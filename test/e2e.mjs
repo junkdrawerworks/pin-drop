@@ -1199,6 +1199,18 @@ for (const tap of ['#menuBtn', '#card']) {
     assert.equal(await p.isVisible('#menu'), false, 'Space on the menu button opened the menu after bowling from the keyboard');
     assert.equal(hard.phase, 'rolling');
     assert.ok(hard.shot.speed > soft.shot.speed + 80, `held 1.5 s it threw at ${hard.shot.speed}, held 0.3 s at ${soft.shot.speed}`);
+    // A ball thrown another way (a click and flick) while Space is held ends the wind-up: letting go of Space once the
+    // ball is back throws nothing.
+    await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
+    await p.keyboard.down(' ');
+    await wait(200);
+    await p.evaluate(() => pinDrop.throw({ speed: 300, angle: 0, hook: 0 }));
+    await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
+    await wait(300);
+    assert.doesNotMatch(await p.textContent('#readout'), /mph/, 'the wind-up came back with the ball');
+    await p.keyboard.up(' ');
+    await wait(200);
+    assert.equal(await p.evaluate(() => pinDrop.phase), 'aim', 'letting go of Space threw a ball after one was thrown another way');
   } finally { await c.close(); }
 }
 

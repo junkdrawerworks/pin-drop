@@ -155,6 +155,7 @@ function aim() {
 }
 
 function throwBall(shot) {
+  unwind();   // Space held as a ball goes another way (a click and flick) would throw again once it's back
   guide = null;
   learnt(shot);
   felt = false; sawGutter = false; called = false; clearedAt = null;
