@@ -110,7 +110,7 @@ function aim() {
   sim = null; guide = null; sweep = null;
   before = pins.filter(p => p.state === 'up').length;
   hud();
-  $('hint').hidden = store.throws >= 6;
+  hint();
 }
 
 function throwBall(shot) {
@@ -120,7 +120,7 @@ function throwBall(shot) {
   wasSplit = !next(current().rolls).fresh && isSplit(pins.filter(p => p.state === 'up').map(p => p.id));
   sim = new Sim(pins, shot, fixedSeed ?? ((Math.random() * 2 ** 31) | 0));
   phase = 'rolling'; phaseT = 0; camT = 0;
-  $('hint').hidden = true;
+  hint();
   const mph = (shot.speed * 0.0568).toFixed(1);
   const hook = Math.abs(shot.hook) < 3 ? 'straight' : shot.hook < 0 ? 'hook left' : 'hook right';
   readout(`${mph} mph · ${hook}`);
@@ -135,6 +135,7 @@ function scoreBall() {
   const knocked = Math.max(0, before - standing.length);
   p.rolls.push(knocked);
   store.throws = (store.throws || 0) + 1;
+  store.thrown[p.name] = (store.thrown[p.name] || 0) + 1;
   callout(st, p, knocked, standing.map(q => q.id).sort((a, b) => a - b));
   const st2 = next(p.rolls);
   if (!st2.done && st2.frame === st.frame) {
@@ -226,11 +227,38 @@ function runSweep() {
   }
 }
 
+// ---- The hint under the ball ----------------------------------------------------------------------------
+
+// It says how to throw with whatever is being used on the lane: a mouse or trackpad, where the click has to be held
+// down, or a finger or pen. Each player sees it for their first three balls on this device.
+const HINTS = {
+  touch: ['Swipe up from the ball to roll', 'drag it sideways to move'],
+  mouse: ['Drag the ball to move it', 'hold the click and flick up to roll'],
+};
+const finePointer = matchMedia('(hover: hover) and (pointer: fine)');
+let pointer = null;   // what was last used on the lane: 'mouse', 'touch' or 'pen' (null before anything is)
+const clicking = () => (pointer ? pointer === 'mouse' : finePointer.matches);
+
+function hint() {
+  const el = $('hint');
+  const [a, b] = HINTS[clicking() ? 'mouse' : 'touch'];
+  el.innerHTML = `<span>${a}</span><span class="dot"> · </span><span>${b}</span>`;
+  const due = game && (store.thrown[current().name] || 0) < 3;
+  el.hidden = !due || phase !== 'aim' || touch?.mode === 'throw';
+}
+
+function seen(e) {
+  if (!e.pointerType || e.pointerType === pointer) return;
+  pointer = e.pointerType;
+  if (phase === 'aim') hint();
+}
+
 // ---- The swipe -----------------------------------------------------------------------------------------
 
 let touch = null;
 canvas.addEventListener('pointerdown', e => {
   sound.wake();
+  seen(e);
   if (phase !== 'aim' || paused) return;
   if (e.pointerType === 'mouse' && e.button !== 0) return;   // only the main button throws
   try { canvas.setPointerCapture(e.pointerId); } catch { /* fine without */ }
@@ -253,10 +281,12 @@ function slide(t, dx) {
   current().x = ball.x;
 }
 canvas.addEventListener('pointermove', e => {
+  seen(e);
   if (!touch || e.pointerId !== touch.id) return;
   addPoints(touch, e);
   const was = touch.mode;
   readStroke(touch);
+  if (touch.mode === 'throw' && was !== 'throw') hint();   // out of the way of the throw
   if (touch.mode === 'move') {
     slide(touch, touch.pts[touch.pts.length - 1].x - touch.pts[0].x);   // the ball follows the finger
   } else if (touch.mode === 'throw') {
@@ -270,6 +300,7 @@ const lift = e => {
   if (!touch || e.pointerId !== touch.id) return;
   const t = touch; touch = null;
   guide = null;
+  hint();
   if (e.type !== 'pointerup') { if (t.mode === 'move') keep(); return; }
   const end = t.pts[t.pts.length - 1];
   if (Math.hypot(e.clientX - end.x, e.clientY - end.y) > 2) { addPoints(t, e); readStroke(t); }

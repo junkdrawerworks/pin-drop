@@ -1,7 +1,8 @@
 // What Pin Drop keeps on this device, all under one key: the players' names, the sound setting, your best game,
 // the last few games, and the game in progress so a reload carries on where you were.
 const KEY = 'pin-drop.v1';
-const blank = () => ({ names: ['You'], sound: true, best: 0, games: [], current: null, throws: 0 });
+// `thrown` counts each player's balls by name, so the hint on how to throw shows for a new player's first few.
+const blank = () => ({ names: ['You'], sound: true, best: 0, games: [], current: null, throws: 0, thrown: {} });
 
 export function load() {
   try {

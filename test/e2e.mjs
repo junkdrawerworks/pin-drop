@@ -214,6 +214,10 @@ const state = p => p.evaluate(() => ({ phase: pinDrop.phase, x: pinDrop.ball.x }
 {
   const { c, p, cdp } = await lane({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   try {
+    // The hint, in a phone's words: a swipe.
+    await touchStroke(cdp, [[30, 0, 3]]);
+    assert.equal(await p.isVisible('#hint'), true, 'no hint on the first ball');
+    assert.match(await p.textContent('#hint'), /^Swipe up from the ball to roll/);
     await p.evaluate(() => { pinDrop.speed = 10; });
     // A backswing: 13 px down, then a quick fling up.
     await touchStroke(cdp, [[0, 13, 2], [0, -280, 6]]);
@@ -227,6 +231,7 @@ const state = p => p.evaluate(() => ({ phase: pinDrop.phase, x: pinDrop.ball.x }
     for (let i = 1; i <= 2; i++) { await wait(16); await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 195 + 7.5 * i, y: 640 }] }); }
     assert.notEqual((await state(p)).x, x0, 'the sideways start did not move the ball');
     for (let i = 1; i <= 10; i++) { await wait(16); await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 210, y: 640 - 33 * i }] }); }
+    assert.equal(await p.isVisible('#hint'), false, 'the hint stays up while swiping to throw');
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
     await wait(50);
     const thrown = await state(p);
@@ -252,6 +257,8 @@ const state = p => p.evaluate(() => ({ phase: pinDrop.phase, x: pinDrop.ball.x }
     // The lane shows it can be grabbed.
     await mouse.move(640, 640);
     assert.equal(await p.evaluate(() => getComputedStyle(document.getElementById('lane')).cursor), 'grab');
+    // The hint, in a mouse's words: hold the click.
+    assert.match(await p.textContent('#hint'), /hold the click and flick up to roll/);
     // A right-button drag up doesn't throw, and no menu pops up over the lane.
     await p.evaluate(() => document.addEventListener('contextmenu', e => { window.menuBlocked = e.defaultPrevented; }));
     await mouse.down({ button: 'right' });
@@ -260,6 +267,21 @@ const state = p => p.evaluate(() => ({ phase: pinDrop.phase, x: pinDrop.ball.x }
     await wait(50);
     assert.equal((await state(p)).phase, 'aim', 'a right-button drag threw the ball');
     assert.equal(await p.evaluate(() => window.menuBlocked), true, 'the context menu opens over the lane');
+  } finally { await c.close(); }
+}
+
+// The hint is for each player's first few balls: on a phone that has seen plenty of throws, a new player in a
+// two-player game still sees it on their first ball.
+{
+  const { c, p } = await lane({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true }, { throws: 6, thrown: { You: 6 } }, ['You', 'Player 2']);
+  try {
+    assert.equal(await p.isVisible('#hint'), false, 'the hint is still up for a player with six balls behind them');
+    await p.evaluate(() => { pinDrop.speed = 10; });
+    await until(() => p.evaluate(() => {
+      if (pinDrop.phase === 'aim' && pinDrop.game.turn === 0) pinDrop.throw({ x: 0, speed: 300, angle: 0, hook: 0 });
+      return pinDrop.phase === 'aim' && pinDrop.game.turn === 1;
+    }), 30000, 'Player 2 never came up');
+    assert.equal(await p.isVisible('#hint'), true, "no hint on Player 2's first ball");
   } finally { await c.close(); }
 }
 

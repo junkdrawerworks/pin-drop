@@ -35,7 +35,7 @@ async function open(viewport, deviceScaleFactor, names = ['You']) {
   await page.addInitScript(([seed, names]) => {
     let a = seed; // mulberry32
     Math.random = () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
-    localStorage.setItem('pin-drop.v1', JSON.stringify({ names, sound: false, best: 0, games: [], current: null, throws: 99 }));
+    localStorage.setItem('pin-drop.v1', JSON.stringify({ names, sound: false, best: 0, games: [], current: null, throws: 99, thrown: Object.fromEntries(names.map(n => [n, 99])) }));
   }, [SEED, names]);
   await page.goto(base);
   await page.evaluate(() => document.fonts.ready);

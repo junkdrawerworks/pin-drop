@@ -101,7 +101,14 @@ button { font: inherit; color: inherit; cursor: pointer; }
   position: fixed; left: 0; right: 0; text-align: center; margin: 0; pointer-events: none;
   font-size: 14px; font-weight: 600; color: var(--cream); text-shadow: 0 1px 6px #000, 0 0 2px #000;
 }
-.hint { bottom: calc(var(--safe-b) + 18px); animation: breathe 2.6s ease-in-out infinite; }
+.hint { bottom: calc(var(--safe-b) + 18px); padding: 0 16px; font-size: 16px; animation: breathe 2.6s ease-in-out infinite; }
+@media (max-width: 519px) {
+  /* Two lines on a phone, one for each half. */
+  .hint span { display: block; }
+  .hint span:last-child::first-letter { text-transform: uppercase; }
+  .hint .dot { display: none; }
+}
+@media (min-width: 768px) { .hint { font-size: 18px; } }
 @keyframes breathe { 50% { opacity: 0.55; } }
 .readout { bottom: calc(var(--safe-b) + 18px); color: var(--gold); transition: opacity 0.4s; }
 
