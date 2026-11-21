@@ -62,6 +62,7 @@ assert.equal(await page.isVisible('#title'), true, 'the title sheet shows first'
 const howTitle = await page.$$eval('#title .how li', els => els.map(e => e.textContent));
 assert.deepEqual(howTitle, await page.$$eval('#howSheet .howlist li', els => els.map(e => e.textContent)));
 assert.ok(howTitle.some(t => /trackpad/.test(t)), 'How to play says nothing about a trackpad');
+assert.ok(howTitle.some(t => /a strike or spare in the tenth earns the extra balls to count it/.test(t)), 'How to play does not say what the tenth\'s extra balls are for');
 await page.click('#addPlayer');
 // Everything on the title can be hit with a thumb: 44 px or more.
 const small = await page.evaluate(() => [...document.querySelectorAll('#title button, #title summary, #title a')]
@@ -428,6 +429,8 @@ const freshRack = SPOTS.map((s, i) => `${i + 1}@${s.x.toFixed(6)},${s.y.toFixed(
       await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
       assert.equal(await p.evaluate(() => pinDrop.game.turn), 0, `not Ana's ball ${k} in the tenth`);
       assert.deepEqual(await upPins(p), freshRack, `no fresh rack for Ana's ball ${k} in the tenth`);
+      // The balls her strikes earned say so.
+      assert.equal(await p.textContent('#where'), k === 1 ? 'Frame 10 · ball 1' : 'Frame 10 · bonus ball');
       await p.evaluate(pocket => pinDrop.throw(pocket), pocket);
       await until(() => p.evaluate(n => pinDrop.game.players[0].rolls.length === n, 18 + k), 20000, `Ana's ball ${k} in the tenth never finished`);
       assert.equal(await p.evaluate(() => pinDrop.game.players[0].rolls.at(-1)), 10, `seed ${strikeSeed} didn't strike in the page on ball ${k}`);

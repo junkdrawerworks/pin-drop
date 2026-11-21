@@ -408,7 +408,9 @@ function hud() {
   const p = current(), st = next(p.rolls);
   // Each player's dot in the light shade of their ball, to stand out on the dark card.
   $('who').innerHTML = `<i style="background:${colourOf(game.turn)[0]}"></i>${esc(p.name)}`;
-  $('where').textContent = st.done ? 'Done' : `Frame ${st.frame + 1} · ball ${st.ball + 1}`;
+  // In the tenth, a ball earned by a strike or spare is a bonus ball: the second after a strike, and the third.
+  const bonus = st.frame === 9 && (st.ball === 2 || (st.ball === 1 && st.fresh));
+  $('where').textContent = st.done ? 'Done' : `Frame ${st.frame + 1} · ${bonus ? 'bonus ball' : `ball ${st.ball + 1}`}`;
   $('frames').outerHTML = cardHTML(p.rolls, st.done ? -1 : st.frame).replace('<span class="frames', '<span id="frames" class="frames');
   const others = game.players.map((q, i) => ({ q, i })).filter(o => o.i !== game.turn);
   $('others').hidden = others.length === 0;
