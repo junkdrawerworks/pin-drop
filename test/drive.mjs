@@ -29,9 +29,11 @@ const problems = [];
 const nineAndMiss = Array.from({ length: 18 }, (_, i) => (i % 2 ? 0 : 9));   // nine frames of 9 and a miss: 81
 const game = (at, name, rolls = nineAndMiss.concat([9, 0])) => ({ at, scores: [{ name, score: 90, rolls, splits: [], c: 0 }] });
 // A device: a browser context with what's kept on it set to `k`, using the fake Google `g`, with Drive allowed here.
-async function device(g, k, { allow = true } = {}) {
+// With `offline`, Google's sign-in script can't be reached.
+async function device(g, k, { allow = true, offline = false } = {}) {
   const c = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   await g.install(c, allow ? { rewrite: { '**/js/sync.js': s => s.replace("['https://pin-drop.junkdrawer.works']", `['https://pin-drop.junkdrawer.works', '${origin}']`) } } : {});
+  if (offline) await c.route('https://accounts.google.com/**', r => r.abort());
   const p = await c.newPage();
   p.on('pageerror', e => problems.push(e.message));
   p.on('console', m => { if (m.type() === 'error') problems.push(m.text()); });
@@ -67,6 +69,22 @@ async function finishGame(p, name) {
     assert.equal(g.calls.length, 0);
     assert.equal(await p.evaluate(() => !!document.querySelector('script[src*="accounts.google.com"]')), false, 'Google sign-in loaded away from its address');
   } finally { await c.close(); }
+}
+
+// Offline, someone who never turned Drive on sees no complaint about Google; a tap on Save to Google Drive says why
+// nothing happened.
+{
+  const g = fakeGoogle();
+  const before = problems.length;
+  const { c, p } = await device(g, { names: ['Ana'] }, { offline: true });
+  try {
+    await p.waitForTimeout(1000);
+    assert.equal(await p.locator('#drive .err').count(), 0, 'an offline title complains about Google to someone who never used Drive');
+    await p.click('#drive button');
+    await until(async () => /didn’t load/.test(await p.textContent('#drive')), 5000, 'a tap offline said nothing');
+  } finally { await c.close(); }
+  // The browser logs the script it couldn't fetch, which is expected.
+  problems.splice(before, Infinity, ...problems.slice(before).filter(m => !/ERR_FAILED/.test(m)));
 }
 
 {

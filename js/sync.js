@@ -42,7 +42,7 @@ const rawLocal = () => { try { return localStorage.getItem(KEY); } catch { retur
 const fresh = () => ({ on: false, email: '', name: '', last: 0, fileId: '' });
 
 let st = { ...fresh(), ...(get(KS) || {}) }, tok = get(KT);
-let status = 'off', note = '', busy = null, again = false, client = null, gisLoading = false, pushT = null;
+let status = 'off', note = '', busy = null, again = false, client = null, gisLoading = false, pushT = null, asked = false;
 // Goes up whenever saving stops (Stop, or Stop in another tab), so a sync already under way then leaves Drive and this
 // device alone instead of putting back what it read before.
 let gen = 0;
@@ -186,7 +186,8 @@ function loadGis() {
   const s = document.createElement('script');
   s.src = 'https://accounts.google.com/gsi/client'; s.async = true;
   s.onload = init;
-  s.onerror = () => { gisLoading = false; setStatus(st.on ? 'tap' : 'off', 'Google sign-in didn’t load. Check the connection.'); };
+  // Said only to someone who saves to Drive or just tapped to: offline, everyone else's title stays quiet.
+  s.onerror = () => { gisLoading = false; setStatus(st.on ? 'tap' : 'off', st.on || asked ? 'Google sign-in didn’t load. Check the connection.' : ''); };
   document.head.append(s);
 }
 function init() {
@@ -230,6 +231,7 @@ function start() {
 }
 // Google only opens its window from a tap, so this has to run inside a click handler.
 function signIn() {
+  asked = true;
   if (!client) { loadGis(); setStatus(status, 'Google sign-in is still loading. Tap again in a second.'); return; }
   const hint = st.email || tok?.email || '';
   client.requestAccessToken(hint ? { prompt: '', login_hint: hint } : { prompt: 'select_account' });
