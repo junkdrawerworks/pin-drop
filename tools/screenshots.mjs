@@ -42,14 +42,19 @@ async function open(viewport, deviceScaleFactor, names = ['You']) {
   return page;
 }
 
-// A hooked ball into the pocket from the right; returns a picture of the pins flying, taken `after` seconds
-// after the ball reaches them, from the first seed that strikes.
+// A hooked ball into the pocket from the right; returns a picture of the pins flying, taken `after` seconds after the
+// last pin starts to go over (so none still stands in it, as if it had been left), from the first seed that strikes.
 async function strike(page, after, shoot) {
   for (let seed = 1; seed < 40; seed++) {
     await page.evaluate(s => { pinDrop.seed = s; pinDrop.throw({ x: 10, speed: 290, angle: 0.0286, hook: -40 }); }, seed);
     await page.waitForFunction(() => pinDrop.ball.y > 711 || pinDrop.ball.state !== 'lane', null, { timeout: 10000 });
+    // A throw that leaves pins never gets there: it's thrown away below.
+    await page.waitForFunction(() => pinDrop.pins.every(p => p.state !== 'up'), null, { timeout: 3000 }).catch(() => {});
     await page.waitForTimeout(after * 1000);
+    // Held still for the picture: a screenshot can take longer than the pins take to land.
+    await page.evaluate(() => { pinDrop.speed = 0; return new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r))); });
     const pic = await shoot();
+    await page.evaluate(() => { pinDrop.speed = 1; });
     await page.waitForFunction(() => pinDrop.phase === 'settle' || pinDrop.phase === 'over', null, { timeout: 15000 });
     const rolls = await page.evaluate(() => pinDrop.game.players[0].rolls);
     if (rolls[rolls.length - 1] === 10) return pic;
@@ -87,7 +92,7 @@ async function strike(page, after, shoot) {
   const page = await open({ width: 390, height: 844 }, 2);
   await page.click('#start');
   await page.waitForTimeout(200);
-  const pic = await strike(page, 0.13, () => page.screenshot());
+  const pic = await strike(page, 0.05, () => page.screenshot());
   await save(pic, 'docs/phone-strike.png');
   await page.context().close();
 }
@@ -117,7 +122,7 @@ async function strike(page, after, shoot) {
   await page.evaluate(() => { document.getElementById('hud').style.display = 'none'; document.getElementById('others').style.display = 'none'; });
   await page.addStyleTag({ content: '.call, .readout, .hint { display: none !important; }' });
   await page.waitForTimeout(200);
-  const shot = await strike(page, 0.16, () => page.evaluate(() => document.getElementById('lane').toDataURL('image/png')));
+  const shot = await strike(page, 0.06, () => page.evaluate(() => document.getElementById('lane').toDataURL('image/png')));
   await page.context().close();
 
   const font = async f => `data:font/woff2;base64,${(await readFile(join(root, 'fonts', f))).toString('base64')}`;
