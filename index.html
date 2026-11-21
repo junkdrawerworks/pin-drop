@@ -45,10 +45,12 @@
       <h1 tabindex="-1">Pin Drop</h1>
       <p class="tag">Ten-pin bowling with one swipe.</p>
       <button type="button" class="big" id="resume" hidden>Carry on</button>
-      <h2>Who’s bowling?</h2>
-      <ol class="players" id="players"></ol>
-      <button type="button" class="link" id="addPlayer">+ Add a player</button>
-      <button type="button" class="big" id="start">Bowl</button>
+      <h2 id="whoTitle">Who’s bowling?</h2>
+      <form id="lineup" aria-labelledby="whoTitle">
+        <ol class="players" id="players"></ol>
+        <button type="button" class="link" id="addPlayer">+ Add a player</button>
+        <button type="submit" class="big" id="start">Bowl</button>
+      </form>
       <details class="how">
         <summary>How to play</summary>
         <ul><!-- the same list as the How to play sheet below, copied in when the page opens --></ul>

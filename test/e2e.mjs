@@ -1045,6 +1045,38 @@ for (const names of [['Ana', 'Ben'], ['Alexandrinaaaa', 'Bartholomewwww', 'Chris
   } finally { await c.close(); }
 }
 
+// The title is a form: Enter in a name bowls (twice, over a saved game, as Bowl asks), each remove button is named for
+// the player as their name is typed, and removing a player from the keyboard puts the focus on the name now in its place.
+{
+  const { c, p } = await kept({ viewport: { width: 1280, height: 800 }, isMobile: false, hasTouch: false }, { names: ['You'] });
+  try {
+    await p.click('#addPlayer');
+    await p.click('#addPlayer');
+    await p.fill('#players li:nth-child(2) input', 'Ben');
+    assert.deepEqual(await p.$$eval('#players button', els => els.map(e => e.getAttribute('aria-label'))), ['Remove You', 'Remove Ben', 'Remove Player 3']);
+    await p.fill('#players li:nth-child(2) input', '');
+    assert.equal(await p.getAttribute('#players li:nth-child(2) button', 'aria-label'), 'Remove Player 2');
+    await p.fill('#players li:nth-child(2) input', 'Ben');
+    await p.focus('#players li:nth-child(2) button');
+    await p.keyboard.press('Enter');
+    assert.deepEqual(await p.$$eval('#players input', els => els.map(e => e.value)), ['You', 'Player 3']);
+    assert.equal(await p.evaluate(() => document.activeElement === document.querySelector('#players li:nth-child(2) input')), true, 'removing a player dropped the focus');
+    await p.fill('#players li:nth-child(1) input', 'Ana');
+    await p.keyboard.press('Enter');
+    assert.equal(await p.evaluate(() => pinDrop.phase), 'aim', 'Enter in a name did not bowl');
+    assert.deepEqual(await p.evaluate(() => pinDrop.game.players.map(q => q.name)), ['Ana', 'Player 3']);
+    // Over a saved game, Enter asks again first, like Bowl.
+    await p.reload();
+    assert.equal(await p.isVisible('#resume'), true);
+    await p.focus('#players li:nth-child(1) input');
+    await p.keyboard.press('Enter');
+    assert.equal(await p.evaluate(() => pinDrop.phase), 'title', 'one Enter started over the saved game');
+    assert.equal(await p.textContent('#start'), 'Tap again to start over');
+    await p.keyboard.press('Enter');
+    assert.equal(await p.evaluate(() => pinDrop.phase), 'aim', 'a second Enter did not start over');
+  } finally { await c.close(); }
+}
+
 // Two windows of Pin Drop (a home-screen copy and a browser tab share what's kept): A finishes a game while B sits on
 // the title, and B's title shows it straight away. Then B starts a game and throws a ball, and A's game and the best
 // it set are still kept (B used to write its own stale copy over them).

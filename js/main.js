@@ -582,7 +582,19 @@ function drawPlayers(names) {
   ol.innerHTML = names.map((n, i) => `<li><span class="ball" style="background:radial-gradient(circle at 35% 30%, ${colourOf(i)[0]}, ${colourOf(i)[1]} 55%, ${colourOf(i)[2]})"></span>`
     + `<input type="text" maxlength="14" value="${esc(n)}" aria-label="Player ${i + 1}’s name" autocomplete="off" spellcheck="false">`
     + (names.length > 1 ? `<button type="button" aria-label="Remove ${esc(n)}">×</button>` : '') + '</li>').join('');
-  ol.querySelectorAll('button').forEach((b, i) => b.addEventListener('click', () => drawPlayers(readNames().filter((_, j) => j !== i))));
+  // Each remove button is named for the player as their name is typed. Removing one from the keyboard puts the focus
+  // on the name now in its place; with a finger or a mouse, on the remove button there (focusing a name would bring
+  // up a phone's keyboard).
+  ol.querySelectorAll('li').forEach((li, i) => {
+    const input = li.querySelector('input'), b = li.querySelector('button');
+    if (!b) return;
+    input.addEventListener('input', () => b.setAttribute('aria-label', `Remove ${input.value.trim() || `Player ${i + 1}`}`));
+    b.addEventListener('click', e => {
+      drawPlayers(readNames().filter((_, j) => j !== i));
+      const rows = ol.querySelectorAll('li'), row = rows[Math.min(i, rows.length - 1)];
+      (e.detail === 0 ? row.querySelector('input') : row.querySelector('button') || $('addPlayer')).focus();
+    });
+  });
   $('addPlayer').hidden = names.length >= MAX_PLAYERS;
 }
 const readNames = () => [...$('players').querySelectorAll('input')].map((el, i) => el.value.trim() || `Player ${i + 1}`);
@@ -695,7 +707,9 @@ function disarmStart() {
   startArmed = false; clearTimeout(startTimer);
   $('start').textContent = 'Bowl';
 }
-$('start').addEventListener('click', () => {
+// Bowl, or Enter in a name: the players are a form.
+$('lineup').addEventListener('submit', e => {
+  e.preventDefault();
   sound.wake();
   if (!$('resume').hidden && !startArmed) {
     startArmed = true; $('start').textContent = 'Tap again to start over';
@@ -705,9 +719,11 @@ $('start').addEventListener('click', () => {
   disarmStart();
   startGame(readNames());
 });
-// Anything else done on the title calls it off.
+// Anything else done on the title calls it off (but Enter in a name is a second go at Bowl).
 for (const type of ['pointerdown', 'keydown', 'input']) {
-  $('title').addEventListener(type, e => { if (startArmed && !e.target.closest?.('#start')) disarmStart(); });
+  $('title').addEventListener(type, e => {
+    if (startArmed && !e.target.closest?.('#start') && !(e.key === 'Enter' && e.target.closest?.('#lineup'))) disarmStart();
+  });
 }
 $('resume').addEventListener('click', () => { sound.wake(); resumeGame(); });
 function openMenu() { touch = null; guide = null; quitArmed = false; $('menuQuit').textContent = 'End this game'; show('menu'); }

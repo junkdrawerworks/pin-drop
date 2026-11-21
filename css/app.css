@@ -150,6 +150,7 @@ h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.08em; color: 
 /* A sheet's heading takes the focus as it opens, so a screen reader starts there; it isn't a control, so no ring. */
 h1[tabindex]:focus, h2[tabindex]:focus { outline: none; }
 
+#lineup { margin: 0; }
 .players { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
 .players li { display: flex; align-items: center; gap: 10px; }
 .players .ball { width: 22px; height: 22px; border-radius: 50%; flex: none; box-shadow: inset -3px -4px 6px rgba(0, 0, 0, 0.45), inset 2px 2px 4px rgba(255, 255, 255, 0.3); }
