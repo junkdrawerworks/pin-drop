@@ -146,7 +146,7 @@ h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.08em; color: 
   border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px;
 }
 .players input:focus { outline: 2px solid var(--teal); outline-offset: 1px; }
-.players button { width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--line); background: transparent; color: var(--muted); font-size: 20px; flex: none; }
+.players button { width: 44px; height: 44px; border-radius: 10px; border: 1px solid var(--line); background: transparent; color: var(--muted); font-size: 20px; flex: none; }
 
 .big {
   display: block; width: 100%; margin: 18px 0 0; padding: 14px; border: 0; border-radius: 14px;
@@ -160,10 +160,11 @@ h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.08em; color: 
   background: var(--panel-2); border: 1px solid var(--line); font-weight: 600;
 }
 .plain.danger { color: var(--coral); }
-.link { background: none; border: 0; color: var(--teal); padding: 10px 0 0; font-weight: 600; }
+.link { background: none; border: 0; color: var(--teal); padding: 0; min-height: 44px; font-weight: 600; }
 
-.how { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 12px; }
-.how summary { cursor: pointer; font-weight: 700; color: var(--cream); }
+.how { margin-top: 18px; border-top: 1px solid var(--line); padding-top: 1px; }
+.how summary { cursor: pointer; font-weight: 700; color: var(--cream); padding: 11px 0; }
+.how summary + ul { margin-top: 0; }
 .how ul, .howlist { padding-left: 18px; margin: 10px 0 0; color: var(--muted); }
 .how li, .howlist li { margin-bottom: 6px; }
 .how b, .howlist b { color: var(--cream); }
@@ -181,7 +182,8 @@ h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.08em; color: 
 .cards .row .name em { font-style: normal; color: var(--gold); font-size: 13px; }
 
 .jd-foot { margin-top: 18px; text-align: center; font-size: 13px; color: var(--muted); }
-.jd-foot a { color: inherit; text-decoration: none; }
+/* Padded out to 44 px tall for a thumb, the padding taken back off so the line stays where it was. */
+.jd-foot a { color: inherit; text-decoration: none; display: inline-block; padding: 13px 4px; margin: -13px 0; }
 .jd-foot a:hover, .jd-foot a:focus-visible { text-decoration: underline; }
 
 .noscript { position: fixed; inset: auto 0 40% 0; text-align: center; }

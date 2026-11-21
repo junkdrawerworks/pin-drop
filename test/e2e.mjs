@@ -63,6 +63,11 @@ const howTitle = await page.$$eval('#title .how li', els => els.map(e => e.textC
 assert.deepEqual(howTitle, await page.$$eval('#howSheet .howlist li', els => els.map(e => e.textContent)));
 assert.ok(howTitle.some(t => /trackpad/.test(t)), 'How to play says nothing about a trackpad');
 await page.click('#addPlayer');
+// Everything on the title can be hit with a thumb: 44 px or more.
+const small = await page.evaluate(() => [...document.querySelectorAll('#title button, #title summary, #title a')]
+  .map(el => ({ what: el.textContent.trim() || el.getAttribute('aria-label'), r: el.getBoundingClientRect() }))
+  .filter(({ r }) => r.width && (r.height < 44 || r.width < 44)).map(({ what, r }) => `${what} ${Math.round(r.width)}x${Math.round(r.height)}`));
+assert.deepEqual(small, [], 'tap targets under 44 px on the title');
 await page.fill('#players li:nth-child(1) input', 'Ana');
 await page.fill('#players li:nth-child(2) input', 'Ben');
 await page.click('#start');
