@@ -458,6 +458,25 @@ const state = p => p.evaluate(() => ({ phase: pinDrop.phase, x: pinDrop.ball.x }
   } finally { await c.close(); }
 }
 
+// The hint sits just under the ball, or just above it where there's no room under it: on a phone on its side with a
+// home bar (an inset at the bottom of the screen) it covered the bottom of the ball.
+for (const [width, height, insets] of [[390, 844, { top: 47, bottom: 34, left: 0, right: 0 }], [844, 390, { top: 0, bottom: 21, left: 47, right: 47 }], [844, 390], [820, 1180], [1180, 820]]) {
+  const { c, p, cdp } = await lane({ viewport: { width, height }, deviceScaleFactor: 2, isMobile: width < 900, hasTouch: true });
+  try {
+    if (insets) { await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets }); await p.evaluate(() => dispatchEvent(new Event('resize'))); }
+    await wait(100);
+    const r = await p.evaluate(() => {
+      const top = pinDrop.view.p(pinDrop.ball.x, pinDrop.ball.y, 8.5)[1], foot = pinDrop.view.p(pinDrop.ball.x, pinDrop.ball.y, 0)[1];
+      const q = document.querySelector('#hint .pill').getBoundingClientRect();
+      return { top, foot, pillTop: q.top, pillBottom: q.bottom };
+    });
+    const where = `${width}x${height}${insets ? ' with insets' : ''}`;
+    assert.ok(r.pillTop >= r.foot || r.pillBottom <= r.top, `${where}: the hint (${r.pillTop}-${r.pillBottom}) covers the ball (${r.top}-${r.foot})`);
+    assert.ok(Math.min(Math.abs(r.pillTop - r.foot), Math.abs(r.top - r.pillBottom)) <= 12, `${where}: the hint (${r.pillTop}-${r.pillBottom}) is far from the ball (${r.top}-${r.foot})`);
+    assert.ok(r.pillBottom <= height - (insets?.bottom || 0), `${where}: the hint runs into the bottom edge`);
+  } finally { await c.close(); }
+}
+
 // The same swipe throws the same ball on a phone, a phone on its side, a tablet either way up and a laptop. (Speed
 // was read against the screen's height, so turning a tablet made the same flick about a fifth harder, and a phone on
 // its side reached the top speed with a gentle one.)

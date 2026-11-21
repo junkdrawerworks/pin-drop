@@ -288,6 +288,19 @@ function hint() {
     : `<span class="pill"><span>${a}</span><span class="dot"> · </span><span>${b}</span></span>`;
   el.classList.toggle('nudge', !!nudgeText);
   el.hidden = !(nudgeText || hintDue()) || phase !== 'aim' || touch?.mode === 'throw';
+  if (!el.hidden) placeHint(el);
+}
+
+// Just under the ball, where it says to swipe from, if there's room between the ball and the bottom of the screen
+// (never lower than the bottom edge, clear of a phone's home bar); otherwise just above it. On a phone on its side
+// with a home bar, the pill sat over the bottom of the ball.
+function placeHint(el) {
+  el.style.bottom = '';
+  const low = parseFloat(getComputedStyle(el).bottom), pill = el.firstElementChild.offsetHeight;
+  const top = view.p(ball.x, ball.y, 2 * BALL_R), foot = view.p(ball.x, ball.y, 0);
+  if (!top || !foot) return;
+  const under = view.H - foot[1] - pill - 8;
+  el.style.bottom = `${Math.round(under >= low ? under : low + pill <= view.H - foot[1] ? low : view.H - top[1] + 10)}px`;
 }
 
 // A word for three seconds (or `ms`) in the hint's place, at most one every four unless it `must` show.
@@ -814,7 +827,7 @@ addEventListener('storage', e => {
   if (phase === 'title') { resumeButton(); record(); }
 });
 
-addEventListener('resize', () => { view.resize(); view.setCamera(camT, followX); });
+addEventListener('resize', () => { view.resize(); view.setCamera(camT, followX); if (phase === 'aim') hint(); });
 
 // For the tests and the screenshot tool.
 window.pinDrop = {
