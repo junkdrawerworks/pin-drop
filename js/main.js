@@ -307,7 +307,9 @@ canvas.addEventListener('pointerdown', e => {
   sound.wake();
   seen(e);
   if (phase !== 'aim' || paused) return;
-  if (e.pointerType === 'mouse' && e.button !== 0) return;   // only the main button throws
+  // The main button, or the right one: pressing a trackpad down with two fingers is a right click, and some people
+  // hold the ball that way. (The menu that would pop up is kept shut, below.) Not the middle button.
+  if (e.pointerType === 'mouse' && e.button !== 0 && e.button !== 2) return;
   try { canvas.setPointerCapture(e.pointerId); } catch { /* fine without */ }
   touch = { ...stroke(e, performance.now()), id: e.pointerId, x0: ball.x };
 });

@@ -317,13 +317,20 @@ const state = p => p.evaluate(() => ({ phase: pinDrop.phase, x: pinDrop.ball.x }
     assert.equal(await p.isVisible('#hint'), true);
     assert.equal(await p.textContent('#hint'), 'Hold the click down while you flick up', 'a two-finger swipe got no word');
     assert.equal((await state(p)).phase, 'aim');
-    // A right-button drag up doesn't throw, and no menu pops up over the lane.
+    // A right-button drag up (a trackpad pressed down with two fingers) throws too, and no menu pops up over the
+    // lane. The middle button doesn't pick the ball up.
     await p.evaluate(() => document.addEventListener('contextmenu', e => { window.menuBlocked = e.defaultPrevented; }));
+    await mouse.down({ button: 'middle' });
+    for (let i = 1; i <= 10; i++) { await mouse.move(640, 640 - i * 35); await wait(12); }
+    await mouse.up({ button: 'middle' });
+    await wait(50);
+    assert.equal((await state(p)).phase, 'aim', 'a middle-button drag threw the ball');
+    await mouse.move(640, 640);
     await mouse.down({ button: 'right' });
     for (let i = 1; i <= 10; i++) { await mouse.move(640, 640 - i * 35); await wait(12); }
     await mouse.up({ button: 'right' });
     await wait(50);
-    assert.equal((await state(p)).phase, 'aim', 'a right-button drag threw the ball');
+    assert.equal((await state(p)).phase, 'rolling', 'a right-button drag (two fingers pressing a trackpad) threw nothing');
     assert.equal(await p.evaluate(() => window.menuBlocked), true, 'the context menu opens over the lane');
   } finally { await c.close(); }
 }
