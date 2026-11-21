@@ -164,3 +164,17 @@ test('a stroke on the lane: a move, a throw, or a throw that started as somethin
   assert.equal(liftAs(stroke([[0, 60, 4]])), 'none');
   assert.equal(liftAs(stroke([[0, -80, 4], [0, 85, 4]])), 'cancel');
 });
+
+test('how hard a swipe throws: the same as ever on a phone held upright, on any screen', async () => {
+  const { throwOf } = await import('../js/swipe.js');
+  const mph = v => {
+    const pts = [];
+    for (let t = 0; t <= 300 / v; t += 8) pts.push({ x: 0, y: -v * t, t });
+    return throwOf(pts).speed * 0.0568;
+  };
+  // 1 px/ms (a gentle swipe) and 2 px/ms, as they threw on a 390 x 844 phone; 3 px/ms and up, the top speed.
+  assert.equal(mph(1).toFixed(1), '12.4');
+  assert.equal(mph(2).toFixed(1), '17.5');
+  assert.equal(mph(3).toFixed(1), '22.2');
+  assert.equal(mph(6).toFixed(1), '22.2');
+});

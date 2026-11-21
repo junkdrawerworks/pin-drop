@@ -1,5 +1,7 @@
 // Reading a swipe.
 
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+
 // How fast the finger was going, in px/ms: the fastest stretch (of at least 40 ms) in the swipe's last quarter
 // second, since a finger often slows a little just before it lifts. Never less than the swipe's average speed.
 export function swipeSpeed(pts) {
@@ -47,4 +49,27 @@ export function liftAs(s) {
   const dx = b.x - a.x, dy = b.y - a.y;
   if (Math.abs(dx) > Math.abs(dy)) return 'move';
   return -dy >= 40 ? 'throw' : dy < 0 ? 'short' : 'cancel';
+}
+
+// A swipe, read as a throw: its direction is the aim, its speed at the end is how hard, and how much it bends is the
+// hook. Gives the ball's speed (in/s), its angle off straight (radians) and its hook (in/s; negative hooks left).
+// The speed is read in screen px per ms against a phone's height held upright (844 px), whatever the size of the
+// screen and whichever way up it is, so the same flick throws the same ball after turning a tablet round.
+export function throwOf(pts) {
+  const a = pts[0], b = pts[pts.length - 1];
+  const dx = b.x - a.x, dy = b.y - a.y;
+  const len = Math.hypot(dx, dy);
+  const vn = swipeSpeed(pts) * 800 / 844;
+  const speed = clamp(175 + (vn - 0.5) * 95, 170, 390);
+  const angle = clamp(Math.atan(dx / -dy * 0.08), -0.07, 0.07);
+  // The bend: how far the swipe bows out from a straight line, as a share of its length. Bowing out to the right
+  // (so it finishes turning left) hooks left.
+  let bow = 0;
+  for (const p of pts) {
+    const right = -((p.x - a.x) * dy - (p.y - a.y) * dx) / len;
+    if (Math.abs(right) > Math.abs(bow)) bow = right;
+  }
+  const c = bow / len;
+  const hook = Math.abs(c) < 0.025 ? 0 : -Math.sign(c) * Math.min(65, (Math.abs(c) - 0.025) * 380);
+  return { speed, angle, hook };
 }

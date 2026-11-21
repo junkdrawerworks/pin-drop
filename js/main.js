@@ -4,7 +4,7 @@ import { Renderer, BALL_COLOURS } from './render.js';
 import { frames, next, total, isSplit } from './scoring.js';
 import * as sound from './sound.js';
 import { load, save } from './store.js';
-import { swipeSpeed, readStroke, throwPoints, liftAs } from './swipe.js';
+import { readStroke, throwPoints, liftAs, throwOf } from './swipe.js';
 
 const $ = id => document.getElementById(id);
 const canvas = $('lane');
@@ -370,27 +370,12 @@ canvas.addEventListener('pointerup', lift);
 canvas.addEventListener('pointercancel', lift);
 canvas.addEventListener('contextmenu', e => e.preventDefault());   // no menu popping up over the lane
 
-// A swipe, read as a throw: its direction is the aim, its speed at the end is how hard, and how much it bends
-// is the hook.
+// A swipe, read as a throw (see throwOf), from where the ball stands; or nothing, for a swipe too short to throw
+// (and while swiping, the guide as it was until the swipe is long enough to show one).
 function shotFrom(pts, final) {
   const a = pts[0], b = pts[pts.length - 1];
-  const dx = b.x - a.x, dy = b.y - a.y;
-  if (-dy < (final ? 40 : 12)) return final ? null : guide;
-  const len = Math.hypot(dx, dy);
-  const v = swipeSpeed(pts);
-  const vn = v * 800 / clamp(view.H, 500, 1100);
-  const speed = clamp(175 + (vn - 0.5) * 95, 170, 390);
-  const angle = clamp(Math.atan(dx / -dy * 0.08), -0.07, 0.07);
-  // The bend: how far the swipe bows out from a straight line, as a share of its length. Bowing out to the right
-  // (so it finishes turning left) hooks left.
-  let bow = 0;
-  for (const p of pts) {
-    const right = -((p.x - a.x) * dy - (p.y - a.y) * dx) / len;
-    if (Math.abs(right) > Math.abs(bow)) bow = right;
-  }
-  const c = bow / len;
-  const hook = Math.abs(c) < 0.025 ? 0 : -Math.sign(c) * Math.min(65, (Math.abs(c) - 0.025) * 380);
-  return { x: ball.x, speed, angle, hook };
+  if (-(b.y - a.y) < (final ? 40 : 12)) return final ? null : guide;
+  return { x: ball.x, ...throwOf(pts) };
 }
 
 // ---- What's on screen ----------------------------------------------------------------------------------

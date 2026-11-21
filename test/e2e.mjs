@@ -306,6 +306,26 @@ const state = p => p.evaluate(() => ({ phase: pinDrop.phase, x: pinDrop.ball.x }
   } finally { await c.close(); }
 }
 
+// The same swipe throws the same ball on a phone, a phone on its side, a tablet either way up and a laptop. (Speed
+// was read against the screen's height, so turning a tablet made the same flick about a fifth harder, and a phone on
+// its side reached the top speed with a gentle one.)
+{
+  const { c, p } = await lane({ viewport: { width: 390, height: 844 }, hasTouch: true });
+  try {
+    const speeds = [];
+    for (const [width, height] of [[390, 844], [844, 390], [820, 1180], [1180, 820], [1280, 800]]) {
+      await p.setViewportSize({ width, height });
+      await wait(50);
+      speeds.push(await p.evaluate(() => {
+        const pts = [];
+        for (let t = 0; t <= 200; t += 8) pts.push({ x: 195, y: 600 - 1.5 * t, t });
+        return pinDrop.shotFrom(pts, true).speed;
+      }));
+    }
+    assert.ok(Math.max(...speeds) - Math.min(...speeds) < 0.01, `the same swipe threw at ${speeds.map(v => v.toFixed(1)).join(', ')} in/s`);
+  } finally { await c.close(); }
+}
+
 // The hint is for each player's first few balls: on a phone that has seen plenty of throws, a new player in a
 // two-player game still sees it on their first ball.
 {
