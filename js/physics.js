@@ -11,7 +11,7 @@ export const LANE = {
   gutter: 9.25,       // each gutter's width; the kickback walls stand at the outer edge, beside the pin deck
   oil: 480,           // the oil pattern ends 40 feet down
   head: 720,          // the head pin
-  deck: 766,          // the pin deck ends and the pit begins
+  deck: 754.1875,     // the pin deck ends and the pit begins, 34 3/16" behind the head pin and 3" behind the back row
   pit: 800,
 };
 export const BOARD = 41.5 / 39;
