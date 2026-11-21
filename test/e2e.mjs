@@ -627,6 +627,25 @@ const nineAndMiss = Array.from({ length: 18 }, (_, i) => (i % 2 ? 0 : 9));   // 
   } finally { await c.close(); }
 }
 
+// Between the last ball and the end card, the game is over: ☰ or the scorecard opens the end card at once (it showed
+// "Paused" and "End this game", and ending it skipped who won and any new best), with the last ball's callout gone
+// rather than left blurred behind the card.
+for (const tap of ['#menuBtn', '#card']) {
+  const { c, p } = await kept({}, { names: ['Ana'], current: { players: [{ name: 'Ana', rolls: [...nineAndMiss, 9], x: 0 }], turn: 0, leftover: [{ id: 7, ...SPOTS[6] }] } });
+  try {
+    await p.click('#resume');
+    await p.evaluate(() => { pinDrop.speed = 4; pinDrop.throw({ x: 14, speed: 300, angle: 0.02, hook: 0 }); });
+    await until(() => p.evaluate(() => pinDrop.phase === 'over'), 20000, 'the last ball never finished');
+    assert.notEqual(await p.textContent('#call'), '', 'no callout for the last ball, so this checks nothing');
+    await p.click(tap);
+    assert.equal(await p.isVisible('#end'), true, `${tap} after the last ball did not open the end card`);
+    assert.equal(await p.isVisible('#menu'), false);
+    assert.equal(await p.isVisible('#board'), false);
+    assert.equal(await p.textContent('#endTitle'), '90');
+    assert.equal(await p.evaluate(() => document.getElementById('call').innerHTML), '', 'the last callout is still behind the end card');
+  } finally { await c.close(); }
+}
+
 // Two players tie: the end says who ("Ana and Cal tie!"), both are tagged Tied, and the best game on the title names
 // them both. There was a best here to beat (Dee's 80), so it says this is a new one.
 {

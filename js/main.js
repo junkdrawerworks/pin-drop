@@ -766,6 +766,7 @@ function endWords() {
 }
 
 function showEnd() {
+  hush();   // the last ball's callout, which can outlast the wait for this card
   const [title, line, best] = endWords();
   $('endTitle').textContent = title;
   $('endTitle').classList.toggle('score', game.players.length === 1);
@@ -826,11 +827,19 @@ for (const type of ['pointerdown', 'keydown', 'input']) {
   });
 }
 $('resume').addEventListener('click', () => { sound.wake(); resumeGame(); });
-function openMenu() { dropStrokes(); stopGlide(); quitArmed = false; $('menuQuit').textContent = 'End this game'; show('menu'); }
+// Once the last ball is in, the game's over: the menu button and the scorecard go straight to the end of it (who won,
+// any new best) rather than pausing a game that's finished, which could then be ended without ever seeing that.
+function openMenu() {
+  if (phase === 'over') { showEnd(); return; }
+  dropStrokes(); stopGlide(); quitArmed = false; $('menuQuit').textContent = 'End this game'; show('menu');
+}
 $('menuBtn').addEventListener('click', openMenu);
 $('menuResume').addEventListener('click', () => show(null));
 $('menuBoard').addEventListener('click', () => { $('boardCards').innerHTML = boardHTML(false); show('board'); });
-$('card').addEventListener('click', () => { $('boardCards').innerHTML = boardHTML(false); show('board'); });
+$('card').addEventListener('click', () => {
+  if (phase === 'over') { showEnd(); return; }
+  $('boardCards').innerHTML = boardHTML(false); show('board');
+});
 $('boardDone').addEventListener('click', () => show(null));
 $('menuHow').addEventListener('click', () => show('howSheet'));
 $('howDone').addEventListener('click', () => show(game ? null : 'title'));
@@ -842,6 +851,7 @@ soundLabel();
 $('menuSound').addEventListener('click', () => { store.sound = !store.sound; sound.setSound(store.sound); soundLabel(); put(); });
 let quitArmed = false;
 $('menuQuit').addEventListener('click', () => {
+  if (phase === 'over') { showEnd(); return; }
   if (!quitArmed) { quitArmed = true; $('menuQuit').textContent = 'Tap again to end it'; return; }
   store.current = null; put();
   titleScreen();
