@@ -3,7 +3,7 @@ import { Sim, rack, LANE, BALL_R } from './physics.js';
 import { Renderer, BALL_COLOURS } from './render.js';
 import { frames, next, total, pending, isSplit, callFor, cardText } from './scoring.js';
 import * as sound from './sound.js';
-import { load, save } from './store.js';
+import { load, save, parse, merge, int, KEY } from './store.js';
 import { stroke, addPoints, readStroke, throwPoints, liftAs, throwOf } from './swipe.js';
 
 const $ = id => document.getElementById(id);
@@ -534,17 +534,22 @@ function titleScreen() {
   readout('');
   pins = rack(); ball = idle(0); sweep = null; guide = null;
   view.setCamera(0);
-  const c = store.current;
-  const going = c && c.players?.some(q => !next(q.rolls).done);
-  $('resume').hidden = !going;
-  if (going) {
-    const f = Math.min(...c.players.map(q => next(q.rolls).frame)) + 1;
-    $('resume').textContent = `Carry on · frame ${f}`;
-  }
+  resumeButton();
   drawPlayers(store.names?.length ? store.names : ['You']);
   disarmStart();
   record();
   show('title');
+}
+
+// Carry on, when there's a game left half-way.
+function resumeButton() {
+  const c = store.current;
+  const going = !!c && Array.isArray(c.players) && c.players.some(q => !next(q.rolls).done);
+  $('resume').hidden = !going;
+  if (going) {
+    const f = Math.min(...c.players.map(q => next(q.rolls).frame)) + 1;
+    $('resume').textContent = `Carry on · frame ${f}`;
+  } else if (startArmed) disarmStart();
 }
 
 function drawPlayers(names) {
@@ -561,11 +566,11 @@ function record() {
   const games = store.games || [];
   let h = '';
   const by = store.bestBy && !isYou(store.bestBy) ? ` · ${esc(store.bestBy)}` : '';
-  if (store.best) h += `<div class="best"><span>Best game${by}</span><b>${store.best}</b></div>`;
+  if (store.best) h += `<div class="best"><span>Best game${by}</span><b>${int(store.best)}</b></div>`;
   if (games.length) {
     h += '<ol>' + games.slice(0, 5).map(g => {
       const d = new Date(g.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-      return `<li><span>${d}</span><span>${g.scores.map(s => `${esc(s.name)} <b>${s.score}</b>`).join(' · ')}</span></li>`;
+      return `<li><span>${d}</span><span>${g.scores.map(s => `${esc(s.name)} <b>${int(s.score)}</b>`).join(' · ')}</span></li>`;
     }).join('') + '</ol>';
   }
   $('record').innerHTML = h;
@@ -676,6 +681,17 @@ $('menuQuit').addEventListener('click', () => {
 });
 $('again').addEventListener('click', () => startGame(game.players.map(q => q.name), game.players.map(q => q.x)));
 $('toTitle').addEventListener('click', titleScreen);
+
+// Another window of Pin Drop kept something (see merge in store.js): take in its records, so this one shows them and
+// never writes over them. The game in progress stays this window's while it's being played; on the title, or at the
+// end of a game, Carry on picks up the other window's.
+addEventListener('storage', e => {
+  if (e.key !== KEY || e.newValue === null) return;
+  const theirs = parse(e.newValue);
+  merge(store, theirs);
+  if (phase === 'title' || phase === 'over') store.current = theirs.current;
+  if (phase === 'title') { resumeButton(); record(); }
+});
 
 addEventListener('resize', () => { view.resize(); view.setCamera(camT, followX); });
 

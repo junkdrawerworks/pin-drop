@@ -902,6 +902,41 @@ for (const names of [['Ana', 'Ben'], ['Alexandrinaaaa', 'Bartholomewwww', 'Chris
   } finally { await c.close(); }
 }
 
+// Two windows of Pin Drop (a home-screen copy and a browser tab share what's kept): A finishes a game while B sits on
+// the title, and B's title shows it straight away. Then B starts a game and throws a ball, and A's game and the best
+// it set are still kept (B used to write its own stale copy over them).
+{
+  const nines = Array.from({ length: 19 }, (_, i) => (i % 2 ? 0 : 9));
+  const c = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await c.addInitScript(k => { if (!localStorage.getItem('pin-drop.v1')) localStorage.setItem('pin-drop.v1', JSON.stringify(k)); },
+    { names: ['Ana'], best: 50, bestBy: 'Cal', bests: { Cal: 50 }, games: [{ at: 1000, scores: [{ name: 'Cal', score: 50 }] }],
+      current: { players: [{ name: 'Ana', rolls: nines, x: 0 }], turn: 0, leftover: null } });
+  const a = await c.newPage(), b = await c.newPage();
+  for (const p of [a, b]) p.on('pageerror', e => problems.push(e.message));
+  const stored = p => p.evaluate(() => JSON.parse(localStorage.getItem('pin-drop.v1')));
+  try {
+    await a.goto(base); await b.goto(base);
+    await a.click('#resume');
+    await a.evaluate(() => { pinDrop.speed = 10; pinDrop.throw({ x: 0, speed: 300, angle: 0, hook: 0 }); });
+    await until(() => a.isVisible('#end'), 20000, "A's game never ended");
+    const after = await stored(a);
+    const anaGame = after.games[0];
+    assert.equal(after.best, anaGame.scores[0].score, 'A set no new best, so this checks less than it means to');
+    // B's title, without a reload: the new best, A's game in the list, and no Carry on for the game that's over.
+    await until(() => b.evaluate(() => document.getElementById('resume').hidden), 3000, "B still offers to carry on A's finished game");
+    assert.match(await b.textContent('#record .best'), new RegExp(`Best game · Ana${after.best}$`));
+    assert.equal(await b.locator('#record li').count(), 2);
+    await b.click('#start');
+    await b.evaluate(() => { pinDrop.speed = 10; pinDrop.throw({ x: 0, speed: 300, angle: 0, hook: 0 }); });
+    await until(() => b.evaluate(() => pinDrop.phase === 'aim' && pinDrop.game.players[0].rolls.length === 1), 20000, "B's ball never finished");
+    const now = await stored(b);
+    assert.equal(now.best, after.best, "B's ball lost the best");
+    assert.equal(now.bestBy, 'Ana');
+    assert.deepEqual(now.games, after.games, "B's ball lost A's game");
+    assert.deepEqual(now.current.players[0].rolls.length, 1, "B's game in progress wasn't kept");
+  } finally { await c.close(); }
+}
+
 assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems while using it');
 await browser.close();
 server.close();
