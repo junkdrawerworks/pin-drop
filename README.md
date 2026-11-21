@@ -42,7 +42,7 @@ thrown straight at the head pin.
 - **Up to four players** pass the phone round, each with their own ball colour. Pin Drop keeps your best game and your
   last few scores, and a game you leave half-way carries on where you were.
 - **Sound** is made on the spot (the rumble of the ball, the clatter of the pins, the pinsetter), with a switch in the
-  menu.
+  menu that stops the buzz too, on a phone that buzzes.
 
 ## Running it
 

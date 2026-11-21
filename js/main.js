@@ -746,7 +746,8 @@ function readout(text) {
   $('readout').innerHTML = text ? `<span class="pill">${esc(text)}</span>` : '';
 }
 
-function buzz(p) { try { navigator.vibrate?.(p); } catch { /* not on this device */ } }
+// A buzz on a phone that can (never on an iPhone or iPad, where a web page can't): Sound off in the menu stops it too.
+function buzz(p) { if (!store.sound) return; try { navigator.vibrate?.(p); } catch { /* not on this device */ } }
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
 // ---- Sheets --------------------------------------------------------------------------------------------
@@ -1010,8 +1011,10 @@ $('card').addEventListener('click', () => {
 $('boardDone').addEventListener('click', () => show(null));
 $('menuHow').addEventListener('click', () => show('howSheet'));
 $('howDone').addEventListener('click', () => show(game ? null : 'title'));
+// On a phone that can buzz, the switch says it's for the buzz too.
+const canBuzz = typeof navigator.vibrate === 'function' && matchMedia('(pointer: coarse)').matches;
 const soundLabel = () => {
-  $('menuSound').textContent = `Sound: ${store.sound ? 'on' : 'off'}`;
+  $('menuSound').textContent = `${canBuzz ? 'Sound and buzz' : 'Sound'}: ${store.sound ? 'on' : 'off'}`;
   $('menuSound').setAttribute('aria-pressed', String(!!store.sound));
 };
 soundLabel();

@@ -897,6 +897,35 @@ for (const tap of ['#menuBtn', '#card']) {
   } finally { await c.close(); }
 }
 
+// Sound off in the menu stops the buzz too: a strike with the sound off doesn't buzz. On a phone that can buzz the
+// switch says "Sound and buzz"; where a page can't buzz (an iPhone, an iPad), just "Sound".
+{
+  const phone = { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true };
+  const { c, p } = await lane(phone, { sound: false });
+  try {
+    await p.evaluate(() => {
+      window.buzzes = [];
+      Object.defineProperty(navigator, 'vibrate', { configurable: true, value: v => { window.buzzes.push(JSON.stringify(v)); return true; } });
+    });
+    await p.evaluate(({ pocket, seed }) => { pinDrop.speed = 2; pinDrop.seed = seed; pinDrop.throw(pocket); }, { pocket, seed: strikeSeed });
+    await until(() => p.evaluate(() => pinDrop.phase === 'settle'), 20000, 'the strike never finished');
+    assert.equal(await p.evaluate(() => pinDrop.game.players[0].rolls[0]), 10, `seed ${strikeSeed} didn't strike`);
+    assert.deepEqual(await p.evaluate(() => window.buzzes), [], 'a strike buzzed with the sound off');
+    await p.click('#menuBtn');
+    assert.equal(await p.textContent('#menuSound'), 'Sound and buzz: off');
+    await p.click('#menuSound');
+    assert.equal(await p.textContent('#menuSound'), 'Sound and buzz: on');
+  } finally { await c.close(); }
+  const { c: c2, p: p2 } = await lane(phone, { sound: true });
+  try {
+    await p2.addInitScript(() => { delete Navigator.prototype.vibrate; });
+    await p2.reload();
+    await p2.click('#resume').catch(() => p2.click('#start'));
+    await p2.click('#menuBtn');
+    assert.equal(await p2.textContent('#menuSound'), 'Sound: on', 'the switch talks of a buzz where a page cannot buzz');
+  } finally { await c2.close(); }
+}
+
 // For a screen reader: the scorecard button's name says what it shows (the name, the frame, the total) and then what it
 // does; each ball and each turn is said in one plain sentence by a polite live region; a callout leaves the page once
 // it has faded; and the scorecards are read in words, frame by frame, not as a string of marks.
