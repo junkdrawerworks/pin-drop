@@ -19,7 +19,9 @@ thrown straight at the head pin.
   where the ball will go as far as the end of the oil, 40 feet down, and a gold arrow how it'll hook on the dry end
   from there, worked out from the real physics. The last ten feet to the pins are up to you. The dotted line lights up
   further the faster you're swiping, so you see how hard it'll go before you let go. On a trackpad, press and hold with
-  one finger and flick up with another; with a mouse, hold the button down as you flick up.
+  one finger and flick up with another; with a mouse, hold the button down as you flick up. On a keyboard, Left and
+  Right move the ball, H changes the hook (none, left, right), and holding Space winds up the throw, shown in mph with
+  the dotted line, until you let go.
 - **A start for new players.** On each player's first ball of a game, a ring on the lane marks a good place to stand
   and the arrow to roll over is lit gold: from there a straight ball comes into the pocket at an angle. A fingertip on
   the lane shows a new player the swipe on their very first ball, how to drag the ball over to line up the first pins

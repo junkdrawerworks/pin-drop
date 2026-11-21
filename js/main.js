@@ -103,6 +103,7 @@ function update(dt) {
     if (phaseT >= RETURN) aim();
   } else {
     view.setCamera(0, 0);
+    if (windAt !== null) winding();
   }
 }
 
@@ -206,8 +207,11 @@ function callout(p, knocked, left) {
   readout('');
   const cleared = left.length === 0;
   // A ball at about the slowest speed there is: say how to throw harder, once a game for each player. With a mouse or
-  // trackpad, a flick with a finger while another holds the click is quicker than dragging with the one pressing.
-  const faster = clicking() ? 'Flick faster: on a trackpad, hold with one finger and flick with another' : 'Flick faster for a harder throw';
+  // trackpad, a flick with a finger while another holds the click is quicker than dragging with the one pressing; from
+  // the keyboard, Space is held longer.
+  const keys = !!lastShot?.keys;
+  const faster = keys ? 'Hold Space longer for a harder throw'
+    : clicking() ? 'Flick faster: on a trackpad, hold with one finger and flick with another' : 'Flick faster for a harder throw';
   // A ball that hooked into the gutter on the side it was hooking to: the swipe curved, maybe without meaning to. That
   // comes first, once a game for each player too. (The readout said which way it hooked, but it's gone by now.) A slow
   // ball with more hook than its speed can carry to the pocket from anywhere is told so, rather than to stand somewhere
@@ -216,13 +220,14 @@ function callout(p, knocked, left) {
   let tip = '';
   if (sawGutter && Math.abs(lastShot.hook) >= 3 && sim.ball.side === way && !toldHook.has(game.turn)) {
     toldHook.add(game.turn);
-    if (lastShot.speed < 250 && Math.abs(lastShot.hook) > carries(lastShot.speed)) {
+    const atEdge = Math.abs(lastShot.x + way * (LANE.half - BALL_R - 0.5)) < 2;
+    const further = atEdge ? '' : ` or stand further ${way > 0 ? 'left' : 'right'}`;
+    // From the keyboard, the hook was chosen with H.
+    if (keys) tip = `It hooked ${way > 0 ? 'right' : 'left'}: press H for a straight ball${further}`;
+    else if (lastShot.speed < 250 && Math.abs(lastShot.hook) > carries(lastShot.speed)) {
       told.add(game.turn);   // it says to flick faster, so the word about a slow ball isn't needed as well
       tip = `Too much hook for a ball that slow: flick faster or curve less${clicking() ? '. On a trackpad, hold with one finger and flick with another' : ''}`;
-    } else {
-      const atEdge = Math.abs(lastShot.x + way * (LANE.half - BALL_R - 0.5)) < 2;
-      tip = `Your swipe curved, so it hooked ${way > 0 ? 'right' : 'left'}: swipe straighter${atEdge ? '' : ` or stand further ${way > 0 ? 'left' : 'right'}`}`;
-    }
+    } else tip = `Your swipe curved, so it hooked ${way > 0 ? 'right' : 'left'}: swipe straighter${further}`;
   } else if (slow && !cleared && !told.has(game.turn)) {
     told.add(game.turn);
     tip = faster;
@@ -339,16 +344,17 @@ function marks() {
 const HINTS = {
   touch: ['Swipe up from the ball to roll', 'drag it sideways to move'],
   mouse: ['Drag the ball to move it', 'hold the click and flick up to roll'],
+  keys: ['Left and Right move the ball, H hooks', 'hold Space and let go to roll'],
 };
 const finePointer = matchMedia('(hover: hover) and (pointer: fine)');
-let pointer = null;   // what was last used on the lane: 'mouse', 'touch' or 'pen' (null before anything is)
+let pointer = null;   // what was last used on the lane: 'mouse', 'touch', 'pen' or 'keys' (null before anything is)
 const clicking = () => (pointer ? pointer === 'mouse' : finePointer.matches);
 const hintDue = () => !!game && (store.thrown[current().name] || 0) < 3;
 let nudgeText = '', nudgeAt = -Infinity, nudgeTimer = 0;
 
 function hint() {
   const el = $('hint');
-  const how = clicking() ? 'mouse' : 'touch';
+  const how = pointer === 'keys' ? 'keys' : clicking() ? 'mouse' : 'touch';
   const [a, b] = HINTS[how];
   // A lesson's words, for the ball it's shown on.
   const words = lesson && LESSONS[lesson.kind]?.[how];
@@ -356,7 +362,8 @@ function hint() {
   el.innerHTML = nudgeText ? `<span class="pill">${esc(nudgeText)}</span>` : words ? `<span class="pill">${words}</span>`
     : `<span class="pill"><span>${a}</span><span class="dot"> · </span><span>${b}</span></span>`;
   el.classList.toggle('nudge', !!nudgeText);
-  el.hidden = !(nudgeText || words || hintDue()) || phase !== 'aim' || touch?.mode === 'throw';
+  // From the keyboard, the keys are said until the first ball they bowl, whoever's bowling.
+  el.hidden = !(nudgeText || words || hintDue() || (how === 'keys' && !keyed)) || phase !== 'aim' || touch?.mode === 'throw' || windAt !== null;
   if (!el.hidden) placeHint(el);
 }
 
@@ -370,8 +377,10 @@ function hint() {
 //   ball of a game: curve the end.
 // Like the hint, each is for a player by name on this device (store.slideShown and store.hookShown).
 const LESSONS = {
-  hook: { touch: 'Curve the end of your swipe to hook into the pocket', mouse: 'Curve the end of your flick to hook into the pocket' },
-  slide: { touch: 'Drag the ball sideways to line up the pins left', mouse: 'Drag the ball sideways to line up the pins left' },
+  hook: { touch: 'Curve the end of your swipe to hook into the pocket', mouse: 'Curve the end of your flick to hook into the pocket',
+    keys: 'Press H to hook into the pocket' },
+  slide: { touch: 'Drag the ball sideways to line up the pins left', mouse: 'Drag the ball sideways to line up the pins left',
+    keys: 'Press Left or Right to line up the pins left' },
 };
 const reduced = matchMedia('(prefers-reduced-motion: reduce)');
 let lesson = null;   // { kind, at (when the fingertip starts, ms), playing, side (which way a slide goes) }
@@ -385,9 +394,10 @@ function lessonDue() {
   const left = pins.filter(p => p.state === 'up'), mid = left.reduce((t, p) => t + p.x, 0) / left.length;
   return { kind: 'slide', at, playing: true, side: mid < ball.x ? -1 : 1 };
 }
-// What's drawn this frame: nothing once they've touched the lane, or while a sheet is up.
+// What's drawn this frame: nothing once they've touched the lane or pressed a key (the keys have only words), or while
+// a sheet is up.
 function teaching() {
-  if (!lesson?.playing || phase !== 'aim' || paused || strokes.size) return null;
+  if (!lesson?.playing || phase !== 'aim' || paused || strokes.size || pointer === 'keys') return null;
   return { kind: lesson.kind, u: (performance.now() - lesson.at) / 1000, still: reduced.matches, side: lesson.side };
 }
 // A ball thrown with a lesson up: that one's been shown.
@@ -576,6 +586,72 @@ function shotFrom(pts, final, gain = 1) {
   return { x: ball.x, ...throwOf(pts, gain) };
 }
 
+// ---- The keyboard -------------------------------------------------------------------------------------------
+
+// While aiming: Left and Right move the ball a board at a time, H changes the hook (none, left, right), and holding
+// Space winds the throw up from the slowest speed to the fastest over two seconds, shown in mph with the guide, and
+// letting go throws it, straight down the lane. Its hook bends it about 10 inches by the pins at any speed (KEY_HOOK,
+// worked out with the physics), so from the first ball's ring a hook left comes into the pocket.
+const KEY_HOOK = [[170, 2.6], [230, 3.8], [290, 5.4], [330, 7.5], [390, 12.5]];
+const WIND = 2;
+let keyHook = 0;       // -1 left, 0 none, 1 right
+let windAt = null;     // when Space went down
+let keyed = false;     // the keyboard has bowled a ball, in this page
+const hookAt = speed => {
+  const i = Math.max(1, KEY_HOOK.findIndex(([s]) => s >= speed));
+  const [s0, h0] = KEY_HOOK[i - 1], [s1, h1] = KEY_HOOK[i];
+  return h0 + (h1 - h0) * clamp((speed - s0) / (s1 - s0));
+};
+const windSpeed = () => 170 + 220 * clamp((performance.now() - windAt) / 1000 / WIND);
+const keyShot = () => { const speed = windSpeed(); return { x: ball.x, speed, angle: 0, hook: keyHook * hookAt(speed), keys: true }; };
+const hookWord = () => (keyHook === 0 ? 'straight' : keyHook < 0 ? 'hook left' : 'hook right');
+function winding() {
+  guide = keyShot();
+  const text = `${(guide.speed * 0.0568).toFixed(1)} mph · ${hookWord()}`;
+  if ($('readout').textContent !== text) readout(text);
+}
+function unwind() {
+  if (windAt === null) return;
+  windAt = null; guide = null; readout('');
+}
+
+document.addEventListener('keydown', e => {
+  if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || shown || paused || !game || phase !== 'aim' || !$('upright').hidden) return;
+  const k = e.key, onButton = !!e.target.closest?.('button, a, input, summary');
+  if (k === 'ArrowLeft' || k === 'ArrowRight') {
+    if (windAt !== null) return;
+    ball.x = clamp(ball.x + (k === 'ArrowLeft' ? -BOARD : BOARD), -LANE.half + BALL_R + 0.5, LANE.half - BALL_R - 0.5);
+    current().x = ball.x;
+    redraw(); keep();
+  } else if (k === 'h' || k === 'H') {
+    if (windAt !== null) return;
+    keyHook = keyHook === 0 ? -1 : keyHook < 0 ? 1 : 0;
+  } else if (k === ' ') {
+    // On the menu button or the scorecard, Space presses it, until the keyboard has bowled (Left, Right or H first take
+    // the focus off it).
+    if (onButton && !keyed) return;
+    if (!e.repeat && windAt === null) windAt = performance.now();
+  } else return;
+  e.preventDefault();
+  if (onButton && k !== ' ') e.target.blur();
+  pointer = 'keys';
+  if (lesson) lesson.playing = false;
+  dropStrokes();
+  if (windAt === null) readout(hookWord()[0].toUpperCase() + hookWord().slice(1));
+  hint();
+});
+document.addEventListener('keyup', e => {
+  if (e.key !== ' ' || windAt === null) return;
+  e.preventDefault();
+  const shot = keyShot();
+  windAt = null;
+  if (phase !== 'aim' || paused || shown) { guide = null; return; }
+  keyed = true;
+  throwBall(shot);
+});
+// Space let go of in another window never comes back as a keyup here.
+addEventListener('blur', unwind);
+
 // ---- What's on screen ----------------------------------------------------------------------------------
 
 // A scorecard: the boxes to look at, and the same in words for a screen reader (left out on the scorecard along the
@@ -707,7 +783,7 @@ function show(id) {
   paused = id === 'menu' || id === 'howSheet' || id === 'board';
   // The rumble only changes as the ball rolls, which stops behind a sheet: so it stops too, and the next step of
   // the roll starts it again. Back on the lane, the sound carries on if it was put to sleep while the page was hidden.
-  if (id) sound.roll(0);
+  if (id) { sound.roll(0); unwind(); }
   else sound.wake(false);
   upright();
 }
@@ -722,7 +798,7 @@ function upright() {
   if ($('upright').hidden === !on) return;
   $('upright').hidden = !on;
   for (const s of behind) $(s).inert = on;
-  if (on) { dropStrokes(); $('uprightSay').focus({ preventScroll: true }); }
+  if (on) { dropStrokes(); unwind(); $('uprightSay').focus({ preventScroll: true }); }
   else if (document.activeElement?.closest?.('#upright')) document.activeElement.blur();
 }
 sideways.addEventListener('change', upright);

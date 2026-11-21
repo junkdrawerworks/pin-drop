@@ -1156,6 +1156,45 @@ for (const tap of ['#menuBtn', '#card']) {
   }
 }
 
+// Bowling from the keyboard: Left and Right move the ball a board at a time, H goes from straight to hook left (and
+// on to hook right and back), and holding Space winds up the speed, shown in mph with the guide, then throws straight
+// down the lane as it's let go, the harder the longer it was held. The hint says the keys once one is pressed. Once
+// the keyboard has bowled, Space throws even with the focus on the menu button.
+{
+  const { c, p } = await lane({ viewport: { width: 1280, height: 800 }, isMobile: false, hasTouch: false }, { thrown: { You: 9 } });
+  try {
+    assert.equal(await p.isVisible('#hint'), false);
+    const x0 = await p.evaluate(() => pinDrop.ball.x);
+    for (let i = 0; i < 3; i++) await p.keyboard.press('ArrowRight');
+    await p.keyboard.press('ArrowLeft');
+    const x1 = await p.evaluate(() => pinDrop.ball.x);
+    assert.ok(Math.abs(x1 - x0 - 2 * 41.5 / 39) < 0.01, `two boards over moved the ball from ${x0} to ${x1}`);
+    assert.match(await p.textContent('#hint'), /Left and Right move the ball, H hooks.*hold Space and let go to roll/);
+    await p.keyboard.press('h');
+    assert.equal(await p.textContent('#readout'), 'Hook left');
+    const wind = async ms => {
+      await p.keyboard.down(' ');
+      await wait(ms);
+      const during = await p.evaluate(() => ({ phase: pinDrop.phase, guide: !!pinDrop.view.guideKey, readout: document.getElementById('readout').textContent, hint: document.getElementById('hint').hidden }));
+      await p.keyboard.up(' ');
+      return { during, shot: await p.evaluate(() => pinDrop.shot), phase: await p.evaluate(() => pinDrop.phase) };
+    };
+    await p.evaluate(() => { pinDrop.speed = 10; });
+    const soft = await wind(300);
+    assert.equal(soft.during.phase, 'aim', 'holding Space threw before it was let go');
+    assert.match(soft.during.readout, /^\d+\.\d mph · hook left$/);
+    assert.ok(soft.during.guide && soft.during.hint, 'no guide while winding up, or the hint stayed up');
+    assert.equal(soft.phase, 'rolling', 'letting go of Space threw nothing');
+    assert.ok(soft.shot.angle === 0 && soft.shot.hook < 0 && Math.abs(soft.shot.x - x1) < 1e-9, `the keyboard threw ${JSON.stringify(soft.shot)}`);
+    await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
+    await p.focus('#menuBtn');
+    const hard = await wind(1500);
+    assert.equal(await p.isVisible('#menu'), false, 'Space on the menu button opened the menu after bowling from the keyboard');
+    assert.equal(hard.phase, 'rolling');
+    assert.ok(hard.shot.speed > soft.shot.speed + 80, `held 1.5 s it threw at ${hard.shot.speed}, held 0.3 s at ${soft.shot.speed}`);
+  } finally { await c.close(); }
+}
+
 // The first player keeps the name You: it's "Your turn" (never "You’s turn") as the turn comes round, and "You win!".
 {
   const { c, p } = await lane({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true }, {}, ['You', 'Player 2']);
