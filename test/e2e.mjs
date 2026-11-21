@@ -1495,6 +1495,32 @@ for (const names of [['Ana', 'Ben'], ['Alexandrinaaaa', 'Bartholomewwww', 'Chris
   } finally { await c.close(); }
 }
 
+// With Reduce Motion on, the view doesn't fly down the lane: it stays behind the ball for the first two thirds of the
+// way to the head pin (480 in of 720), then cuts to the pins, and once the pinsetter is done cuts straight back for the
+// next ball. Without it, the camera moves through every place in between.
+for (const motion of ['reduce', 'no-preference']) {
+  const { c, p } = await lane({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, reducedMotion: motion });
+  try {
+    const seen = await p.evaluate(() => new Promise(done => {
+      const aimY = pinDrop.view.aimView.y, pinY = pinDrop.view.pinView.y, out = { between: 0, cutAt: null, returns: 0, back: null };
+      pinDrop.throw({ x: 0, speed: 290, angle: 0, hook: 0 });
+      (function frame() {
+        const cy = pinDrop.view.cam.y, ph = pinDrop.phase;
+        if (Math.abs(cy - aimY) > 0.01 && Math.abs(cy - pinY) > 0.01) out.between++;
+        if (ph === 'rolling' && out.cutAt === null && Math.abs(cy - pinY) < 0.01) out.cutAt = pinDrop.ball.y;
+        if (ph === 'return') out.returns++;
+        if (ph === 'aim') { out.back = Math.abs(cy - aimY) < 0.01; done(out); } else requestAnimationFrame(frame);
+      })();
+    }));
+    if (motion === 'reduce') {
+      assert.equal(seen.between, 0, `with Reduce Motion the camera was somewhere between the ball and the pins for ${seen.between} frames`);
+      assert.ok(seen.cutAt >= 480 && seen.cutAt < 500, `the view cut to the pins with the ball ${seen.cutAt} in down the lane`);
+      assert.ok(seen.returns <= 1, `the camera came back over ${seen.returns} frames`);
+      assert.equal(seen.back, true, 'the view is not back behind the ball for the next one');
+    } else assert.ok(seen.between > 30 && seen.returns > 10, `the camera did not fly: ${JSON.stringify(seen)}`);
+  } finally { await c.close(); }
+}
+
 // A game left half-way: one tap on Bowl doesn't throw it away. It asks for a second tap, which starts over.
 {
   const current = { players: [{ name: 'Ana', rolls: [7, 2, 10], x: 0 }, { name: 'Ben', rolls: [5, 4], x: 0 }], turn: 1, leftover: null };

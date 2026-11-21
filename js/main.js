@@ -82,9 +82,7 @@ function update(dt) {
       clearedAt ??= phaseT;
       if (phaseT - clearedAt >= 0.12) { called = true; callCleared(); }
     }
-    // Follow the ball down the lane, and into the gutter; once it's in the pit, stay where it went in.
-    camT = Math.max(camT, ease((ball.y - 140) / (LANE.head - 110 - 140)));
-    view.setCamera(camT, follow(ball.state === 'pit' ? followX : ball.x, dt));
+    chase(dt);
     const moving = ball.state === 'lane' || (ball.state === 'gutter' && ball.y < LANE.deck);
     sound.roll(moving ? clamp(Math.hypot(ball.vx, ball.vy) / 380) * (1 - camT * 0.4) : 0);
     if (sim.settled) { sound.roll(0); scoreBall(); }
@@ -98,6 +96,7 @@ function update(dt) {
     runSweep();
     view.setCamera(1, follow(0, dt));
   } else if (phase === 'return') {
+    if (reduced.matches) { aim(); return; }   // a cut back to the ball, not a flight
     camT = 1 - ease(phaseT / RETURN);
     view.setCamera(camT, follow(0, dt));
     if (phaseT >= RETURN) aim();
@@ -105,6 +104,17 @@ function update(dt) {
     view.setCamera(0, 0);
     if (windAt !== null) winding();
   }
+}
+
+// The camera as a ball rolls: following it down the lane, and into the gutter; once it's in the pit, staying where it
+// went in. With Reduce Motion on, it doesn't fly: the view stays behind the ball for the first two thirds of the way
+// to the head pin, then cuts to the pins (and cuts back once the pinsetter is done: see update).
+const CUT = LANE.head * 2 / 3;
+function chase(dt) {
+  if (reduced.matches) {
+    if (camT < 1 && ball.y >= CUT) { camT = 1; followX = ball.x; }
+  } else camT = Math.max(camT, ease((ball.y - 140) / (LANE.head - 110 - 140)));
+  view.setCamera(camT, follow(ball.state === 'pit' ? followX : ball.x, dt));
 }
 
 // Eases the camera's follow towards x, a quarter of a second behind.
