@@ -760,12 +760,15 @@ const nineAndMiss = Array.from({ length: 18 }, (_, i) => (i % 2 ? 0 : 9));   // 
     await touchStroke(cdp, [[90, 0, 6]], 195, 660);
     const curved = await ball(async () => {
       const path = [];
-      for (let i = 0; i <= 14; i++) { const t = i / 14; path.push([285 - 36 * Math.sin(t * Math.PI), 660 - 320 * t]); }
+      // An 8% bow: a hook of about 15, which any speed carries (a slow ball with more gets a word of its own, below).
+      for (let i = 0; i <= 14; i++) { const t = i / 14; path.push([285 - 27 * Math.sin(t * Math.PI), 660 - 320 * t]); }
       await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: path[0][0], y: path[0][1] }] });
       for (const [x, y] of path.slice(1)) { await wait(12); await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y }] }); }
       await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
     }, 'Ana');
     assert.match(curved.said, /hook right/);
+    const hooked = await p.evaluate(() => pinDrop.shot.hook);
+    assert.ok(hooked > 3 && hooked <= 20, `the curved swipe threw a hook of ${hooked}, not the one this checks`);
     assert.equal(curved.side, 1, 'the curved swipe did not go in the right-hand gutter, so this checks nothing');
     assert.equal(curved.call, 'Gutter ballYour swipe curved, so it hooked right: swipe straighter or stand further left');
     // The tip is on a dark pill, to read where it lands over the lane's light wood.
