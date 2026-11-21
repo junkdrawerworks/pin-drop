@@ -52,6 +52,18 @@ export class Renderer {
     return { x: 0, y: LANE.head - D, h, f, hor: baseY - f * h / D };
   }
 
+  // Where a callout can go without covering the sign or the pins, in px down the screen: the top and bottom of the
+  // lit masking unit, and the front of the pin deck (with room for a pin that fell forward), in the close view of
+  // the pins; and the front of the pin deck seen from the foul line, while the next ball is aimed.
+  spots() {
+    const at = (v, Y, Z) => v.hor + (v.h - Z) * v.f / (Y - v.y);
+    const back = LANE.pit + 30, front = LANE.head - 24;
+    return {
+      signTop: at(this.pinView, back, 50), signBottom: at(this.pinView, back, 24),
+      deckFront: at(this.pinView, front, 0), aimDeckFront: at(this.aimView, front, 0),
+    };
+  }
+
   setCamera(t, follow = 0) {
     const a = this.aimView, b = this.pinView, e = t * t * (3 - 2 * t);
     const c = this.cam;

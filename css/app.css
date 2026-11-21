@@ -79,7 +79,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 
 /* STRIKE! */
 .call {
-  position: fixed; left: 0; right: 0; top: calc(var(--safe-t) + 17%); text-align: center; pointer-events: none;
+  position: fixed; left: 0; right: 0; top: calc(var(--safe-t) + 17%); padding: 0 12px; text-align: center; pointer-events: none;
   font-family: Shrikhand, Georgia, serif; font-size: clamp(44px, 13vw, 92px); line-height: 1;
   color: var(--gold); text-shadow: 0 3px 0 #a3461c, 0 0 28px rgba(255, 140, 50, 0.55);
   opacity: 0;

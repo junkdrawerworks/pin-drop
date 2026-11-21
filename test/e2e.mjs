@@ -361,6 +361,35 @@ const state = p => p.evaluate(() => ({ phase: pinDrop.phase, x: pinDrop.ball.x }
   } finally { await c2.close(); }
 }
 
+// A ball's callout stays off the Pin Drop sign over the pins (it used to land on it on a tablet), and the call for
+// the next player's turn stays off the pins they're aiming at: on a phone, and a tablet either way up.
+{
+  const { c, p } = await lane({ viewport: { width: 390, height: 844 }, hasTouch: true }, {}, ['Ana', 'Ben']);
+  try {
+    const call = () => p.evaluate(() => {
+      const el = document.getElementById('call'), top = parseFloat(el.style.top);
+      return { text: el.textContent, top, bottom: top + el.offsetHeight, ...pinDrop.view.spots() };
+    });
+    for (const [width, height] of [[390, 844], [820, 1180], [1180, 820]]) {
+      await p.setViewportSize({ width, height });
+      await wait(100);
+      const turn = await p.evaluate(() => pinDrop.game.turn);
+      await p.evaluate(() => { pinDrop.speed = 3; });
+      for (let k = 0; k < 3 && await p.evaluate(t => pinDrop.game.turn === t, turn); k++) {
+        await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
+        await p.evaluate(() => pinDrop.throw({ x: 10, speed: 290, angle: 0.03, hook: -45 }));
+        await until(() => p.evaluate(() => pinDrop.phase === 'settle'), 20000, 'the ball never finished');
+        const b = await call();
+        assert.ok(b.bottom <= b.signTop || b.top >= b.signBottom, `at ${width}x${height} "${b.text}" (${b.top}–${b.bottom}) is on the sign (${b.signTop}–${b.signBottom})`);
+        await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
+      }
+      const t = await call();
+      assert.match(t.text, /’s turn/);
+      assert.ok(t.top >= t.aimDeckFront, `at ${width}x${height} "${t.text}" (from ${t.top}) is over the pins (down to ${t.aimDeckFront})`);
+    }
+  } finally { await c.close(); }
+}
+
 // The scorecard along the top keeps clear of the other players' scores under it, once there are totals in it too,
 // with four players whose long names wrap the scores onto two lines, on a phone and a tablet either way up.
 for (const names of [['Ana', 'Ben'], ['Alexandrinaaaa', 'Bartholomewwww', 'Christabellaaa', 'Dmitrijevichhh']]) {

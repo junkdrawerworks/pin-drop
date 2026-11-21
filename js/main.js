@@ -92,7 +92,7 @@ function startGame(names) {
   $('hud').hidden = false;
   pins = rack();
   aim();
-  if (names.length > 1) say(turnLine(names[0]), '', 'small');
+  if (names.length > 1) say(turnLine(names[0]), '', 'small', '', 'aim');
 }
 
 function resumeGame() {
@@ -102,7 +102,7 @@ function resumeGame() {
   $('hud').hidden = false;
   pins = rack(game.leftover || undefined);
   aim();
-  say(`${current().name}`, `Frame ${next(current().rolls).frame + 1}`, 'small');
+  say(`${current().name}`, `Frame ${next(current().rolls).frame + 1}`, 'small', '', 'aim');
 }
 
 // Ready for the next ball: the rack it faces, the ball where this player last stood.
@@ -231,7 +231,7 @@ function runSweep() {
     ball = idle(current().x || 0);
     hud();
     keep();
-    if (changing && game.players.length > 1) say(turnLine(current().name), '', 'small');
+    if (changing && game.players.length > 1) say(turnLine(current().name), '', 'small', '', 'aim');
   }
 }
 
@@ -421,12 +421,23 @@ function boardHTML(withBest) {
 }
 
 let callTimer = 0;
-function say(big, small, kind, tip) {
+// A callout. A ball's goes just above the sign over the pins, where there's room under the scorecard, or else over
+// the lane in front of the pins (a tablet on its side). A turn's (at 'aim') goes over the lane in front of the pins
+// as the next player sees them, so it doesn't hide them while they aim.
+function say(big, small, kind, tip, at = 'pins') {
   const el = $('call');
   el.className = 'call';
   el.innerHTML = `${esc(big)}${small ? `<small>${esc(small)}</small>` : ''}${tip ? `<small class="tip">${esc(tip)}</small>` : ''}`;
   void el.offsetWidth;
+  el.style.fontSize = '';
   el.className = `call go ${kind || ''}${tip ? ' long' : ''}`;   // longer, to read the tip
+  // A long name in the big letters is made smaller until it fits across the screen.
+  if (el.scrollWidth > el.clientWidth + 1) el.style.fontSize = `${parseFloat(getComputedStyle(el).fontSize) * 0.97 * (el.clientWidth - 24) / (el.scrollWidth - 24)}px`;
+  const s = view.spots(), h = el.offsetHeight, grow = h * 0.04;  // it pops up to 8% bigger
+  const below = $('hud').hidden ? 0 : $('hud').getBoundingClientRect().bottom + 6;
+  let top = at === 'aim' ? s.aimDeckFront + 12 + grow : s.signTop - 12 - grow - h;
+  if (at !== 'aim' && top < below) top = s.deckFront + 12 + grow;
+  el.style.top = `${Math.round(Math.max(below, Math.min(top, view.H - h - grow - 8)))}px`;
   clearTimeout(callTimer);
   callTimer = setTimeout(() => { el.className = 'call'; }, tip ? 2900 : 1800);
 }
