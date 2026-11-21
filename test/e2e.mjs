@@ -942,6 +942,59 @@ for (const names of [['Ana', 'Ben'], ['Alexandrinaaaa', 'Bartholomewwww', 'Chris
   } finally { await c.close(); }
 }
 
+// A browser that won't let Pin Drop keep anything (site data blocked, a private window with no room) gets one word
+// about it: under the record on the title when that's known as the page opens, or else in the hint's place as the
+// next ball is aimed, the first time a save fails. Never again after each ball.
+{
+  const blockedLine = 'This browser isn’t letting Pin Drop keep games, so a reload starts over.';
+  const hints = p => p.evaluate(t => {
+    window.saidBlocked = 0;
+    new MutationObserver(() => { if (document.getElementById('hint').textContent === t) window.saidBlocked++; })
+      .observe(document.getElementById('hint'), { childList: true, subtree: true, characterData: true });
+  }, blockedLine);
+  const twoBalls = async p => {
+    for (let k = 0; k < 2; k++) {
+      await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
+      await p.evaluate(() => { pinDrop.speed = 10; pinDrop.throw({ x: 0, speed: 300, angle: 0, hook: 0 }); });
+      await until(() => p.evaluate(() => pinDrop.phase !== 'rolling'), 20000, 'the ball never finished');
+    }
+    await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
+  };
+  // Every write refused, from the start.
+  const c = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await c.addInitScript(() => { Storage.prototype.setItem = () => { throw new DOMException('no room', 'QuotaExceededError'); }; });
+  const p = await c.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  try {
+    await p.goto(base);
+    assert.deepEqual(await p.$$eval('#record .blocked', els => els.map(e => e.textContent)), [blockedLine], 'the title says nothing about keeping games');
+    await p.click('#start');
+    await hints(p);
+    await twoBalls(p);
+    assert.equal(await p.evaluate(() => window.saidBlocked), 0, 'said again in the game, after the title had said it');
+    await p.click('#menuBtn'); await p.click('#menuQuit'); await p.click('#menuQuit');
+    assert.equal(await p.locator('#record .blocked').count(), 1);
+  } finally { await c.close(); }
+  // Writes refused from the middle of a game on: said once, as the next ball is aimed.
+  const c2 = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await c2.addInitScript(() => {
+    const set = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (...a) { if (window.refuse) throw new DOMException('no room', 'QuotaExceededError'); return set.apply(this, a); };
+  });
+  const p2 = await c2.newPage();
+  p2.on('pageerror', e => problems.push(e.message));
+  try {
+    await p2.goto(base);
+    assert.equal(await p2.locator('#record .blocked').count(), 0, 'the title says games are not kept, when they are');
+    await p2.click('#start');
+    await hints(p2);
+    await p2.evaluate(() => { window.refuse = true; });
+    await twoBalls(p2);
+    await twoBalls(p2);
+    assert.equal(await p2.evaluate(() => window.saidBlocked), 1, 'not said exactly once in the game');
+  } finally { await c2.close(); }
+}
+
 // Two windows of Pin Drop (a home-screen copy and a browser tab share what's kept): A finishes a game while B sits on
 // the title, and B's title shows it straight away. Then B starts a game and throws a ball, and A's game and the best
 // it set are still kept (B used to write its own stale copy over them).

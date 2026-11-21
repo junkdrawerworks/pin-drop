@@ -3,7 +3,7 @@ import { Sim, rack, LANE, BALL_R } from './physics.js';
 import { Renderer, BALL_COLOURS } from './render.js';
 import { frames, next, total, pending, isSplit, callFor, cardText } from './scoring.js';
 import * as sound from './sound.js';
-import { load, save, parse, merge, int, KEY } from './store.js';
+import { load, save as write, parse, merge, int, keeping, KEY } from './store.js';
 import { stroke, addPoints, readStroke, throwPoints, liftAs, throwOf } from './swipe.js';
 
 const $ = id => document.getElementById(id);
@@ -126,6 +126,7 @@ function aim() {
   before = pins.filter(p => p.state === 'up').length;
   hud();
   hint();
+  if (blockedDue) { blockedDue = false; nudge(BLOCKED, 6000, true); }
 }
 
 function throwBall(shot) {
@@ -289,13 +290,13 @@ function hint() {
   el.hidden = !(nudgeText || hintDue()) || phase !== 'aim' || touch?.mode === 'throw';
 }
 
-// A word for three seconds in the hint's place, at most one every four.
-function nudge(text) {
+// A word for three seconds (or `ms`) in the hint's place, at most one every four unless it `must` show.
+function nudge(text, ms = 3000, must = false) {
   const now = performance.now();
-  if (now - nudgeAt < 4000) return;
+  if (now - nudgeAt < 4000 && !must) return;
   nudgeAt = now; nudgeText = text;
   clearTimeout(nudgeTimer);
-  nudgeTimer = setTimeout(() => { nudgeText = ''; hint(); }, 3000);
+  nudgeTimer = setTimeout(() => { nudgeText = ''; hint(); }, ms);
   hint();
 }
 
@@ -535,6 +536,7 @@ function titleScreen() {
   pins = rack(); ball = idle(0); sweep = null; guide = null;
   view.setCamera(0);
   resumeButton();
+  blockedDue = false;   // the title says it
   drawPlayers(store.names?.length ? store.names : ['You']);
   disarmStart();
   record();
@@ -585,6 +587,7 @@ function record() {
       return `<li><span class="when">${d}</span><span class="scores">${pairs.join(' ')}</span></li>`;
     }).join('') + '</ol>';
   }
+  if (!keeping()) h += `<p class="blocked">${BLOCKED}</p>`;
   $('record').innerHTML = h;
 }
 
@@ -601,7 +604,7 @@ function finish() {
   for (const s of scores) if (!Object.hasOwn(store.bests, s.name) || s.score > store.bests[s.name]) store.bests[s.name] = s.score;
   store.games = [{ at: Date.now(), scores }, ...(store.games || [])].slice(0, 20);
   store.current = null;
-  save(store);
+  put();
 }
 
 // "Ana and Cal": names in a line ("You and Ana" when one is still called You, who comes first).
@@ -641,13 +644,23 @@ function showEnd() {
   $('hud').hidden = true; $('others').hidden = true;
 }
 
+// What's on this device, saved; the first time the browser won't keep it, a word about that, once: in a game, in the
+// hint's place as the next ball is aimed (the title says it under the record, from the start if loading found out).
+const BLOCKED = 'This browser isn’t letting Pin Drop keep games, so a reload starts over.';
+let blockedSaid = !keeping(), blockedDue = false;
+function put() {
+  if (write(store) || blockedSaid) return;
+  blockedSaid = true;
+  if (game) blockedDue = true; else record();
+}
+
 // Saves after every ball, as the next ball will find things: whose turn, and the pins left standing.
 function keep() {
   if (game && !game.players.every(q => next(q.rolls).done)) {
     const pending = game.nextTurn != null;
     store.current = { players: game.players, turn: pending && game.nextTurn >= 0 ? game.nextTurn : game.turn, leftover: pending ? null : game.leftover };
   }
-  save(store);
+  put();
 }
 
 $('addPlayer').addEventListener('click', () => {
@@ -686,11 +699,11 @@ $('menuHow').addEventListener('click', () => show('howSheet'));
 $('howDone').addEventListener('click', () => show(game ? null : 'title'));
 const soundLabel = () => { $('menuSound').textContent = `Sound: ${store.sound ? 'on' : 'off'}`; };
 soundLabel();
-$('menuSound').addEventListener('click', () => { store.sound = !store.sound; sound.setSound(store.sound); soundLabel(); save(store); });
+$('menuSound').addEventListener('click', () => { store.sound = !store.sound; sound.setSound(store.sound); soundLabel(); put(); });
 let quitArmed = false;
 $('menuQuit').addEventListener('click', () => {
   if (!quitArmed) { quitArmed = true; $('menuQuit').textContent = 'Tap again to end it'; return; }
-  store.current = null; save(store);
+  store.current = null; put();
   titleScreen();
 });
 $('again').addEventListener('click', () => startGame(game.players.map(q => q.name), game.players.map(q => q.x)));

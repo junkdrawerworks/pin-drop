@@ -17,8 +17,18 @@ export function parse(json) {
   } catch { return blank(); }
 }
 
+// Whether this browser lets Pin Drop keep anything: false once reading or writing has failed (site data blocked, or
+// a private window with no room). load() tries a write too, so the title can say so before a game is lost.
+let works = true;
+export const keeping = () => works;
+
 export function load() {
-  try { return parse(localStorage.getItem(KEY)); } catch { return blank(); }
+  try {
+    const s = parse(localStorage.getItem(KEY));
+    localStorage.setItem(`${KEY}.try`, '1');
+    localStorage.removeItem(`${KEY}.try`);
+    return s;
+  } catch { works = false; return blank(); }
 }
 
 // Folds the records kept in `theirs` into `mine`: another window of Pin Drop (a home-screen copy and a browser tab, a
@@ -44,10 +54,11 @@ export function merge(mine, theirs) {
   return mine;
 }
 
-// Writes `s`, with whatever another window has kept since folded into it first (see merge).
+// Writes `s`, with whatever another window has kept since folded into it first (see merge). False when the browser
+// wouldn't keep it: the game carries on without.
 export function save(s) {
   let kept = null;
   try { kept = localStorage.getItem(KEY); } catch { /* blocked: written over, or not at all, below */ }
   merge(s, parse(kept));
-  try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* private window or full: carry on without */ }
+  try { localStorage.setItem(KEY, JSON.stringify(s)); return true; } catch { works = false; return false; }
 }

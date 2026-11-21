@@ -191,6 +191,7 @@ h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.08em; color: 
 .record .pair { white-space: nowrap; }
 .record li b { color: var(--cream); font-variant-numeric: tabular-nums; }
 .record li b.won { color: var(--gold); }
+.record .blocked { margin: 12px 0 0; font-size: 13px; }
 
 .cards { display: grid; gap: 14px; margin-top: 12px; }
 .cards .row .name { display: flex; justify-content: space-between; font-weight: 700; margin-bottom: 4px; }
