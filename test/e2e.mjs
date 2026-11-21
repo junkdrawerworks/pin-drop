@@ -50,9 +50,26 @@ const page = await ctx.newPage();
 const problems = [];
 page.on('pageerror', e => problems.push(e.message));
 page.on('console', m => { if (m.type() === 'error') problems.push(m.text()); });
-page.on('requestfailed', r => problems.push('failed: ' + r.url()));
+// A request that fails while the server is down (see 'Works offline' below) is expected; one at any other time isn't.
+page.on('requestfailed', r => problems.push((net === 'up' ? 'failed: ' : 'failed with the network down: ') + r.url()));
 page.on('request', r => { if (!r.url().startsWith(base)) problems.push('left the site: ' + r.url()); });
 
+// Every sound that starts finishes: each buffer source and oscillator is counted when it starts and when it ends.
+await page.addInitScript(() => {
+  window.sounds = { started: 0, ended: 0 };
+  for (const make of ['createBufferSource', 'createOscillator']) {
+    const made = BaseAudioContext.prototype[make];
+    BaseAudioContext.prototype[make] = function (...args) {
+      const node = made.apply(this, args), start = node.start;
+      node.start = function (...when) {
+        sounds.started++;
+        node.addEventListener('ended', () => sounds.ended++, { once: true });
+        return start.apply(this, when);
+      };
+      return node;
+    };
+  }
+});
 await page.goto(base);
 await page.evaluate(() => document.fonts.ready);
 
@@ -161,6 +178,12 @@ assert.equal(saved.games.length, 1);
 assert.deepEqual(saved.games[0].scores, rolls.map((r, i) => ({ name: ['Ana', 'Ben'][i], score: total(r), rolls: r })));
 assert.equal(saved.current, null);
 console.log('  a two-player game:', scores.join(' and '));
+// The knocks, chimes, rumbles and sweeps of a whole game have finished, bar the few still sounding as it ends: none
+// is left running for good, getting louder and costing more with every ball.
+const sounds = await page.evaluate(() => window.sounds);
+assert.ok(sounds.started > 100, `only ${sounds.started} sounds in a whole game, so this checks nothing`);
+assert.ok(sounds.started - sounds.ended < 15, `${sounds.started - sounds.ended} of the game's ${sounds.started} sounds never finished`);
+console.log(`  sounds: ${sounds.started} started, ${sounds.started - sounds.ended} still going at the end`);
 
 // A game in progress carries on after a reload.
 await page.click('#toTitle');
@@ -667,6 +690,84 @@ const nineAndMiss = Array.from({ length: 18 }, (_, i) => (i % 2 ? 0 : 9));   // 
     assert.equal(await p.textContent('#record .best'), 'Best game · Ben204', "Ben's best was lost");
     const saved = await p.evaluate(() => JSON.parse(localStorage.getItem('pin-drop.v1')));
     assert.deepEqual(saved.bests, { Ben: 204, Ana: 98 });
+  } finally { await c.close(); }
+}
+
+// Three players carry on a game in the ninth frame, and the turn goes round all three in order, Ana, Ben, Cy, Ana...
+// (the turn passing was only played with two players and four). Ben strikes every ball, so his ninth takes one ball
+// and his tenth three; the others throw two balls in the gutter. The end shows all three.
+{
+  const eight = Array.from({ length: 16 }, (_, i) => (i % 2 ? 4 : 3));   // eight open frames of 3 and 4: 56
+  const names = ['Ana', 'Ben', 'Cy'];
+  const { c, p } = await kept({}, { names, current: { players: names.map(name => ({ name, rolls: [...eight], x: 0 })), turn: 0, leftover: null } });
+  try {
+    assert.equal(await p.textContent('#resume'), 'Carry on · Ana’s turn, frame 9');
+    await p.click('#resume');
+    await p.evaluate(seed => { pinDrop.speed = 10; pinDrop.seed = seed; window.turns = []; }, strikeSeed);
+    await until(() => p.evaluate(pocket => {
+      if (pinDrop.phase === 'aim') {
+        turns.push(pinDrop.game.turn);
+        pinDrop.throw(pinDrop.game.turn === 1 ? pocket : { x: 14, speed: 300, angle: 0.02, hook: 0 });
+      }
+      return pinDrop.phase === 'over';
+    }, pocket), 90000, 'the three-player game never ended');
+    const rolls = await p.evaluate(() => pinDrop.game.players.map(q => q.rolls));
+    assert.deepEqual(rolls[1].slice(16), [10, 10, 10, 10], `seed ${strikeSeed} didn't strike every ball for Ben`);
+    assert.deepEqual(await p.evaluate(() => turns), [0, 0, 1, 2, 2, 0, 0, 1, 1, 1, 2, 2], 'the turn did not go round the three in order');
+    await until(() => p.isVisible('#end'), 5000, 'no end of the game');
+    assert.equal(await p.textContent('#endTitle'), 'Ben wins!');
+    const rows = await p.$$eval('#endCards .row', els => els.map(e => ({ tenth: e.querySelectorAll('.f')[9].querySelector('.balls').textContent, sum: +e.querySelector('.f.sum').textContent })));
+    assert.deepEqual(rows, [{ tenth: '--', sum: 56 }, { tenth: 'XXX', sum: 116 }, { tenth: '--', sum: 56 }]);
+    console.log('  three players: the turn went round in order, 56, 116, 56');
+  } finally { await c.close(); }
+}
+
+// A spare in the tenth: Ana has 7 down and the pins a ball at the head pin leaves, picks them up, and her fill ball
+// faces a fresh rack.
+{
+  const left = play(rack(), headOn, leaveSeed).standing;
+  const at = { x: Math.max(-14, Math.min(14, left.reduce((s, q) => s + q.x, 0) / left.length)), speed: 290, angle: 0, hook: 0 };
+  const spareSeed = [...Array(100).keys()].find(k => play(rack(left), at, k + 1).standing.length === 0) + 1;
+  const first = 10 - left.length;
+  const { c, p } = await kept({}, { names: ['Ana'], current: { players: [{ name: 'Ana', rolls: [...nineAndMiss, first], x: 0 }], turn: 0, leftover: left } });
+  try {
+    await p.click('#resume');
+    assert.deepEqual(await upPins(p), left.map(q => `${q.id}@${q.x.toFixed(6)},${q.y.toFixed(6)}`), 'the pins left did not come back');
+    assert.equal(await p.textContent('#where'), 'Frame 10 · ball 2');
+    await p.evaluate(({ at, seed }) => { pinDrop.speed = 4; pinDrop.seed = seed; pinDrop.throw(at); }, { at, seed: spareSeed });
+    await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the fill ball');
+    assert.deepEqual(await p.evaluate(() => pinDrop.game.players[0].rolls.slice(18)), [first, 10 - first], `seed ${spareSeed} didn't pick up the spare in the page`);
+    assert.equal(await p.$$eval('#frames .f', els => els[9].querySelector('.balls').textContent), `${first}/`);
+    assert.equal(await p.textContent('#where'), 'Frame 10 · bonus ball');
+    assert.deepEqual(await upPins(p), freshRack, 'no fresh rack for the fill ball after a spare in the tenth');
+    await p.evaluate(() => pinDrop.throw({ x: 14, speed: 300, angle: 0.02, hook: 0 }));
+    await until(() => p.isVisible('#end'), 20000, 'no end of the game');
+    assert.equal(await p.$$eval('#endCards .row', els => els[0].querySelectorAll('.f')[9].querySelector('.balls').textContent), `${first}/-`);
+    assert.equal(await p.textContent('#endTitle'), '91');
+    console.log(`  a spare in the tenth with seed ${spareSeed}, and a fresh rack for the fill ball`);
+  } finally { await c.close(); }
+}
+
+// Reloading in the tenth after a strike and then a 7, and tapping Carry on, brings back the very pins that 7 left,
+// where they stood, for the bonus ball.
+{
+  const { c, p } = await kept({}, { names: ['Ana'], current: { players: [{ name: 'Ana', rolls: [...nineAndMiss], x: 0 }], turn: 0, leftover: null } });
+  try {
+    await p.click('#resume');
+    await p.evaluate(({ pocket, seed }) => { pinDrop.speed = 4; pinDrop.seed = seed; pinDrop.throw(pocket); }, { pocket, seed: strikeSeed });
+    await until(() => p.evaluate(() => pinDrop.phase === 'aim' && pinDrop.game.players[0].rolls.length === 19), 20000, 'the strike never finished');
+    await p.evaluate(({ headOn, seed }) => { pinDrop.seed = seed; pinDrop.throw(headOn); }, { headOn, seed: leaveSeed });
+    await until(() => p.evaluate(() => pinDrop.phase === 'settle'), 20000, 'the second ball never finished');
+    const left = await upPins(p), rolls = await p.evaluate(() => pinDrop.game.players[0].rolls.slice(18));
+    assert.ok(left.length >= 2, `the second ball left ${left.length} pins, so this checks less than it means to`);
+    assert.deepEqual(rolls, [10, 10 - left.length]);
+    await p.reload();
+    assert.equal(await p.textContent('#resume'), 'Carry on · frame 10');
+    await p.click('#resume');
+    assert.deepEqual(await p.evaluate(() => pinDrop.game.players[0].rolls.slice(18)), rolls);
+    assert.deepEqual(await upPins(p), left, 'the pins left after X and a 7 did not come back');
+    assert.equal(await p.textContent('#where'), 'Frame 10 · bonus ball');
+    console.log(`  carried on in the tenth after X and ${rolls[1]}, with the ${left.length} pins left`);
   } finally { await c.close(); }
 }
 
@@ -1367,7 +1468,7 @@ for (const names of [['Ana', 'Ben'], ['Alexandrinaaaa', 'Bartholomewwww', 'Chris
   } finally { await c.close(); }
 }
 
-assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems while using it');
+assert.deepEqual(problems.filter(p => !p.startsWith('failed with the network down:')), [], 'problems while using it');
 await browser.close();
 server.close();
 
