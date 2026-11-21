@@ -4,6 +4,10 @@ import { LANE, SPOTS, BOARD, BALL_R, PIN_LEN, fallen, path } from './physics.js'
 
 const NEAR = 6;
 const GOLD_TO = 600;   // the guide's gold arrow ends 50 feet down
+// How far down the lane (inches) the guide's dotted line is lit for a ball thrown at `speed` (in/s): 4 feet at the
+// slowest (170), half way to the end of the oil at 15.9 mph, and all 40 feet at the top speed (390). It grows as the
+// swipe speeds up, so the speed shows before letting go.
+export const litTo = speed => 48 + (LANE.oil - 48) * Math.max(0, Math.min(1, (speed - 170) / 220));
 const NEXT_LANE = 41.5 + LANE.gutter * 2 + 9;   // centre to centre, with the ball return between
 // A pin's outline: height up the pin (inches) and its radius there.
 const PROFILE = [[0, 1.02], [0.75, 1.41], [2.25, 1.96], [3.4, 2.25], [4.5, 2.38], [5.9, 2.28], [7.25, 1.92], [8.6, 1.4],
@@ -300,7 +304,8 @@ export class Renderer {
   }
 
   // While a throw is being swiped: the way the ball will go, worked out with the real physics less the lane's small
-  // wander (see path in physics.js). A dotted line runs to the end of the oil, 40 feet down. Then, for a ball with any
+  // wander (see path in physics.js). A dotted line runs to the end of the oil, 40 feet down, lit as far as the swipe's
+  // speed reaches (from 4 feet at the slowest to all 40 at the top speed), faint beyond. Then, for a ball with any
   // hook, a gold arrow bends the way it really will on the dry back end, as far as 50 feet: the last ten feet to the
   // pins are left to the player.
   guide(shot) {
@@ -316,6 +321,7 @@ export class Renderer {
       return a.x + (b.x - a.x) * u;
     };
     const end = pts[pts.length - 1].y;
+    const lit = litTo(shot.speed);
     const steps = 32, from = 10, len = LANE.oil - from;
     g.save();
     g.lineCap = 'round';
@@ -324,7 +330,7 @@ export class Renderer {
       if (y0 >= end) break;
       const a = this.p(at(y0), y0), b = this.p(at(y1) ?? at(y0), y1);
       if (!a || !b) continue;
-      g.strokeStyle = `rgba(255,255,255,${0.6 - 0.35 * i / steps})`;
+      g.strokeStyle = y0 < lit ? `rgba(255,255,255,${0.62 - 0.27 * i / steps})` : 'rgba(255,255,255,0.16)';
       g.lineWidth = Math.max(1, 1.2 * a[2]);
       g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke();
     }

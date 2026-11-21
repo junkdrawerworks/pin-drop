@@ -259,6 +259,14 @@ test('the guide\'s path is the ball\'s own, with no wander, and stops at the edg
   assert.ok(gutter.edge && gutter.x === -20.75 && gutter.y < 600, JSON.stringify(gutter));
 });
 
+test('the guide\'s dotted line grows with the swipe\'s speed, to the end of the oil at the top speed', async () => {
+  const { litTo } = await import('../js/render.js');
+  assert.equal(litTo(170), 48);
+  assert.equal(litTo(390), 480);
+  assert.ok(litTo(290) > 250 && litTo(290) < 320, `a good ball lights ${litTo(290)} in`);
+  for (let v = 170; v < 390; v += 10) assert.ok(litTo(v + 10) > litTo(v));
+});
+
 test('a second ball can pick up a leftover pin', () => {
   // The 10 pin alone, and a ball sent straight at it.
   const pins = rack([{ id: 10, x: 18, y: 751.18 }]);
