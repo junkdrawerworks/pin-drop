@@ -235,6 +235,30 @@ test('a slow ball with a big hook reaches no pin from the edge of the lane, what
   }
 });
 
+// The guide drawn while swiping follows the ball's real path, less the lane's wander, and ends where it ends.
+test('the guide\'s path is the ball\'s own, with no wander, and stops at the edge of the lane', async () => {
+  const { path } = await import('../js/physics.js');
+  const shot = { x: 10, speed: 290, angle: through(10, 2.5, -40), hook: -40 };
+  const pts = path(shot, 600);
+  assert.equal(pts.at(-1).y, 600);
+  const sim = new Sim([], shot);
+  sim.rand = () => 0.5;
+  for (const q of pts.filter(q => q.y > 100)) {
+    while (sim.ball.y < q.y) sim.tick(1 / 600);
+    assert.ok(Math.abs(sim.ball.x - q.x) < 0.2, `at ${q.y.toFixed(0)} in the guide is at ${q.x.toFixed(2)}, the ball at ${sim.ball.x.toFixed(2)}`);
+  }
+  // The bend after the oil is as big as it really is: bigger for a slower ball with the same hook.
+  const bend = speed => {
+    const p = path({ x: 0, speed, angle: 0, hook: -30 }, 600), at = y => p.find(q => q.y >= y);
+    const a = p.findLast(q => q.y <= 470), b = at(480), c = p.at(-1);
+    return (b.x + (b.x - a.x) / (b.y - a.y) * (c.y - b.y)) - c.x;
+  };
+  assert.ok(bend(260) > bend(390) + 1, `from 40 to 50 feet a 260 in/s ball bends ${bend(260).toFixed(1)} in, a 390 in/s one ${bend(390).toFixed(1)}`);
+  // A slow ball hooking hard from the middle reaches the gutter before 50 feet: the guide ends at the lane's edge.
+  const gutter = path({ x: 0, speed: 170, angle: 0, hook: -30 }, 600).at(-1);
+  assert.ok(gutter.edge && gutter.x === -20.75 && gutter.y < 600, JSON.stringify(gutter));
+});
+
 test('a second ball can pick up a leftover pin', () => {
   // The 10 pin alone, and a ball sent straight at it.
   const pins = rack([{ id: 10, x: 18, y: 751.18 }]);

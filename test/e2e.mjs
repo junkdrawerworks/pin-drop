@@ -295,6 +295,9 @@ const state = p => p.evaluate(() => ({ phase: pinDrop.phase, x: pinDrop.ball.x }
     assert.notEqual((await state(p)).x, x0, 'the sideways start did not move the ball');
     for (let i = 1; i <= 10; i++) { await wait(16); await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 210, y: 640 - 33 * i }] }); }
     assert.equal(await p.isVisible('#hint'), false, 'the hint stays up while swiping to throw');
+    // The guide on the lane is the ball's own path, worked out from the physics, to 50 feet (or the gutter).
+    const drawn = await p.evaluate(() => pinDrop.view.guidePts?.at(-1));
+    assert.ok(drawn && (drawn.y === 600 || drawn.edge), `the guide drawn while swiping ends at ${JSON.stringify(drawn)}`);
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
     await wait(50);
     const thrown = await state(p);

@@ -1,8 +1,9 @@
 // Draws the alley in perspective from behind the ball. The camera starts at the foul line looking down the
 // lane and follows the ball to the pins.
-import { LANE, SPOTS, BOARD, BALL_R, PIN_LEN, fallen } from './physics.js';
+import { LANE, SPOTS, BOARD, BALL_R, PIN_LEN, fallen, path } from './physics.js';
 
 const NEAR = 6;
+const GOLD_TO = 600;   // the guide's gold arrow ends 50 feet down
 const NEXT_LANE = 41.5 + LANE.gutter * 2 + 9;   // centre to centre, with the ball return between
 // A pin's outline: height up the pin (inches) and its radius there.
 const PROFILE = [[0, 1.02], [0.75, 1.41], [2.25, 1.96], [3.4, 2.25], [4.5, 2.38], [5.9, 2.28], [7.25, 1.92], [8.6, 1.4],
@@ -298,35 +299,49 @@ export class Renderer {
     g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.lineTo(c[0], c[1]); g.closePath(); g.fill();
   }
 
-  // The line the ball will start along, while a throw is being swiped.
-  guide({ x, angle, hook }) {
-    const g = this.g;
-    const steps = 24, len = 330;
+  // While a throw is being swiped: the way the ball will go, worked out with the real physics less the lane's small
+  // wander (see path in physics.js). A dotted line runs to the end of the oil, 40 feet down. Then, for a ball with any
+  // hook, a gold arrow bends the way it really will on the dry back end, as far as 50 feet: the last ten feet to the
+  // pins are left to the player.
+  guide(shot) {
+    const key = `${shot.x},${shot.speed},${shot.angle},${shot.hook}`;
+    if (this.guideKey !== key) { this.guideKey = key; this.guidePts = path(shot, GOLD_TO); }
+    const pts = this.guidePts, g = this.g;
+    // Where the path is `y` inches down (null past where it ends).
+    const at = y => {
+      let i = 1;
+      while (i < pts.length && pts[i].y < y) i++;
+      if (i >= pts.length) return null;
+      const a = pts[i - 1], b = pts[i], u = (y - a.y) / (b.y - a.y || 1);
+      return a.x + (b.x - a.x) * u;
+    };
+    const end = pts[pts.length - 1].y;
+    const steps = 32, from = 10, len = LANE.oil - from;
     g.save();
     g.lineCap = 'round';
     for (let i = 0; i < steps; i++) {
-      const y0 = 10 + (len / steps) * i, y1 = y0 + len / steps * 0.5;
-      const a = this.p(x + Math.tan(angle) * y0, y0), b = this.p(x + Math.tan(angle) * y1, y1);
+      const y0 = from + (len / steps) * i, y1 = Math.min(end, y0 + len / steps * 0.5);
+      if (y0 >= end) break;
+      const a = this.p(at(y0), y0), b = this.p(at(y1) ?? at(y0), y1);
       if (!a || !b) continue;
-      g.strokeStyle = `rgba(255,255,255,${0.55 * (1 - i / steps)})`;
+      g.strokeStyle = `rgba(255,255,255,${0.6 - 0.35 * i / steps})`;
       g.lineWidth = Math.max(1, 1.2 * a[2]);
       g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke();
     }
-    // Which way it'll hook, for any hook at all (as the readout says): a short bend off the end of the line.
-    if (hook) {
-      const y0 = len + 10, x0 = x + Math.tan(angle) * y0, bend = Math.sign(hook) * Math.min(14, 3 + Math.abs(hook) * 0.18);
-      const pts = [];
-      for (let i = 0; i <= 10; i++) {
-        const t = i / 10, y = y0 + t * 150;
-        const q = this.p(x0 + Math.tan(angle) * t * 150 + bend * t * t, y);
-        if (q) pts.push(q);
+    // Which way it'll hook, and how far, for any hook at all (as the readout says): gold, from the end of the oil.
+    if (shot.hook && end > LANE.oil + 6) {
+      const q = [];
+      for (let y = LANE.oil; ; y = Math.min(end, y + 6)) {
+        const r = this.p(at(y) ?? pts[pts.length - 1].x, y);
+        if (r) q.push(r);
+        if (y >= end) break;
       }
-      if (pts.length > 2) {
+      if (q.length > 2) {
         g.strokeStyle = 'rgba(255,211,107,0.9)'; g.fillStyle = 'rgba(255,211,107,0.9)';
-        g.lineWidth = Math.max(1.5, pts[0][2] * 1.1);
-        g.beginPath(); pts.forEach((q, i) => (i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]))); g.stroke();
-        const e = pts[pts.length - 1], f = pts[pts.length - 3];
-        const ang = Math.atan2(e[1] - f[1], e[0] - f[0]), hs = Math.max(5, e[2] * 3.2);
+        g.lineWidth = Math.max(2, q[0][2] * 1.3);
+        g.beginPath(); q.forEach((r, i) => (i ? g.lineTo(r[0], r[1]) : g.moveTo(r[0], r[1]))); g.stroke();
+        const e = q[q.length - 1], f = q[q.length - 3];
+        const ang = Math.atan2(e[1] - f[1], e[0] - f[0]), hs = Math.max(6.5, e[2] * 3.2);
         g.beginPath();
         g.moveTo(e[0] + Math.cos(ang) * hs, e[1] + Math.sin(ang) * hs);
         g.lineTo(e[0] + Math.cos(ang + 2.4) * hs, e[1] + Math.sin(ang + 2.4) * hs);

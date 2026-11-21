@@ -16,7 +16,8 @@ thrown straight at the head pin.
 ## How it plays
 
 - **Drag the ball sideways** to choose where you stand, then **swipe up to roll**. While you swipe, a dotted line shows
-  where the ball will start and an arrow shows which way it'll hook. On a trackpad, press and hold with one finger and
+  where the ball will go as far as the end of the oil, 40 feet down, and a gold arrow how it'll hook on the dry end
+  from there, worked out from the real physics. The last ten feet to the pins are up to you. On a trackpad, press and hold with one finger and
   flick up with another; with a mouse, hold the button down as you flick up.
 - **Hook it for strikes.** Bend your swipe and the ball keeps that side spin through the oil on the front 40 feet, then
   grips the dry back end and curves. Coming into the pocket at an angle (just right of the head pin, for a ball that

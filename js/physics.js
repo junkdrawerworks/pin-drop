@@ -306,6 +306,24 @@ function closest(a, b) {
 }
 const clamp = v => Math.max(0, Math.min(1, v));
 
+// Where a throw's ball goes down the lane with none of the lane's wander, as points every 6 inches or so, up to `to`
+// inches down (or until it reaches the gutter, at the lane's edge): for the guide drawn while swiping.
+export function path(shot, to) {
+  const sim = new Sim([], shot);
+  sim.rand = () => 0.5;
+  const b = sim.ball, pts = [{ x: b.x, y: b.y }];
+  while (b.state === 'lane' && b.y < to) {
+    sim.tick(1 / 600);
+    const last = pts[pts.length - 1];
+    if (b.state !== 'lane') {
+      // Over the edge: end it where it crossed.
+      const u = (Math.sign(b.x) * LANE.half - last.x) / (b.x - last.x || 1);
+      pts.push({ x: Math.sign(b.x) * LANE.half, y: last.y + (b.y - last.y) * u, edge: true });
+    } else if (b.y - last.y >= 6 || b.y >= to) pts.push({ x: b.x, y: Math.min(b.y, to) });
+  }
+  return pts;
+}
+
 // Runs a throw to the end, for tests and for trying things out.
 export function play(pins, shot, seed) {
   const sim = new Sim(pins, shot, seed);
