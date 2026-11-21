@@ -88,7 +88,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .call small { display: block; font-family: Figtree, sans-serif; font-weight: 700; font-size: 18px; color: var(--cream); text-shadow: 0 1px 8px #000; margin-top: 10px; letter-spacing: 0.02em; }
 .call.small { font-size: clamp(36px, 10vw, 64px); color: var(--cream); text-shadow: 0 3px 0 #39406a, 0 0 22px rgba(0, 0, 0, 0.7); }
 .call.teal { color: var(--teal); text-shadow: 0 3px 0 #1d6b6b, 0 0 26px rgba(63, 208, 201, 0.5); }
+.call small.tip { font-size: 15px; font-weight: 600; color: var(--gold); margin-top: 6px; }
 .call.go { animation: pop 1.7s ease-out forwards; }
+.call.go.long { animation-duration: 2.8s; }
 @keyframes pop {
   0% { opacity: 0; transform: scale(0.6) rotate(-6deg); }
   12% { opacity: 1; transform: scale(1.08) rotate(-3deg); }
@@ -102,6 +104,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
   font-size: 14px; font-weight: 600; color: var(--cream); text-shadow: 0 1px 6px #000, 0 0 2px #000;
 }
 .hint { bottom: calc(var(--safe-b) + 18px); padding: 0 16px; font-size: 16px; animation: breathe 2.6s ease-in-out infinite; }
+.hint.nudge { animation: none; color: var(--gold); }
 @media (max-width: 519px) {
   /* Two lines on a phone, one for each half. */
   .hint span { display: block; }

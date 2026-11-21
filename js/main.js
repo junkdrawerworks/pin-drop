@@ -22,7 +22,8 @@ let phase = 'title';      // title, aim, rolling, settle, sweep, return, over
 let phaseT = 0, camT = 0;
 let pins = rack(), ball = idle(0), sim = null;
 let guide = null, sweep = null;
-let before = 10, sawGutter = false, wasSplit = false, felt = false;
+let before = 10, sawGutter = false, wasSplit = false, felt = false, slow = false;
+let told = new Set();     // the players (by turn) already told a ball was slow, this game
 let paused = false;
 let timeScale = 1, fixedSeed = null;
 
@@ -84,6 +85,7 @@ function update(dt) {
 function startGame(names) {
   hush();
   game = { players: names.map(name => ({ name, rolls: [], x: 0 })), turn: 0, leftover: null };
+  told = new Set();
   store.names = names;
   keep();
   show(null);
@@ -95,6 +97,7 @@ function startGame(names) {
 
 function resumeGame() {
   game = store.current;
+  told = new Set();
   show(null);
   $('hud').hidden = false;
   pins = rack(game.leftover || undefined);
@@ -120,6 +123,8 @@ function throwBall(shot) {
   wasSplit = !next(current().rolls).fresh && isSplit(pins.filter(p => p.state === 'up').map(p => p.id));
   sim = new Sim(pins, shot, fixedSeed ?? ((Math.random() * 2 ** 31) | 0));
   phase = 'rolling'; phaseT = 0; camT = 0;
+  slow = shot.speed <= 185;   // the slowest a swipe throws is 170
+  nudgeText = '';
   hint();
   const mph = (shot.speed * 0.0568).toFixed(1);
   const hook = Math.abs(shot.hook) < 3 ? 'straight' : shot.hook < 0 ? 'hook left' : 'hook right';
@@ -160,6 +165,9 @@ function scoreBall() {
 function callout(st, p, knocked, left) {
   readout('');
   const cleared = left.length === 0;
+  // A ball at about the slowest speed there is: say how to throw harder, once a game for each player.
+  const tip = slow && !cleared && !told.has(game.turn) ? 'Flick faster for a harder throw' : '';
+  if (tip) told.add(game.turn);
   if (st.fresh) {
     if (cleared) {
       // Strikes in a row: count back through this player's balls.
@@ -171,15 +179,15 @@ function callout(st, p, knocked, left) {
       const perfect = run === 12 ? 'A perfect game' : '';
       say(perfect ? 'Perfect!' : name, perfect, '');
       sound.chime(true); buzz([30, 50, 60]);
-    } else if (knocked === 0) say(sawGutter ? 'Gutter ball' : 'Missed', '', 'small');
-    else if (isSplit(left)) say('Split', `the ${left.join('–')}`, 'small');
-    else say(String(knocked), left.length <= 3 ? `the ${left.join('–')} left` : 'pins', 'small');
+    } else if (knocked === 0) say(sawGutter ? 'Gutter ball' : 'Missed', '', 'small', tip);
+    else if (isSplit(left)) say('Split', `the ${left.join('–')}`, 'small', tip);
+    else say(String(knocked), left.length <= 3 ? `the ${left.join('–')} left` : 'pins', 'small', tip);
   } else if (cleared) {
     say(wasSplit ? 'Picked up!' : 'Spare!', wasSplit ? 'the split' : '', 'teal');
     sound.chime(false); buzz(30);
   } else {
     const st2 = next(p.rolls);
-    say(knocked === 0 ? (sawGutter ? 'Gutter ball' : 'Missed') : String(knocked), st2.frame !== st.frame || st2.done ? 'open frame' : '', 'small');
+    say(knocked === 0 ? (sawGutter ? 'Gutter ball' : 'Missed') : String(knocked), st2.frame !== st.frame || st2.done ? 'open frame' : '', 'small', tip);
   }
 }
 
@@ -230,7 +238,8 @@ function runSweep() {
 // ---- The hint under the ball ----------------------------------------------------------------------------
 
 // It says how to throw with whatever is being used on the lane: a mouse or trackpad, where the click has to be held
-// down, or a finger or pen. Each player sees it for their first three balls on this device.
+// down, or a finger or pen. Each player sees it for their first three balls on this device. Anything tried on the
+// lane that throws nothing gets a word in its place for a few seconds (see nudge()), whoever is bowling.
 const HINTS = {
   touch: ['Swipe up from the ball to roll', 'drag it sideways to move'],
   mouse: ['Drag the ball to move it', 'hold the click and flick up to roll'],
@@ -238,13 +247,43 @@ const HINTS = {
 const finePointer = matchMedia('(hover: hover) and (pointer: fine)');
 let pointer = null;   // what was last used on the lane: 'mouse', 'touch' or 'pen' (null before anything is)
 const clicking = () => (pointer ? pointer === 'mouse' : finePointer.matches);
+const hintDue = () => !!game && (store.thrown[current().name] || 0) < 3;
+let nudgeText = '', nudgeAt = -Infinity, nudgeTimer = 0;
 
 function hint() {
   const el = $('hint');
   const [a, b] = HINTS[clicking() ? 'mouse' : 'touch'];
-  el.innerHTML = `<span>${a}</span><span class="dot"> · </span><span>${b}</span>`;
-  const due = game && (store.thrown[current().name] || 0) < 3;
-  el.hidden = !due || phase !== 'aim' || touch?.mode === 'throw';
+  if (nudgeText) el.textContent = nudgeText;
+  else el.innerHTML = `<span>${a}</span><span class="dot"> · </span><span>${b}</span>`;
+  el.classList.toggle('nudge', !!nudgeText);
+  el.hidden = !(nudgeText || hintDue()) || phase !== 'aim' || touch?.mode === 'throw';
+}
+
+// A word for three seconds in the hint's place, at most one every four.
+function nudge(text) {
+  const now = performance.now();
+  if (now - nudgeAt < 4000) return;
+  nudgeAt = now; nudgeText = text;
+  clearTimeout(nudgeTimer);
+  nudgeTimer = setTimeout(() => { nudgeText = ''; hint(); }, 3000);
+  hint();
+}
+
+// Two fingers sliding on a trackpad scroll (wheel events), which does nothing here. (Pinching to zoom sends wheel
+// events with ctrlKey set: that's the browser's business.)
+canvas.addEventListener('wheel', e => {
+  if (phase === 'aim' && !paused && !e.ctrlKey) nudge('Hold the click down while you flick up');
+}, { passive: true });
+
+// One finger gliding up a trackpad without pressing: the pointer flies up the lane with no button held. Only while
+// the player still has the hint, so heading for the menu or the scorecard later on doesn't set it off.
+let glide = [];
+function gliding(e) {
+  if (e.pointerType !== 'mouse' || e.buttons !== 0 || touch || phase !== 'aim' || paused) { glide = []; return; }
+  const now = performance.now();
+  glide.push({ y: e.clientY, t: now });
+  while (now - glide[0].t > 300) glide.shift();
+  if (Math.max(...glide.map(g => g.y)) - e.clientY >= 120 && hintDue()) { glide = []; nudge('Hold the click down while you flick up'); }
 }
 
 function seen(e) {
@@ -282,6 +321,7 @@ function slide(t, dx) {
 }
 canvas.addEventListener('pointermove', e => {
   seen(e);
+  gliding(e);
   if (!touch || e.pointerId !== touch.id) return;
   addPoints(touch, e);
   const was = touch.mode;
@@ -312,6 +352,11 @@ const lift = e => {
   } else if (as === 'move') {
     slide(t, p[p.length - 1].x - p[0].x);
     keep();
+  } else if (as !== 'cancel') {
+    // A tap, a stroke that only went down, or a flick too short to throw.
+    const mouse = e.pointerType === 'mouse';
+    nudge(as === 'short' ? (mouse ? 'Flick further up to roll' : 'Swipe further up to roll')
+      : mouse ? 'Hold the click and flick up to roll' : 'Swipe up to roll');
   }
 };
 canvas.addEventListener('pointerup', lift);
@@ -376,14 +421,14 @@ function boardHTML(withBest) {
 }
 
 let callTimer = 0;
-function say(big, small, kind) {
+function say(big, small, kind, tip) {
   const el = $('call');
   el.className = 'call';
-  el.innerHTML = `${esc(big)}${small ? `<small>${esc(small)}</small>` : ''}`;
+  el.innerHTML = `${esc(big)}${small ? `<small>${esc(small)}</small>` : ''}${tip ? `<small class="tip">${esc(tip)}</small>` : ''}`;
   void el.offsetWidth;
-  el.className = `call go ${kind || ''}`;
+  el.className = `call go ${kind || ''}${tip ? ' long' : ''}`;   // longer, to read the tip
   clearTimeout(callTimer);
-  callTimer = setTimeout(() => { el.className = 'call'; }, 1800);
+  callTimer = setTimeout(() => { el.className = 'call'; }, tip ? 2900 : 1800);
 }
 
 function hush() { clearTimeout(callTimer); $('call').className = 'call'; }
@@ -407,6 +452,7 @@ function titleScreen() {
   phase = 'title';
   hush();
   game = null;
+  nudgeText = '';
   $('hud').hidden = true; $('others').hidden = true; $('hint').hidden = true;
   readout('');
   pins = rack(); ball = idle(0); sweep = null; guide = null;

@@ -247,6 +247,22 @@ const state = p => p.evaluate(() => ({ phase: pinDrop.phase, x: pinDrop.ball.x }
     const moved = await state(p);
     assert.equal(moved.phase, 'aim', 'moving the ball diagonally threw it');
     assert.ok(moved.x > before + 3, `the ball only moved from ${before} to ${moved.x}`);
+
+    // A flick too short to throw says so.
+    await touchStroke(cdp, [[0, -30, 3]]);
+    assert.equal((await state(p)).phase, 'aim');
+    assert.equal(await p.isVisible('#hint'), true, 'a short flick got no word');
+    assert.equal(await p.textContent('#hint'), 'Swipe further up to roll');
+
+    // A ball thrown at the slowest speed gets a word under the callout, once in the game.
+    const slowBall = async () => {
+      await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
+      await p.evaluate(() => pinDrop.throw({ x: 0, speed: 175, angle: 0, hook: 0 }));
+      await until(() => p.evaluate(() => pinDrop.phase === 'settle' || pinDrop.phase === 'over'), 20000, 'the slow ball never finished');
+      return p.textContent('#call');
+    };
+    assert.match(await slowBall(), /Flick faster for a harder throw/);
+    assert.doesNotMatch(await slowBall(), /Flick faster/, 'the word about slow balls came twice in a game');
   } finally { await c.close(); }
 }
 
@@ -259,6 +275,17 @@ const state = p => p.evaluate(() => ({ phase: pinDrop.phase, x: pinDrop.ball.x }
     assert.equal(await p.evaluate(() => getComputedStyle(document.getElementById('lane')).cursor), 'grab');
     // The hint, in a mouse's words: hold the click.
     assert.match(await p.textContent('#hint'), /hold the click and flick up to roll/);
+    // Gliding up the trackpad without the click held, and a two-finger swipe (wheel events), throw nothing but say
+    // what does.
+    for (let i = 1; i <= 8; i++) { await mouse.move(640, 640 - i * 20); await wait(16); }
+    assert.equal(await p.textContent('#hint'), 'Hold the click down while you flick up', 'gliding up without the click got no word');
+    await wait(4100);   // one word every four seconds at most
+    await mouse.move(640, 640);
+    for (let i = 0; i < 5; i++) { await mouse.wheel(0, -60); await wait(16); }
+    await wait(50);
+    assert.equal(await p.isVisible('#hint'), true);
+    assert.equal(await p.textContent('#hint'), 'Hold the click down while you flick up', 'a two-finger swipe got no word');
+    assert.equal((await state(p)).phase, 'aim');
     // A right-button drag up doesn't throw, and no menu pops up over the lane.
     await p.evaluate(() => document.addEventListener('contextmenu', e => { window.menuBlocked = e.defaultPrevented; }));
     await mouse.down({ button: 'right' });
