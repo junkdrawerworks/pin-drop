@@ -166,7 +166,8 @@ for (const [width, height] of [[320, 568], [320, 700], [360, 740], [390, 844]]) 
 
 // A Back that comes while a finger is on the lane, or just after the browser took a touch from it (as Android's back
 // gesture does when a swipe starts near the screen's side), is taken for a slip: the game stays as it was. A second
-// later, Back leaves in one press, as it always has.
+// later, Back leaves in one press, as it always has: the guard's extra history entry goes on when a finger touches the
+// lane and comes off a second after it lifts.
 {
   const other = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, serviceWorkers: 'block' });
   const tab = await other.newPage();
@@ -175,14 +176,20 @@ for (const [width, height] of [[320, 568], [320, 700], [360, 740], [390, 844]]) 
   await tab.goto(base + 'icon.svg');   // somewhere to go Back to
   await tab.goto(base);
   await tab.click('#start');
+  const guarded = () => tab.evaluate(() => history.state?.__edgeGuard === true);
+  assert.equal(await guarded(), false, 'no extra history entry before the lane is touched');
   await tab.tap('#lane', { position: { x: 195, y: 400 } });
+  await tab.waitForTimeout(1300);
+  assert.equal(await guarded(), false, 'a second after a tap on the lane, no extra entry');
   const onLane = async what => {
     await tab.waitForTimeout(300);
     assert.equal(tab.url(), base, what);
     assert.deepEqual(await tab.evaluate(() => [pinDrop.phase, document.getElementById('hud').hidden]), ['aim', false], what);
   };
   // Back in the middle of sliding the ball.
-  await tab.mouse.move(195, 700); await tab.mouse.down(); await tab.mouse.move(230, 702, { steps: 4 });
+  await tab.mouse.move(195, 700); await tab.mouse.down();
+  assert.equal(await guarded(), true, 'a finger down on the lane adds the extra entry');
+  await tab.mouse.move(230, 702, { steps: 4 });
   await tab.goBack();
   await onLane('Back in the middle of a drag should stay on the lane');
   await tab.mouse.up();
@@ -199,7 +206,8 @@ for (const [width, height] of [[320, 568], [320, 700], [360, 740], [390, 844]]) 
   assert.equal(await game(), was, 'the game should be as it was');
   // A second on, Back leaves.
   await tab.tap('#lane', { position: { x: 195, y: 400 } });
-  await tab.waitForTimeout(1100);
+  await tab.waitForTimeout(1300);
+  assert.equal(await guarded(), false, 'with nothing on the lane, there is no extra entry to press Back through');
   await tab.goBack();
   await tab.waitForURL(/icon\.svg$/, { timeout: 5000 }).catch(() => assert.fail('Back a while after a touch was taken should leave in one press'));
   assert.deepEqual(errors, []);
