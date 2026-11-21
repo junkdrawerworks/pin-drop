@@ -164,6 +164,48 @@ for (const [width, height] of [[320, 568], [320, 700], [360, 740], [390, 844]]) 
   await other.close();
 }
 
+// A Back that comes while a finger is on the lane, or just after the browser took a touch from it (as Android's back
+// gesture does when a swipe starts near the screen's side), is taken for a slip: the game stays as it was. A second
+// later, Back leaves in one press, as it always has.
+{
+  const other = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, serviceWorkers: 'block' });
+  const tab = await other.newPage();
+  const errors = [];
+  tab.on('pageerror', e => errors.push(e.message));
+  await tab.goto(base + 'icon.svg');   // somewhere to go Back to
+  await tab.goto(base);
+  await tab.click('#start');
+  await tab.tap('#lane', { position: { x: 195, y: 400 } });
+  const onLane = async what => {
+    await tab.waitForTimeout(300);
+    assert.equal(tab.url(), base, what);
+    assert.deepEqual(await tab.evaluate(() => [pinDrop.phase, document.getElementById('hud').hidden]), ['aim', false], what);
+  };
+  // Back in the middle of sliding the ball.
+  await tab.mouse.move(195, 700); await tab.mouse.down(); await tab.mouse.move(230, 702, { steps: 4 });
+  await tab.goBack();
+  await onLane('Back in the middle of a drag should stay on the lane');
+  await tab.mouse.up();
+  // The browser takes the touch, then a Back follows.
+  const game = () => tab.evaluate(() => JSON.stringify([pinDrop.game, pinDrop.ball, pinDrop.pins]));
+  const was = await game();
+  await tab.evaluate(() => {
+    const lane = document.getElementById('lane'), at = { pointerId: 7, pointerType: 'touch', clientX: 200, clientY: 700, bubbles: true };
+    lane.dispatchEvent(new PointerEvent('pointerdown', at));
+    lane.dispatchEvent(new PointerEvent('pointercancel', at));
+  });
+  await tab.goBack();
+  await onLane('Back just after the touch was taken should stay on the lane');
+  assert.equal(await game(), was, 'the game should be as it was');
+  // A second on, Back leaves.
+  await tab.tap('#lane', { position: { x: 195, y: 400 } });
+  await tab.waitForTimeout(1100);
+  await tab.goBack();
+  await tab.waitForURL(/icon\.svg$/, { timeout: 5000 }).catch(() => assert.fail('Back a while after a touch was taken should leave in one press'));
+  assert.deepEqual(errors, []);
+  await other.close();
+}
+
 // Works offline once it has been opened. The server goes down as well as the browser: in some Chromium builds the
 // browser's offline switch alone doesn't stop the service worker's own requests, and this passed with no copy at all.
 await page.waitForFunction(() => navigator.serviceWorker?.controller, null, { timeout: 10000 });

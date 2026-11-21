@@ -54,6 +54,8 @@ GitHub Pages serves it from `main`, at its own address set by `CNAME`.
 - `js/main.js`: turns, the swipe, the pinsetter's sweep, callouts and the sheets.
 - `js/sound.js`: every sound, made with Web Audio.
 - `js/store.js`: what's kept on this device, under `pin-drop.v1`.
+- `js/edge-guard.js`: a Back that comes mid-swipe (Android's back gesture, set off by a swipe near the screen's side)
+  is taken for a slip, and the game stays.
 - `css/app.css`: the look.
 - `fonts/`: [Shrikhand](https://fonts.google.com/specimen/Shrikhand) and [Figtree](https://fonts.google.com/specimen/Figtree),
   both under the SIL Open Font License, served from here so nothing loads from elsewhere.

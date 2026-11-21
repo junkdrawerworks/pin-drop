@@ -4,6 +4,7 @@ import { Renderer, BALL_COLOURS } from './render.js';
 import { frames, next, total, isSplit } from './scoring.js';
 import * as sound from './sound.js';
 import { load, save } from './store.js';
+import { guardEdges } from './edge-guard.js';
 
 const $ = id => document.getElementById(id);
 const canvas = $('lane');
@@ -259,6 +260,11 @@ const lift = e => {
 };
 canvas.addEventListener('pointerup', lift);
 canvas.addEventListener('pointercancel', lift);
+// A swipe that starts near the screen's side can set off Android's back gesture (or Chrome's swipe to go back), which
+// takes the touch (pointercancel) and then goes Back, leaving the game. A Back that comes while a finger is on the lane,
+// or within a second of the lane's touch being taken, is a slip, and the game stays as it was. Pin Drop has no history
+// of its own, so the guard keeps one extra entry for it; a deliberate Back still leaves in one press.
+guardEdges({ surfaces: [canvas] });
 
 // A swipe, read as a throw: its direction is the aim, its speed at the end is how hard, and how much it bends
 // is the hook.
