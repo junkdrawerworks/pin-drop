@@ -507,6 +507,24 @@ const state = p => p.evaluate(() => ({ phase: pinDrop.phase, x: pinDrop.ball.x }
     await touchStroke(cdp, [[0, -280, 6]]);
     assert.equal((await state(p)).phase, 'rolling', `a flick ${late.toFixed(2)} s into the return threw nothing`);
     assert.equal(await p.evaluate(() => pinDrop.view.cam.y), await p.evaluate(() => { pinDrop.camera(0); return pinDrop.view.cam.y; }), 'the camera was not back behind the ball for the throw');
+    // A drag to the right begun and ended early in the return moves the ball right, as far as the same drag while
+    // aiming: with the camera still down the lane, it slid the ball left, to the edge.
+    await p.evaluate(() => { pinDrop.speed = 4; });
+    await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
+    for (const at of [0.1, 0.4]) {
+      const from = (await state(p)).x;
+      await into(at);
+      await touchStroke(cdp, [[100, 0, 6]]);
+      const moved = (await state(p)).x - from;
+      await p.evaluate(() => { pinDrop.speed = 4; });
+      await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
+      assert.equal((await state(p)).x - from, moved, 'the ball moved again once aiming began');
+      await p.evaluate(() => { pinDrop.speed = 1; });
+      const x1 = (await state(p)).x;
+      await touchStroke(cdp, [[-100, 0, 6]]);
+      const back = x1 - (await state(p)).x;
+      assert.ok(moved > 5 && Math.abs(moved - back) < 0.5, `a drag right ${at} s into the return moved the ball ${moved.toFixed(2)} in, against ${back.toFixed(2)} in while aiming`);
+    }
   } finally { await c.close(); }
 }
 

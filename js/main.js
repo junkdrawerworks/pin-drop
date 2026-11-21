@@ -612,7 +612,10 @@ canvas.addEventListener('pointermove', e => {
   readStroke(t);
   leading();
   if (t !== touch) return;
-  if ((touch.mode === 'throw') !== (was === 'throw')) hint();   // out of the way of a throw, and back for a move
+  // Begun as the camera came back: followed, but the ball doesn't move (with the camera still down the lane, a drag
+  // right slid it left) until aiming begins, or the finger lifts (see lift).
+  if (phase !== 'aim') return;
+  if ((touch.mode === 'throw') !== (was === 'throw')) hint();  // out of the way of a throw, and back for a move
   if (touch.mode === 'move') {
     // The ball follows the finger, from where it stood when the stroke began (a stroke that started with a wobble
     // down or up takes it from there as soon as it's clearly sideways).
@@ -640,8 +643,9 @@ const lift = e => {
   if (Math.hypot(e.clientX - end.x, e.clientY - end.y) > 2) { track(t, e); readStroke(t); }
   const as = liftAs(t), p = throwPoints(t);
   if (phase !== 'aim' && phase !== 'return') return;   // thrown already, by another finger
+  // A flick or a drag begun as the camera came back, ended before it got there: the camera jumps the rest of the way.
+  if (phase === 'return' && (as === 'throw' || as === 'move')) aim();
   if (as === 'throw') {
-    if (phase === 'return') aim();   // a flick begun as the camera came back, ended before it got there
     if (led) slide(t, t.slid || 0);
     const shot = shotFrom(p, true, t.gain);
     if (shot) { dropStrokes(); throwBall(shot); return; }
