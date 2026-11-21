@@ -307,6 +307,16 @@ h1[tabindex]:focus, h2[tabindex]:focus { outline: none; }
 .record .best b { color: var(--gold); font-size: 22px; font-variant-numeric: tabular-nums; }
 .record ol { list-style: none; margin: 8px 0 0; padding: 0; }
 .record li { display: grid; grid-template-columns: auto 1fr; column-gap: 12px; align-items: baseline; padding: 3px 0; }
+/* A kept game is a button that opens its scorecard: the whole line, tall enough for a thumb, with a chevron. */
+.record li:has(> .game) { display: block; padding: 0; }
+.record .game {
+  display: grid; grid-template-columns: auto 1fr auto; column-gap: 12px; align-items: baseline; width: 100%; min-height: 44px;
+  padding: 11px 2px; border: 0; border-top: 1px solid rgba(45, 54, 88, 0.6); background: none; color: inherit; text-align: left;
+}
+.record li:first-child > .game { border-top: 0; }
+.record .game::after { content: '\203A'; color: var(--muted); font-size: 18px; line-height: 0; }
+.record .game:hover .when, .record .game:focus-visible .when { color: var(--cream); }
+.record .game:focus-visible { outline: 2px solid var(--teal); outline-offset: -2px; border-radius: 8px; }
 .record .when { white-space: nowrap; }
 .record .scores { text-align: right; }
 /* A name stays with its score: a long line of players breaks between them. */

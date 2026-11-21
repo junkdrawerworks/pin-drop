@@ -46,7 +46,8 @@ const current = () => game.players[game.turn];
 // A player's ball colours, by their place in the game: their own colour (`c`, which stays with them when Bowl again
 // changes who leads off), or on the title, the colour of that row.
 // The computer's ball is silver.
-const colourOf = i => { const q = game?.players[i]; return q?.cpu ? CPU_COLOURS : BALL_COLOURS[(q?.c ?? i) % BALL_COLOURS.length]; };
+const colourFor = (q, i) => (q?.cpu ? CPU_COLOURS : BALL_COLOURS[(q?.c ?? i) % BALL_COLOURS.length]);
+const colourOf = i => colourFor(game?.players[i], i);
 
 // ---- The lane, every frame -------------------------------------------------------------------------------
 
@@ -895,14 +896,14 @@ function leaveCard() {
 // ("3 strikes · 2 spares · 4 open", as an alley's screen sums it up); on the Scorecard sheet during a game, with the
 // most each player can still reach under their total ("max 212"), as a league's screen shows it, so in a close finish
 // everyone can see whether the player behind can still catch up.
-function boardHTML(withBest) {
-  const players = game.players;
+// A kept game's are drawn the same way from its scores (see past).
+function boardHTML(withBest, players = game.players) {
   const best = Math.max(...players.map(scoreOf));
   const tied = players.filter(q => scoreOf(q) === best).length > 1;
   const under = q => (withBest ? `<p class="count">${statsLine(q.rolls)}</p>`
     : next(q.rolls).done ? ''
       : `<p class="max"><span aria-hidden="true">max </span><span class="sr">${esc(q.name)} can still reach </span>${most(q.rolls) + int(q.head)}</p>`);
-  return players.map((q, i) => `<div class="row"><div class="name"><span><i style="background:${colourOf(i)[0]}"></i>${esc(q.name)}</span>${withBest && players.length > 1 && scoreOf(q) === best ? `<em>${tied ? 'Tied' : 'Winner'}</em>` : ''}</div>${cardHTML(q.rolls, -1, true, true, q.splits, int(q.head))}${under(q)}</div>`).join('');
+  return players.map((q, i) => `<div class="row"><div class="name"><span><i style="background:${colourFor(q, i)[0]}"></i>${esc(q.name)}</span>${withBest && players.length > 1 && scoreOf(q) === best ? `<em>${tied ? 'Tied' : 'Winner'}</em>` : ''}</div>${cardHTML(q.rolls, -1, true, true, q.splits, int(q.head))}${under(q)}</div>`).join('');
 }
 
 let callTimer = 0, callUntil = 0, callAt = null;   // when the callout on screen goes, and where it is ('pins' or 'aim')
@@ -960,8 +961,8 @@ function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<':
 
 // ---- Sheets --------------------------------------------------------------------------------------------
 
-const sheets = ['title', 'menu', 'howSheet', 'board', 'end'];
-const dialogs = ['menu', 'howSheet', 'board', 'end'];
+const sheets = ['title', 'menu', 'howSheet', 'board', 'end', 'past'];
+const dialogs = ['menu', 'howSheet', 'board', 'end', 'past'];
 // Everything behind a sheet, out of reach of Tab and a screen reader while one is up.
 const behind = ['lane', 'handoff', 'hud', 'others', 'call', 'hint', 'readout', 'replay'];
 // One How to play: the title's folded-up copy is the sheet's list.
@@ -1136,8 +1137,10 @@ function record() {
   const by = store.bestBy && !isYou(store.bestBy) ? ` · ${esc(store.bestBy)}` : '';
   if (store.best) h += `<div class="best"><span>Best game${by}</span><b>${int(store.best)}</b></div>`;
   if (games.length) {
-    h += '<ol>' + games.slice(0, 5).map(g => {
-      const d = new Date(g.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    const listed = games.slice(0, 5);
+    h += '<ol>' + listed.map((g, k) => {
+      // The day, and the time too for a game on the same day as another in the list.
+      const d = when(g.at, listed.some((o, j) => j !== k && day(o.at) === day(g.at)));
       // Each name with its score, never parted at the end of a line, and the winner's score in gold (each top score, in
       // a tie), with the same said in words for a screen reader.
       const top = Math.max(...g.scores.map(q => int(q.score)));
@@ -1149,12 +1152,48 @@ function record() {
         const how = q.bumpers || q.head ? ` <small>(${[q.bumpers ? 'bumpers' : '', q.head ? `+${int(q.head)}` : ''].filter(Boolean).join(', ')})</small>` : '';
         return `<span class="pair">${esc(q.name)} <b${won ? ' class="won"' : ''}>${int(q.score)}</b>${how}${won ? `<span class="sr"> ${tied ? 'tied' : 'won'}</span>` : ''}${sep}</span>`;
       });
-      return `<li><span class="when">${d}</span><span class="scores">${pairs.join(' ')}</span></li>`;
+      // A game kept with its balls opens its scorecard.
+      const inner = `<span class="when">${d}</span><span class="scores">${pairs.join(' ')}</span>`;
+      return g.scores.every(q => Array.isArray(q.rolls)) ? `<li><button type="button" class="game" data-at="${int(g.at)}">${inner}<span class="sr">. Show the scorecard</span></button></li>` : `<li>${inner}</li>`;
     }).join('') + '</ol>';
   }
   if (!keeping()) h += `<p class="blocked">${BLOCKED}</p>`;
   $('record').innerHTML = h;
 }
+
+// "Nov 21", or "Nov 21 · 8:40 pm" with the time.
+const day = at => new Date(at).toDateString();
+function when(at, withTime) {
+  const d = new Date(at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+  if (!withTime) return d;
+  return `${d} · ${new Date(at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }).replace(/\s?([AaPp])\.?[Mm]\.?$/, (_, a) => ` ${a.toLowerCase()}m`)}`;
+}
+
+// A kept game's scorecard, frame by frame, opened from the recent games on the title: who won, and each card as it
+// was at the end of the game. (Before, a reload at the end of a game, or Change players, lost the cards for good.)
+let pastFrom = null;   // the line it was opened from, for the focus to go back to
+function past(at) {
+  const g = (store.games || []).find(o => int(o.at) === at);
+  if (!g) return;
+  const players = g.scores.map(q => ({ ...q, rolls: q.rolls.slice(), splits: q.splits || [] }));
+  const top = Math.max(...players.map(scoreOf)), winners = players.filter(q => scoreOf(q) === top);
+  $('pastTitle').textContent = when(g.at, true);
+  const who = name => (isYou(name) ? 'You' : name);
+  $('pastLine').textContent = players.length === 1 ? `${who(players[0].name)} bowled ${top}.`
+    : winners.length === 1 ? `${who(winners[0].name)} won, ${top} to ${Math.max(...players.filter(q => q !== winners[0]).map(scoreOf))}.`
+      : `${both(winners.map(q => q.name))} tied, ${top} each.`;
+  $('pastCards').innerHTML = boardHTML(true, players);
+  pastFrom = document.activeElement;
+  show('past');
+}
+function closePast() {
+  show('title');
+  const back = pastFrom?.dataset?.at && $('record').querySelector(`[data-at="${pastFrom.dataset.at}"]`);
+  back?.focus({ preventScroll: true });
+  pastFrom = null;
+}
+$('record').addEventListener('click', e => { const b = e.target.closest('.game'); if (b) past(+b.dataset.at); });
+$('pastDone').addEventListener('click', closePast);
 
 // Whether a player's game counts toward the bests: not with bumpers or a head start, and never the computer's.
 const counts = q => !q.bumpers && !int(q.head) && !q.cpu;
@@ -1181,7 +1220,7 @@ function tallyLine() {
 
 function finish() {
   tally();
-  const scores = game.players.map(q => ({ name: q.name, score: scoreOf(q), rolls: q.rolls.slice(), splits: (q.splits || []).slice(), ...extras(q) }));
+  const scores = game.players.map((q, i) => ({ name: q.name, score: scoreOf(q), rolls: q.rolls.slice(), splits: (q.splits || []).slice(), c: q.c ?? i, ...extras(q) }));
   const counted = scores.filter((_, i) => counts(game.players[i]));
   const top = Math.max(-1, ...counted.map(s => s.score));
   // Whether there was a best here to beat, and each player's own best before this game (null for a first game).
@@ -1345,6 +1384,7 @@ document.addEventListener('keydown', e => {
   if (e.key !== 'Escape' || e.defaultPrevented) return;
   if (shown === 'menu' || shown === 'board') show(null);
   else if (shown === 'howSheet') show(game ? null : 'title');
+  else if (shown === 'past') closePast();
   else if (!shown && game && phase !== 'over') openMenu();
   else return;
   e.preventDefault();

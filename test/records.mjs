@@ -71,6 +71,48 @@ const nineAndMiss = Array.from({ length: 18 }, (_, i) => (i % 2 ? 0 : 9));   // 
   } finally { await c.close(); }
 }
 
+// ---- A kept game's scorecard ------------------------------------------------------------------------------------
+
+// Each recent game on the title opens its scorecard, frame by frame, with who won: after a reload, the end of the
+// game is gone but its cards aren't. Two games on the same day show their times; a game on a day of its own, its date.
+{
+  const at = new Date(2026, 10, 21, 20, 40).getTime(), earlier = new Date(2026, 10, 21, 19, 5).getTime(), before = new Date(2026, 10, 18, 12, 0).getTime();
+  const ana = [...nineAndMiss, 10, 7, 3], ben = [10, 10, 10, ...Array(12).fill(0), 9, 0];
+  const { c, p } = await kept({ names: ['Ana', 'Ben'], games: [
+    { at, scores: [{ name: 'Ana', score: 101, rolls: ana, splits: [2], c: 0 }, { name: 'Ben', score: 69, rolls: ben, splits: [], c: 1 }] },
+    { at: earlier, scores: [{ name: 'Ana', score: 90, rolls: nineAndMiss.concat([9, 0]), splits: [], c: 0 }] },
+    { at: before, scores: [{ name: 'Ana', score: 120 }] },   // kept with only its score: no scorecard to show
+  ] });
+  try {
+    const whens = await p.$$eval('#record li .when', els => els.map(e => e.textContent));
+    assert.deepEqual(whens, ['Nov 21 · 8:40 pm', 'Nov 21 · 7:05 pm', 'Nov 18']);
+    assert.equal(await p.locator('#record .game').count(), 2, 'a game kept without its balls opens nothing');
+    // A thumb's worth of line to tap.
+    const h = await p.$$eval('#record .game', els => els.map(e => e.getBoundingClientRect().height));
+    assert.ok(h.every(x => x >= 44), `the recent games' lines are ${h} px tall`);
+    await p.reload();   // as after the end of a game
+    await p.click('#record .game >> nth=0');
+    assert.equal(await p.isVisible('#past'), true, 'the scorecard did not open');
+    assert.equal(await p.evaluate(() => document.activeElement.id), 'pastTitle');
+    assert.equal(await p.textContent('#pastTitle'), 'Nov 21 · 8:40 pm');
+    assert.equal(await p.textContent('#pastLine'), 'Ana won, 101 to 69.');
+    assert.deepEqual(await p.$$eval('#pastCards .row .name em', els => els.map(e => e.textContent)), ['Winner']);
+    assert.deepEqual(await p.$$eval('#pastCards .f.sum', els => els.map(e => e.textContent)), ['101', '69']);
+    // Frame by frame, with the ring for Ana's split and the tenth's marks.
+    assert.equal(await p.$eval('#pastCards .row:nth-child(1) .f:nth-child(2) .split', e => e.textContent), '9');
+    assert.equal(await p.$eval('#pastCards .row:nth-child(1) .f:nth-child(10) .balls', e => e.textContent), 'X7/');
+    assert.deepEqual(await p.$$eval('#pastCards .count', els => els.map(e => e.textContent)), ['1 strike · 1 spare · 9 open', '3 strikes · 7 open']);
+    // Back to the title, the focus on the line it came from; Escape does the same.
+    await p.click('#pastDone');
+    assert.equal(await p.isVisible('#title'), true);
+    assert.equal(await p.evaluate(() => document.activeElement.dataset.at), String(at));
+    await p.click('#record .game >> nth=1');
+    assert.equal(await p.textContent('#pastLine'), 'Ana bowled 90.');
+    await p.keyboard.press('Escape');
+    assert.equal(await p.isVisible('#title'), true, 'Escape did not close the scorecard');
+  } finally { await c.close(); }
+}
+
 assert.deepEqual(problems, [], 'problems while using it');
 await browser.close();
 server.close();
