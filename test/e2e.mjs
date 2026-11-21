@@ -139,6 +139,31 @@ assert.deepEqual(installErrors, [], 'Chromium says it cannot be installed');
 // Fits a phone: nothing scrolls sideways.
 assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'the page scrolls sideways on a phone');
 
+// A swipe sideways is nobody's, so it can't run on into Chrome's swipe to go Back or Forward: the page doesn't
+// overscroll and the lane takes every touch. The ball, slid as far as it goes either way, stays 24 px or more from the
+// screen's sides, where Android's back gesture starts, at any phone width (the lane's edges are only scenery).
+for (const [width, height] of [[320, 568], [320, 700], [360, 740], [390, 844]]) {
+  const other = await browser.newContext({ viewport: { width, height }, hasTouch: true, isMobile: true, serviceWorkers: 'block' });
+  const tab = await other.newPage();
+  await tab.goto(base);
+  await tab.click('#start');
+  const look = await tab.evaluate(() => ['html', 'body', '#lane'].map(s => { const c = getComputedStyle(document.querySelector(s)); return [c.overscrollBehaviorX, c.touchAction]; }));
+  assert.deepEqual(look.map(l => l[0]).slice(0, 2), ['none', 'none'], 'the page should not overscroll sideways');
+  assert.equal(look[2][1], 'none', 'the lane should take every touch');
+  for (const way of [-1, 1]) {
+    await tab.mouse.move(width / 2, height - 120); await tab.mouse.down();
+    for (let i = 1; i <= 10; i++) await tab.mouse.move(width / 2 + way * i * 30, height - 118);
+    await tab.mouse.up();
+    const gap = await tab.evaluate(async way => {
+      const { BALL_R } = await import('./js/physics.js');
+      const at = pinDrop.view.p(pinDrop.ball.x + way * BALL_R, pinDrop.ball.y)[0];
+      return way < 0 ? at : innerWidth - at;
+    }, way);
+    assert.ok(gap >= 24, `the ball slid ${way < 0 ? 'left' : 'right'} comes ${gap.toFixed(1)} px from the screen's side at ${width}x${height}`);
+  }
+  await other.close();
+}
+
 // Works offline once it has been opened. The server goes down as well as the browser: in some Chromium builds the
 // browser's offline switch alone doesn't stop the service worker's own requests, and this passed with no copy at all.
 await page.waitForFunction(() => navigator.serviceWorker?.controller, null, { timeout: 10000 });

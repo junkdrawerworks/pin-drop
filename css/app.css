@@ -16,11 +16,12 @@
 }
 
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; background: var(--night); color: var(--cream); overflow: hidden; }
+/* No swipe sideways starts the browser's Back or Forward (Chrome's overscroll navigation): a swipe that runs off the
+   lane's side would otherwise leave the game. */
+html, body { margin: 0; height: 100%; background: var(--night); color: var(--cream); overflow: hidden; overscroll-behavior: none; }
 body {
   font: 16px/1.4 Figtree, system-ui, sans-serif;
   -webkit-tap-highlight-color: transparent;
-  overscroll-behavior: none;
 }
 button { font: inherit; color: inherit; cursor: pointer; }
 [hidden] { display: none !important; }
