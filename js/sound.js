@@ -165,7 +165,26 @@ export function chime(big) {
   });
 }
 
-// The pinsetter's whirr and clunk.
+// The ball landing on the boards as it's let go: a brief low thud with a little wood in it (all of it under 150 Hz would
+// be lost on a phone's speaker), louder for a harder throw (`speed` in in/s, 170 to 390) but well under a pin hit.
+export const thudLevel = speed => 0.12 + 0.14 * Math.max(0, Math.min(1, (speed - 170) / 220));
+export function thud(speed) {
+  if (!ctx || !on) return;
+  const t = ctx.currentTime, v = thudLevel(speed);
+  knock(70, v, 0.13, t);
+  burst(noise, 240, 1.4, v * 0.9, 0.07, t);
+}
+
+// The pinsetter's bar coming down, and the new rack set on the deck: a short low knock with a small tick of metal.
+export function clunk() {
+  if (!ctx || !on) return;
+  const t = ctx.currentTime;
+  knock(125, 0.2, 0.09, t);
+  burst(noise, 380, 2, 0.22, 0.05, t);
+  burst(white, 3200, 8, 0.05, 0.015, t);
+}
+
+// The pinsetter's whirr.
 export function sweep() {
   if (!ctx || !on) return;
   const t = ctx.currentTime;

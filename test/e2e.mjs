@@ -926,6 +926,32 @@ for (const tap of ['#menuBtn', '#card']) {
   } finally { await c2.close(); }
 }
 
+// The ball lands with a thud as it's let go, before it has reached any pin, and the pinsetter clunks as its bar lands
+// on the deck and as the new rack is set down: a knock (an oscillator) at each, and none other during the sweep.
+{
+  const { c, p } = await lane({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  try {
+    await p.evaluate(() => {
+      window.knocks = [];
+      const make = BaseAudioContext.prototype.createOscillator;
+      BaseAudioContext.prototype.createOscillator = function (...a) {
+        const o = make.apply(this, a), start = o.start;
+        o.start = function (...w) { window.knocks.push([pinDrop.phase, +pinDrop.phaseT.toFixed(2)]); return start.apply(this, w); };
+        return o;
+      };
+    });
+    await touchStroke((await c.newCDPSession(p)), [[0, -280, 6]]);
+    assert.equal((await state(p)).phase, 'rolling', 'the swipe threw nothing');
+    await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
+    const knocks = await p.evaluate(() => window.knocks);
+    // The rumble's pulse starts then too: one oscillator of its own.
+    assert.ok(knocks.filter(([ph, t]) => ph === 'rolling' && t < 0.1).length >= 2, `no thud as the ball was let go: ${JSON.stringify(knocks)}`);
+    const sweep = knocks.filter(([ph]) => ph === 'sweep').map(([, t]) => t);
+    assert.equal(sweep.length, 2, `the pinsetter's knocks: ${JSON.stringify(knocks)}`);
+    assert.ok(Math.abs(sweep[0] - 0.55) < 0.1 && Math.abs(sweep[1] - 1.7) < 0.1, `the pinsetter clunked at ${sweep.join(' and ')} s, not as the bar landed and the rack went down`);
+  } finally { await c.close(); }
+}
+
 // For a screen reader: the scorecard button's name says what it shows (the name, the frame, the total) and then what it
 // does; each ball and each turn is said in one plain sentence by a polite live region; a callout leaves the page once
 // it has faded; and the scorecards are read in words, frame by frame, not as a string of marks.

@@ -172,6 +172,7 @@ function throwBall(shot) {
   const hook = shot.hook === 0 ? 'straight' : shot.hook < 0 ? 'hook left' : 'hook right';
   readout(`${mph} mph · ${hook}`);
   sound.wake();
+  sound.thud(shot.speed);
 }
 
 // The ball's done: count the pins, mark the card, say something, and work out who's next.
@@ -297,6 +298,8 @@ function runSweep() {
   sweep.on = u > 0.3 && u < 1.4;
   sweep.z = u < 0.55 ? 26 * (1 - ease((u - 0.3) / 0.25)) : u < 1.1 ? 0 : 26 * ease((u - 1.1) / 0.28);
   sweep.y = u < 0.55 ? LANE.head - 28 : LANE.head - 28 + (LANE.deck + 14 - LANE.head + 28) * ease((u - 0.55) / 0.55);
+  // A clunk as the bar lands on the deck, and another as the pins are set down.
+  if (u >= 0.55 && !sweep.landed) { sweep.landed = true; sound.clunk(); }
   if (sweep.z < 4) {
     for (const p of pins) {
       if (p.state !== 'down' && p.state !== 'falling') continue;
@@ -311,6 +314,7 @@ function runSweep() {
     for (const p of pins) p.lift = 22;
   }
   if (sweep.swapped) for (const p of pins) p.lift = 22 * (1 - ease((u - 1.3) / 0.4));
+  if (u >= 1.7 && !sweep.set) { sweep.set = true; sound.clunk(); }
   if (u >= SWEEP) {
     for (const p of pins) p.lift = 0;
     sweep = null;
