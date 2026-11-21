@@ -576,8 +576,10 @@ function record() {
   $('record').innerHTML = h;
 }
 
+// The game's over: keep it, with every player's balls as well as their score (for working out averages and the
+// like later), and any new bests.
 function finish() {
-  const scores = game.players.map(q => ({ name: q.name, score: total(q.rolls) }));
+  const scores = game.players.map(q => ({ name: q.name, score: total(q.rolls), rolls: q.rolls.slice() }));
   const top = Math.max(...scores.map(s => s.score));
   // Whether there was a best here to beat, and each player's own best before this game (null for a first game).
   game.hadBest = !!store.best;

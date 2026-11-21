@@ -157,6 +157,8 @@ assert.ok(rolls.some(r => frames(r).some(f => f.marks.includes('X'))), `no strik
 const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('pin-drop.v1')));
 assert.equal(saved.best, Math.max(...scores));
 assert.equal(saved.games.length, 1);
+// Each player's balls are kept with the game, not only the score.
+assert.deepEqual(saved.games[0].scores, rolls.map((r, i) => ({ name: ['Ana', 'Ben'][i], score: total(r), rolls: r })));
 assert.equal(saved.current, null);
 console.log('  a two-player game:', scores.join(' and '));
 
