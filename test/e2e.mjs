@@ -578,6 +578,22 @@ const state = p => p.evaluate(() => ({ phase: pinDrop.phase, x: pinDrop.ball.x }
   } finally { await c.close(); }
 }
 
+// Hurried on, a ball's callout goes as aiming begins: it was still up for most of a second, over the pins (or the ball)
+// being aimed at.
+{
+  const { c, p, cdp } = await lane({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  try {
+    await p.evaluate(() => pinDrop.throw({ x: 18, speed: 200, angle: 0.06, hook: 0 }));   // into the gutter
+    await until(() => p.evaluate(() => pinDrop.phase === 'settle'), 20000, 'the ball never finished');
+    const said = await p.textContent('#call');
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 195, y: 500 }] });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 5000, 'never ready for the next ball');
+    assert.ok(said, 'the gutter ball had no callout');
+    assert.equal(await p.textContent('#call'), '', `"${said}" was still up as the next ball was aimed`);
+  } finally { await c.close(); }
+}
+
 // The hint sits just under the ball, or just above it where there's no room under it: on a phone on its side with a
 // home bar (an inset at the bottom of the screen) it covered the bottom of the ball.
 for (const [width, height, insets] of [[390, 844, { top: 47, bottom: 34, left: 0, right: 0 }], [844, 390, { top: 0, bottom: 21, left: 47, right: 47 }], [844, 390], [820, 1180], [1180, 820]]) {

@@ -175,6 +175,8 @@ function resumeGame() {
 
 // Ready for the next ball: the rack it faces, the ball where this player last stood.
 function aim() {
+  // Hurried on, a ball's callout can still be up, over the pins (or the ball) being aimed at: it goes.
+  if (hurry && callAt === 'pins' && performance.now() < callUntil) hush();
   phase = 'aim'; phaseT = 0; camT = 0; followX = 0; hurry = false;
   $('replay').hidden = true;
   view.setCamera(0);
@@ -808,12 +810,13 @@ function boardHTML(withBest) {
   return game.players.map((q, i) => `<div class="row"><div class="name"><span><i style="background:${colourOf(i)[0]}"></i>${esc(q.name)}</span>${withBest && game.players.length > 1 && total(q.rolls) === best ? `<em>${tied ? 'Tied' : 'Winner'}</em>` : ''}</div>${cardHTML(q.rolls, -1, true, true, q.splits)}</div>`).join('');
 }
 
-let callTimer = 0, callUntil = 0;   // when the callout on screen goes
+let callTimer = 0, callUntil = 0, callAt = null;   // when the callout on screen goes, and where it is ('pins' or 'aim')
 // A callout. A ball's goes just above the sign over the pins, where there's room under the scorecard, or else over
 // the lane in front of the pins (a tablet on its side). A turn's (at 'aim') goes over the lane in front of the pins
 // as the next player sees them, so it doesn't hide them while they aim.
 function say(big, small, kind, tip, at = 'pins') {
   const el = $('call');
+  callAt = at;
   el.className = 'call';
   el.innerHTML = `${esc(big)}${small ? `<small>${esc(small)}</small>` : ''}${tip ? `<small class="tip">${esc(tip)}</small>` : ''}`;
   void el.offsetWidth;
