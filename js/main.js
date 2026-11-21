@@ -313,16 +313,27 @@ canvas.addEventListener('wheel', e => {
 }, { passive: true });
 
 // One finger gliding up a trackpad without pressing, or a mouse moved up with its button let go: the pointer flies up
-// the lane with no button held. Only while the player still has the hint, so heading for the menu or the scorecard
-// later on doesn't set it off.
-let glide = [];
+// the lane from the ball (120 px within 300 ms, from within two ball widths of it) with no button held. Only while the
+// player still has the hint. Heading for the menu or the scorecard does the same, so the word waits until the pointer
+// has stopped for 150 ms, and doesn't come if by then it has gone over the scorecard or a button, or off the lane.
+let glide = [], glideTimer = 0;
+function stopGlide() { glide = []; clearTimeout(glideTimer); glideTimer = 0; }
 function gliding(e) {
-  if (e.pointerType !== 'mouse' || e.buttons !== 0 || strokes.size || phase !== 'aim' || paused) { glide = []; return; }
-  const now = performance.now();
-  glide.push({ y: e.clientY, t: now });
+  if (e.pointerType !== 'mouse' || e.buttons !== 0 || strokes.size || phase !== 'aim' || paused
+    || e.clientY < $('hud').getBoundingClientRect().bottom) { stopGlide(); return; }
+  const now = performance.now(), x = e.clientX, y = e.clientY;
+  glide.push({ x, y, t: now });
   while (now - glide[0].t > 300) glide.shift();
-  if (Math.max(...glide.map(g => g.y)) - e.clientY >= 120 && hintDue()) { glide = []; nudge(HOLD); }
+  const low = glide.reduce((a, g) => (g.y > a.y ? g : a)), b = view.p(ball.x, ball.y, BALL_R);
+  const fromBall = b && Math.hypot(low.x - b[0], low.y - b[1]) <= 4 * BALL_R * b[2];
+  if (!glideTimer && !(low.y - y >= 120 && fromBall && hintDue())) return;
+  clearTimeout(glideTimer);
+  glideTimer = setTimeout(() => {
+    stopGlide();
+    if (phase === 'aim' && !paused && !strokes.size && document.elementFromPoint(x, y) === canvas) nudge(HOLD);
+  }, 150);
 }
+canvas.addEventListener('pointerleave', stopGlide);
 
 function seen(e) {
   if (!e.pointerType || e.pointerType === pointer) return;
@@ -760,7 +771,7 @@ for (const type of ['pointerdown', 'keydown', 'input']) {
   });
 }
 $('resume').addEventListener('click', () => { sound.wake(); resumeGame(); });
-function openMenu() { dropStrokes(); quitArmed = false; $('menuQuit').textContent = 'End this game'; show('menu'); }
+function openMenu() { dropStrokes(); stopGlide(); quitArmed = false; $('menuQuit').textContent = 'End this game'; show('menu'); }
 $('menuBtn').addEventListener('click', openMenu);
 $('menuResume').addEventListener('click', () => show(null));
 $('menuBoard').addEventListener('click', () => { $('boardCards').innerHTML = boardHTML(false); show('board'); });

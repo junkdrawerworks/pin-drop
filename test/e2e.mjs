@@ -386,7 +386,19 @@ const state = p => p.evaluate(() => ({ phase: pinDrop.phase, x: pinDrop.ball.x }
     assert.match(await p.textContent('#hint'), /hold the click and flick up to roll/);
     // Gliding up the trackpad without the click held, and a two-finger swipe (wheel events), throw nothing but say
     // what does: on a trackpad, one finger holds the click and another flicks.
+    // But heading for the menu button from the lane at an ordinary speed, or gliding up from halfway down the lane, gets
+    // no word (going for the menu set it off).
+    const menuAt = await p.evaluate(() => { const b = document.getElementById('menuBtn').getBoundingClientRect(); return { x: b.x + 22, y: b.y + 22 }; });
+    for (let i = 0; i <= 20; i++) { const e = (i / 20) ** 2 * (3 - 2 * i / 20); await mouse.move(640 + (menuAt.x - 640) * e, 560 + (menuAt.y - 560) * e); await wait(17); }
+    await wait(300);
+    assert.notEqual(await p.textContent('#hint'), 'Hold the click as you flick up (on a trackpad, hold with one finger, flick with another)', 'heading for the menu said to hold the click');
+    await mouse.move(640, 400);
+    for (let i = 1; i <= 8; i++) { await mouse.move(640, 400 - i * 20); await wait(16); }
+    await wait(300);
+    assert.notEqual(await p.textContent('#hint'), 'Hold the click as you flick up (on a trackpad, hold with one finger, flick with another)', 'gliding up from halfway down the lane said to hold the click');
+    await mouse.move(640, 640);
     for (let i = 1; i <= 8; i++) { await mouse.move(640, 640 - i * 20); await wait(16); }
+    await wait(300);
     assert.equal(await p.textContent('#hint'), 'Hold the click as you flick up (on a trackpad, hold with one finger, flick with another)', 'gliding up without the click got no word');
     await wait(4100);   // one word every four seconds at most
     await mouse.move(640, 640);
