@@ -174,8 +174,9 @@ assert.ok(rolls.some(r => frames(r).some(f => f.marks.includes('X'))), `no strik
 const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('pin-drop.v1')));
 assert.equal(saved.best, Math.max(...scores));
 assert.equal(saved.games.length, 1);
-// Each player's balls are kept with the game, not only the score.
-assert.deepEqual(saved.games[0].scores, rolls.map((r, i) => ({ name: ['Ana', 'Ben'][i], score: total(r), rolls: r })));
+// Each player's balls are kept with the game, not only the score, and which of them left splits (by their place).
+assert.deepEqual(saved.games[0].scores.map(({ splits, ...q }) => q), rolls.map((r, i) => ({ name: ['Ana', 'Ben'][i], score: total(r), rolls: r })));
+assert.ok(saved.games[0].scores.every(q => Array.isArray(q.splits) && q.splits.every(k => Number.isInteger(k) && k < q.rolls.length)), 'the splits kept with the game');
 assert.equal(saved.current, null);
 console.log('  a two-player game:', scores.join(' and '));
 // The knocks, chimes, rumbles and sweeps of a whole game have finished, bar the few still sounding as it ends: none
