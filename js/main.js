@@ -92,7 +92,7 @@ function startGame(names) {
   $('hud').hidden = false;
   pins = rack();
   aim();
-  if (names.length > 1) say(`${names[0]}’s turn`, '', 'small');
+  if (names.length > 1) say(turnLine(names[0]), '', 'small');
 }
 
 function resumeGame() {
@@ -231,7 +231,7 @@ function runSweep() {
     ball = idle(current().x || 0);
     hud();
     keep();
-    if (changing && game.players.length > 1) say(`${current().name}’s turn`, '', 'small');
+    if (changing && game.players.length > 1) say(turnLine(current().name), '', 'small');
   }
 }
 
@@ -431,6 +431,11 @@ function say(big, small, kind, tip) {
   callTimer = setTimeout(() => { el.className = 'call'; }, tip ? 2900 : 1800);
 }
 
+// The first player is called You until they type a name, and "You’s turn" won't do.
+const isYou = name => name.trim().toLowerCase() === 'you';
+const turnLine = name => (isYou(name) ? 'Your turn' : `${name}’s turn`);
+const winLine = name => (isYou(name) ? 'You win!' : `${name} wins!`);
+
 function hush() { clearTimeout(callTimer); $('call').className = 'call'; }
 
 function readout(text) {
@@ -495,7 +500,8 @@ const readNames = () => [...$('players').querySelectorAll('input')].map((el, i) 
 function record() {
   const games = store.games || [];
   let h = '';
-  if (store.best) h += `<div class="best"><span>Best game${store.bestBy ? ` · ${esc(store.bestBy)}` : ''}</span><b>${store.best}</b></div>`;
+  const by = store.bestBy && !isYou(store.bestBy) ? ` · ${esc(store.bestBy)}` : '';
+  if (store.best) h += `<div class="best"><span>Best game${by}</span><b>${store.best}</b></div>`;
   if (games.length) {
     h += '<ol>' + games.slice(0, 5).map(g => {
       const d = new Date(g.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
@@ -519,7 +525,7 @@ function showEnd() {
   const scores = game.players.map(q => ({ name: q.name, score: total(q.rolls) }));
   const top = Math.max(...scores.map(s => s.score));
   const winners = scores.filter(s => s.score === top);
-  $('endTitle').textContent = scores.length === 1 ? `${top}` : winners.length > 1 ? 'A tie!' : `${winners[0].name} wins!`;
+  $('endTitle').textContent = scores.length === 1 ? `${top}` : winners.length > 1 ? 'A tie!' : winLine(winners[0].name);
   $('endTitle').classList.toggle('score', scores.length === 1);
   const line = scores.length === 1
     ? (top === 300 ? 'A perfect game.' : game.newBest ? 'Your best game yet.' : store.best ? `Your best is ${store.best}.` : '')

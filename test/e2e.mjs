@@ -321,6 +321,46 @@ const state = p => p.evaluate(() => ({ phase: pinDrop.phase, x: pinDrop.ball.x }
   } finally { await c.close(); }
 }
 
+// The first player keeps the name You: it's "Your turn" (never "You’s turn") as the turn comes round, and "You win!".
+{
+  const { c, p } = await lane({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true }, {}, ['You', 'Player 2']);
+  try {
+    await p.evaluate(() => {
+      window.calls = [document.getElementById('call').textContent];
+      new MutationObserver(() => window.calls.push(document.getElementById('call').textContent)).observe(document.getElementById('call'), { childList: true, subtree: true });
+    });
+    await p.evaluate(() => { pinDrop.speed = 10; });
+    let turns = 0, was = 0;
+    await until(async () => {
+      const turn = await p.evaluate(() => {
+        if (pinDrop.phase === 'aim') pinDrop.throw({ x: 0, speed: 300, angle: 0, hook: 0 });
+        return pinDrop.game.turn;
+      });
+      if (turn !== was) { turns++; was = turn; }
+      return turns >= 2;
+    }, 60000, 'the turn never came back round to You');
+    await wait(300);
+    const calls = await p.evaluate(() => window.calls);
+    assert.ok(calls.some(t => t.startsWith('Your turn')), `no "Your turn" among ${JSON.stringify(calls)}`);
+    assert.ok(!calls.some(t => /You’s turn/i.test(t)), `"You’s turn" among ${JSON.stringify(calls)}`);
+  } finally { await c.close(); }
+  // The last ball of a game You win.
+  const nines = Array.from({ length: 19 }, (_, i) => (i % 2 ? 0 : 9));
+  const end = { players: [{ name: 'You', rolls: nines, x: 0 }, { name: 'Player 2', rolls: Array(20).fill(0), x: 0 }], turn: 0, leftover: null };
+  const { c: c2, p: p2 } = await lane({ viewport: { width: 390, height: 844 }, hasTouch: true }, { current: end }, ['You', 'Player 2']);
+  try {
+    // lane() tapped Bowl, which asks again with a game going: carry on with it instead.
+    await p2.click('#players li:first-child input');
+    await p2.click('#resume');
+    await p2.evaluate(() => { pinDrop.speed = 10; pinDrop.throw({ x: 0, speed: 300, angle: 0, hook: 0 }); });
+    await until(() => p2.isVisible('#end'), 20000, 'the game never ended');
+    assert.equal(await p2.textContent('#endTitle'), 'You win!');
+    // And the best game on the title isn't "Best game · You".
+    await p2.click('#toTitle');
+    assert.equal(await p2.textContent('#record .best span'), 'Best game');
+  } finally { await c2.close(); }
+}
+
 // The scorecard along the top keeps clear of the other players' scores under it, once there are totals in it too,
 // with four players whose long names wrap the scores onto two lines, on a phone and a tablet either way up.
 for (const names of [['Ana', 'Ben'], ['Alexandrinaaaa', 'Bartholomewwww', 'Christabellaaa', 'Dmitrijevichhh']]) {
