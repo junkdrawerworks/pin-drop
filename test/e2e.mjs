@@ -127,28 +127,32 @@ for (let k = 0; k < 5; k++) same.push(await steadyFling());
 assert.ok(Math.max(...same) - Math.min(...same) <= 1, `the same fling threw at ${same.join(', ')} mph`);
 console.log(`  the same fling five times: ${same.join(', ')} mph`);
 
-// Play the rest of the game fast: each ball aimed at the pocket with a hook, or at whatever's left.
+// Play the rest of the game fast: each ball hooked into the pocket (which strikes about half the time), or aimed
+// at whatever's left.
+const { pocket, through } = await import('./aim.mjs');
+const { play, rack, SPOTS } = await import('../js/physics.js');
 await page.evaluate(() => { pinDrop.speed = 10; });
 const deadline = Date.now() + 120000;
 while (!(await page.isVisible('#end'))) {
   assert.ok(Date.now() < deadline, 'the game never finished');
-  await page.evaluate(() => {
+  await page.evaluate(pocket => {
     if (pinDrop.phase !== 'aim') return;
     const up = pinDrop.pins.filter(p => p.state === 'up');
-    const full = up.length === 10;
-    const target = full ? 1.5 : up.reduce((s, p) => s + p.x, 0) / up.length;
-    const x = full ? 10 : Math.max(-14, Math.min(14, target));
-    pinDrop.throw({ x, speed: 290, angle: full ? 0.004 + (Math.random() - 0.5) * 0.006 : (target - x) / 720, hook: full ? -40 : 0 });
-  });
+    if (up.length === 10) { pinDrop.throw(pocket); return; }
+    const target = up.reduce((s, p) => s + p.x, 0) / up.length;
+    const x = Math.max(-14, Math.min(14, target));
+    pinDrop.throw({ x, speed: 290, angle: (target - x) / 720, hook: 0 });
+  }, pocket);
   await page.waitForTimeout(60);
 }
 const { scores, rolls } = await page.evaluate(() => ({
   scores: [...document.querySelectorAll('#endCards .f.sum')].map(e => +e.textContent),
   rolls: pinDrop.game.players.map(p => p.rolls),
 }));
-const { total, next } = await import('../js/scoring.js');
+const { total, next, frames } = await import('../js/scoring.js');
 assert.deepEqual(scores, rolls.map(total), 'the end cards show the right totals');
 assert.ok(rolls.every(r => next(r).done), 'both games are complete');
+assert.ok(rolls.some(r => frames(r).some(f => f.marks.includes('X'))), `no strikes in ${JSON.stringify(rolls)}, so strikes went untested`);
 const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('pin-drop.v1')));
 assert.equal(saved.best, Math.max(...scores));
 assert.equal(saved.games.length, 1);
@@ -341,6 +345,109 @@ const state = p => p.evaluate(() => ({ phase: pinDrop.phase, x: pinDrop.ball.x }
       }));
     }
     assert.ok(Math.max(...speeds) - Math.min(...speeds) < 0.01, `the same swipe threw at ${speeds.map(v => v.toFixed(1)).join(', ')} in/s`);
+  } finally { await c.close(); }
+}
+
+// A seed that makes the pocket ball strike, and one that makes a ball at the head pin leave some pins, in node: the
+// page plays the same seed and throw out exactly the same way.
+const strikeSeed = [...Array(100).keys()].find(k => play(rack(), pocket, k + 1).standing.length === 0) + 1;
+const headOn = { x: 0, speed: 290, angle: through(0, 0, 0), hook: 0 };
+const leaveSeed = [...Array(100).keys()].find(k => play(rack(), headOn, k + 1).standing.length >= 2) + 1;
+const watchCalls = p => p.evaluate(() => {
+  window.calls = [];
+  new MutationObserver(() => window.calls.push(document.getElementById('call').textContent)).observe(document.getElementById('call'), { childList: true, subtree: true });
+});
+const upPins = p => p.evaluate(() => pinDrop.pins.filter(q => q.state === 'up').map(q => `${q.id}@${q.x.toFixed(6)},${q.y.toFixed(6)}`));
+const freshRack = SPOTS.map((s, i) => `${i + 1}@${s.x.toFixed(6)},${s.y.toFixed(6)}`);
+
+// Four players carry on a game in the tenth frame. The first strikes three times: a fresh rack after each strike,
+// Strike!, Double! and Turkey!, X X X in the tenth for 30 more, and then it's the next player's turn. The rest
+// throw in the gutter, and the end shows all four.
+{
+  const nine = Array.from({ length: 18 }, (_, i) => (i % 2 ? 4 : 3));   // nine open frames of 3 and 4: 63
+  const names = ['Ana', 'Ben', 'Cy', 'Dee'];
+  const current = { players: names.map(name => ({ name, rolls: [...nine], x: 0 })), turn: 0, leftover: null };
+  const c = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const p = await c.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  p.on('console', m => { if (m.type() === 'error') problems.push(m.text()); });
+  await p.addInitScript(k => { if (!sessionStorage.getItem('set')) { sessionStorage.setItem('set', '1'); localStorage.setItem('pin-drop.v1', JSON.stringify(k)); } }, { names, current });
+  try {
+    await p.goto(base);
+    assert.equal(await p.textContent('#resume'), 'Carry on · frame 10');
+    await p.click('#resume');
+    await watchCalls(p);
+    await p.evaluate(seed => { pinDrop.speed = 4; pinDrop.seed = seed; }, strikeSeed);
+    for (let k = 1; k <= 3; k++) {
+      await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
+      assert.equal(await p.evaluate(() => pinDrop.game.turn), 0, `not Ana's ball ${k} in the tenth`);
+      assert.deepEqual(await upPins(p), freshRack, `no fresh rack for Ana's ball ${k} in the tenth`);
+      await p.evaluate(pocket => pinDrop.throw(pocket), pocket);
+      await until(() => p.evaluate(n => pinDrop.game.players[0].rolls.length === n, 18 + k), 20000, `Ana's ball ${k} in the tenth never finished`);
+      assert.equal(await p.evaluate(() => pinDrop.game.players[0].rolls.at(-1)), 10, `seed ${strikeSeed} didn't strike in the page on ball ${k}`);
+    }
+    await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
+    const ana = await p.evaluate(() => pinDrop.game.players[0].rolls);
+    assert.deepEqual(frames(ana)[9].marks, ['X', 'X', 'X']);
+    assert.equal(total(ana), 63 + 30);
+    assert.equal(await p.evaluate(() => pinDrop.game.turn), 1, 'the turn did not pass to Ben');
+    assert.match(await p.textContent('#who'), /Ben/);
+    assert.deepEqual(await upPins(p), freshRack, 'Ben does not face a fresh rack');
+    const calls = await p.evaluate(() => window.calls);
+    for (const word of ['Strike!', 'Double!', 'Turkey!', 'Ben’s turn']) assert.ok(calls.some(t => t.startsWith(word)), `no "${word}" among ${JSON.stringify(calls)}`);
+    // The rest throw in the gutter.
+    await until(() => p.evaluate(() => {
+      if (pinDrop.phase === 'aim') pinDrop.throw({ x: 14, speed: 300, angle: 0.02, hook: 0 });
+      return pinDrop.phase === 'over';
+    }), 60000, 'the game never ended');
+    await until(() => p.isVisible('#end'), 5000, 'no end of the game');
+    assert.equal(await p.textContent('#endTitle'), 'Ana wins!');
+    const rows = await p.$$eval('#endCards .row', els => els.map(e => ({ tenth: e.querySelectorAll('.f')[9].querySelector('.balls').textContent, sum: +e.querySelector('.f.sum').textContent })));
+    assert.deepEqual(rows, [{ tenth: 'XXX', sum: 93 }, { tenth: '--', sum: 63 }, { tenth: '--', sum: 63 }, { tenth: '--', sum: 63 }]);
+    console.log(`  four players: three strikes in the tenth with seed ${strikeSeed}, ${rows.map(r => r.sum).join(', ')}`);
+  } finally { await c.close(); }
+}
+
+// Reloading the page at any moment of a ball, and tapping Carry on, picks up the game as it was saved: a ball still
+// rolling is thrown again, and once it has stopped it counts, with the pins it left (or a fresh rack) and the turn
+// passed on if the frame is over. Twice through: as the ball rolls, as the pins settle, during the sweep and as the
+// camera comes back.
+{
+  const { c, p } = await lane({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true }, {}, ['Ana', 'Ben']);
+  try {
+    for (const at of ['rolling', 'settle', 'sweep', 'return', 'rolling', 'settle', 'sweep', 'return']) {
+      await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
+      const was = await p.evaluate(() => ({ turn: pinDrop.game.turn, rolls: pinDrop.game.players.map(q => q.rolls.slice()) }));
+      const pinsWas = await upPins(p);
+      // A full rack: a ball at the head pin that leaves pins. Pins left: a ball at them.
+      await p.evaluate(({ headOn, leaveSeed }) => {
+        pinDrop.speed = 2;
+        const up = pinDrop.pins.filter(q => q.state === 'up');
+        pinDrop.seed = leaveSeed;
+        if (up.length === 10) { pinDrop.throw(headOn); return; }
+        const x = Math.max(-14, Math.min(14, up.reduce((s, q) => s + q.x, 0) / up.length));
+        pinDrop.throw({ x, speed: 290, angle: 0, hook: 0 });
+      }, { headOn, leaveSeed });
+      // What the ball left, as soon as it stopped, and then wait for the moment to reload at.
+      let left = null;
+      await until(async () => {
+        const ph = await p.evaluate(() => pinDrop.phase);
+        if (!left && ph !== 'rolling') left = await upPins(p);
+        return ph === at;
+      }, 20000, `never got to ${at}`);
+      const after = await p.evaluate(() => pinDrop.game.players.map(q => q.rolls.slice()));
+      await p.reload();
+      await p.click('#resume');
+      const now = { turn: await p.evaluate(() => pinDrop.game.turn), rolls: await p.evaluate(() => pinDrop.game.players.map(q => q.rolls)), pins: await upPins(p) };
+      if (at === 'rolling') {
+        assert.deepEqual(now, { ...was, pins: pinsWas }, 'reloaded while the ball rolled');
+      } else {
+        const mine = after[was.turn], st = next(mine), frameOver = st.frame !== next(was.rolls[was.turn]).frame;
+        assert.equal(mine.length, was.rolls[was.turn].length + 1, `reloaded at ${at}: the ball didn't count`);
+        assert.deepEqual(now, { turn: frameOver ? 1 - was.turn : was.turn, rolls: after, pins: st.fresh ? freshRack : left }, `reloaded at ${at}`);
+      }
+    }
+    console.log('  carried on after a reload as the ball rolled, the pins settled, the sweep and the return, twice');
   } finally { await c.close(); }
 }
 

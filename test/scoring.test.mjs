@@ -3,6 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { frames, next, total, best, isSplit } from '../js/scoring.js';
 import { play, rack, Sim, rng } from '../js/physics.js';
+import { through } from './aim.mjs';
 
 test('an all-gutter game is 0 and a perfect game is 300', () => {
   assert.equal(total(Array(20).fill(0)), 0);
@@ -95,16 +96,6 @@ test('a ball down the middle of the gutter knocks nothing over, and runs on into
 });
 
 test('hooking into the pocket strikes far more often than a straight ball at the head pin', () => {
-  // Find the angle that takes the ball through x at the head pin line.
-  const through = (x0, xh, hook) => {
-    let lo = -0.08, hi = 0.08;
-    for (let k = 0; k < 40; k++) {
-      const m = (lo + hi) / 2, s = new Sim([], { x: x0, speed: 290, angle: m, hook }, 1);
-      while (s.ball.y < 720 && s.ball.state === 'lane') s.step(1 / 240);
-      if (s.ball.x < xh) lo = m; else hi = m;
-    }
-    return (lo + hi) / 2;
-  };
   const rate = (x0, xh, hook) => {
     const angle = through(x0, xh, hook);
     let n = 0;
