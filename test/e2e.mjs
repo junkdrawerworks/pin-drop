@@ -2060,6 +2060,44 @@ for (const motion of ['reduce', 'no-preference']) {
   } finally { await c.close(); }
 }
 
+// A head start: tapping Ben's ball on the title goes through +10, +20, +30, +50 and back to none, shown on the ball. In
+// the game his total counts it, in a box of its own; he wins on it, and his game is kept marked and not as a best.
+{
+  const { c, p } = await kept({}, { names: ['Ana', 'Ben'] });
+  try {
+    const ball = '#players li:nth-child(2) .ball';
+    const seen = [];
+    for (let k = 0; k < 5; k++) { await p.click(ball); seen.push(await p.textContent(`${ball} .plus`)); }
+    assert.deepEqual(seen, ['+10', '+20', '+30', '+50', ''], 'the head starts a ball offers');
+    await p.click(ball); await p.click(ball);
+    assert.equal(await p.getAttribute(ball, 'aria-label'), 'Head start for Ben: 20 pins');
+    await p.click('#start');
+    assert.deepEqual(await p.evaluate(() => pinDrop.game.players.map(q => q.head || 0)), [0, 20]);
+    assert.match(await p.textContent('#others'), /Ben 20/, 'the head start is not in Ben\'s total under the card');
+    await p.reload();
+    assert.equal(await p.textContent(`${ball} .plus`), '+20', 'Ben\'s head start was not kept for next time');
+  } finally { await c.close(); }
+}
+{
+  const all = SPOTS.map((q, i) => ({ id: i + 1, ...q }));
+  const { c, p } = await kept({}, { names: ['Ana', 'Ben'], current: { players: [{ name: 'Ana', rolls: [...nineAndMiss, 9, 0], x: 0 }, { name: 'Ben', rolls: [...nineAndMiss, 0], x: 0, head: 20 }], turn: 1, leftover: all } });
+  try {
+    await p.click('#resume');
+    await p.evaluate(() => { pinDrop.speed = 10; pinDrop.throw({ x: 14, speed: 300, angle: 0.02, hook: 0 }); });
+    await until(() => p.isVisible('#end'), 20000, 'no end of the game');
+    assert.deepEqual([await p.textContent('#endTitle'), await p.textContent('#endLine')], ['Ben wins!', '101 to 90']);
+    const ben = await p.$eval('#endCards .row:nth-child(2)', el => ({ start: el.querySelector('.f.start')?.textContent, sum: el.querySelector('.f.sum').textContent, said: el.querySelector('.sr').textContent }));
+    assert.deepEqual([ben.start, ben.sum], ['+20', '101'], 'Ben\'s card');
+    assert.match(ben.said, /Head start 20\. Total 101\.$/);
+    assert.equal(await p.$eval('#endCards .row:nth-child(2) .f:nth-child(10) .tot', el => el.textContent), '81', 'the head start went into the frames');
+    await p.click('#toTitle');
+    const saved = await p.evaluate(() => JSON.parse(localStorage.getItem('pin-drop.v1')));
+    assert.deepEqual([saved.best, saved.bestBy, saved.bests], [90, 'Ana', { Ana: 90 }], 'a game with a head start counted toward a best');
+    assert.deepEqual([saved.games[0].scores[1].score, saved.games[0].scores[1].head], [101, 20]);
+    assert.match(await p.textContent('#record li'), /Ana 90 · Ben 101 \(\+20\)/);
+  } finally { await c.close(); }
+}
+
 assert.deepEqual(problems.filter(p => !p.startsWith('failed with the network down:')), [], 'problems while using it');
 await browser.close();
 server.close();

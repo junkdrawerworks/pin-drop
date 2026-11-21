@@ -17,7 +17,7 @@ const SETTLE = 1.2, SWEEP = 1.75, RETURN = 0.85;   // seconds
 const clamp = (v, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, v));
 const ease = t => { t = clamp(t); return t * t * (3 - 2 * t); };
 
-let game = null;          // { players: [{ name, rolls, x, splits, bumpers }], turn, leftover }
+let game = null;          // { players: [{ name, rolls, x, splits, bumpers, head }], turn, leftover }
 let phase = 'title';      // title, aim, rolling, settle, sweep, return, over
 let phaseT = 0, camT = 0;
 let pins = rack(), ball = idle(0), sim = null;
@@ -148,15 +148,15 @@ function follow(x, dt) {
 
 // ---- A game --------------------------------------------------------------------------------------------
 
-// A new game for these players ([{ name, bumpers }]), each standing where `spots` says (Bowl again keeps where each
-// one stood). Each player's switches on the title are kept by name for next time.
+// A new game for these players ([{ name, bumpers, head }]), each standing where `spots` says (Bowl again keeps where
+// each one stood). Each player's switches on the title are kept by name for next time.
 function startGame(lineup, spots = []) {
   hush();
   const names = lineup.map(q => q.name);
-  game = { players: lineup.map((q, i) => ({ name: q.name, rolls: [], x: spots[i] || 0, ...(q.bumpers ? { bumpers: true } : {}) })), turn: 0, leftover: null };
+  game = { players: lineup.map((q, i) => ({ name: q.name, rolls: [], x: spots[i] || 0, ...extras(q) })), turn: 0, leftover: null };
   told = new Set(); toldHook = new Set();
   store.names = names;
-  store.opts = Object.fromEntries(lineup.filter(q => q.bumpers).map(q => [q.name, { bumpers: true }]));
+  store.opts = Object.fromEntries(lineup.filter(q => q.bumpers || q.head).map(q => [q.name, extras(q)]));
   keep();
   $('hud').hidden = false;
   show(null);
@@ -165,6 +165,9 @@ function startGame(lineup, spots = []) {
   if (names.length > 1) say(turnLine(names[0]), '', 'small', '', 'aim');
   tell(names.length > 1 ? `${turnLine(names[0])}, frame 1.` : 'Frame 1.');
 }
+
+// A player's bumpers and head start, as kept on them: only what's switched on.
+const extras = q => ({ ...(q.bumpers ? { bumpers: true } : {}), ...(int(q.head) ? { head: int(q.head) } : {}) });
 
 function resumeGame() {
   game = store.current;
@@ -751,11 +754,12 @@ addEventListener('blur', unwind);
 // ---- What's on screen ----------------------------------------------------------------------------------
 
 // A scorecard: the boxes to look at, and the same in words for a screen reader (left out on the scorecard along the
-// top, which says it its own way). A count that left a split has a ring round it, as on a real card.
-function cardHTML(rolls, now, big, words = true, splits = []) {
+// top, which says it its own way). A count that left a split has a ring round it, as on a real card. A head start has
+// a box of its own before the total ("+20"), never in the frames, and the total counts it.
+function cardHTML(rolls, now, big, words = true, splits = [], head = 0) {
   const fs = frames(rolls), at = boxes(rolls);
   const ringed = new Set(splits.filter(k => at[k]).map(k => at[k].join()));
-  let h = `<span class="frames${big ? ' roomy' : ''}" aria-hidden="true">`;
+  let h = `<span class="frames${big ? ' roomy' : ''}${head ? ' head' : ''}" aria-hidden="true">`;
   for (let i = 0; i < 10; i++) {
     const f = fs[i], boxes = i < 9 ? 2 : 3;
     let spans = '';
@@ -765,15 +769,19 @@ function cardHTML(rolls, now, big, words = true, splits = []) {
     }
     h += `<span class="f${i === now ? ' now' : ''}"><span class="balls">${spans}</span><span class="tot">${f && f.total !== null ? f.total : ''}</span></span>`;
   }
-  return h + `<span class="f sum${pending(rolls) > total(rolls) ? ' waiting' : ''}"><span>${sumHTML(rolls)}</span></span></span>${words ? `<span class="sr">${cardText(rolls, splits)}</span>` : ''}`;
+  if (head) h += `<span class="f start"><span>+${head}</span></span>`;
+  const said = head ? cardText(rolls, splits).replace(/Total (at least )?(\d+)\.$/, (_, more, n) => `Head start ${head}. Total ${more || ''}${+n + head}.`) : cardText(rolls, splits);
+  return h + `<span class="f sum${pending(rolls) > total(rolls) ? ' waiting' : ''}"><span>${sumHTML(rolls, head)}</span></span></span>${words ? `<span class="sr">${said}</span>` : ''}`;
 }
 
 // A player's total, and while a strike or spare waits for its bonus balls, the pins so far with a plus ("10+"): a
-// plain 0 after a first strike read as a strike scoring nothing. Once a game is over it's exact.
-function sumHTML(rolls) {
-  const t = total(rolls), p = pending(rolls);
+// plain 0 after a first strike read as a strike scoring nothing. Once a game is over it's exact. A head start counts.
+function sumHTML(rolls, head = 0) {
+  const t = total(rolls) + head, p = pending(rolls) + head;
   return p > t ? `${p}<i>+</i>` : `${t}`;
 }
+// A player's total with their head start: what decides who wins.
+const scoreOf = q => total(q.rolls) + int(q.head);
 
 function hud() {
   if (!game) return;
@@ -788,14 +796,14 @@ function hud() {
   const upName = passing && up >= 0 ? game.players[up].name : '';
   $('where').textContent = passing ? (up < 0 ? 'Done' : `Up next: ${isYou(upName) ? 'you' : upName}`)
     : st.done ? 'Done' : `Frame ${st.frame + 1} · ${bonus ? 'bonus ball' : `ball ${st.ball + 1}`}`;
-  $('frames').outerHTML = cardHTML(p.rolls, st.done ? -1 : st.frame, false, false, p.splits).replace('<span class="frames', '<span id="frames" class="frames');
+  $('frames').outerHTML = cardHTML(p.rolls, st.done ? -1 : st.frame, false, false, p.splits, int(p.head)).replace('<span class="frames', '<span id="frames" class="frames');
   // The button's name carries what it shows (the name, the frame and the total), then what it does.
-  const t = total(p.rolls), pend = pending(p.rolls);
+  const t = scoreOf(p), pend = pending(p.rolls) + int(p.head);
   $('cardSay').textContent = `total ${pend > t ? `at least ${pend}` : t}. Show the scorecard`;
   const others = game.players.map((q, i) => ({ q, i })).filter(o => o.i !== game.turn);
   $('others').hidden = others.length === 0;
   $('others').innerHTML = others.map(({ q, i }) =>
-    `<span><i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${colourOf(i)[0]};margin-right:5px"></i>${esc(q.name)} <b>${sumHTML(q.rolls)}</b></span>`).join('');
+    `<span><i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${colourOf(i)[0]};margin-right:5px"></i>${esc(q.name)} <b>${sumHTML(q.rolls, int(q.head))}</b></span>`).join('');
   leaveCard();
 }
 
@@ -812,9 +820,9 @@ function leaveCard() {
 }
 
 function boardHTML(withBest) {
-  const best = Math.max(...game.players.map(q => total(q.rolls)));
-  const tied = game.players.filter(q => total(q.rolls) === best).length > 1;
-  return game.players.map((q, i) => `<div class="row"><div class="name"><span><i style="background:${colourOf(i)[0]}"></i>${esc(q.name)}</span>${withBest && game.players.length > 1 && total(q.rolls) === best ? `<em>${tied ? 'Tied' : 'Winner'}</em>` : ''}</div>${cardHTML(q.rolls, -1, true, true, q.splits)}</div>`).join('');
+  const best = Math.max(...game.players.map(scoreOf));
+  const tied = game.players.filter(q => scoreOf(q) === best).length > 1;
+  return game.players.map((q, i) => `<div class="row"><div class="name"><span><i style="background:${colourOf(i)[0]}"></i>${esc(q.name)}</span>${withBest && game.players.length > 1 && scoreOf(q) === best ? `<em>${tied ? 'Tied' : 'Winner'}</em>` : ''}</div>${cardHTML(q.rolls, -1, true, true, q.splits, int(q.head))}</div>`).join('');
 }
 
 let callTimer = 0, callUntil = 0, callAt = null;   // when the callout on screen goes, and where it is ('pins' or 'aim')
@@ -964,14 +972,21 @@ function resumeButton() {
   } else if (startArmed) disarmStart();
 }
 
-// The players as they were last set up on the title: [{ name, bumpers }].
+// The players as they were last set up on the title: [{ name, bumpers, head }].
 const lineup = () => (store.names?.length ? store.names : ['You'])
-  .map(name => ({ name, bumpers: Object.hasOwn(store.opts, name) && !!store.opts[name]?.bumpers }));
+  .map(name => ({ name, ...(Object.hasOwn(store.opts, name) ? extras(store.opts[name] || {}) : {}) }));
 
-// The players on the title, each with a name, and a Bumpers switch (pressed or not).
+// The head starts a player's ball offers, in turn, as it's tapped.
+const HEADS = [0, 10, 20, 30, 50];
+const headSay = (name, head) => `Head start for ${name}: ${head ? `${head} pins` : 'none'}`;
+
+// The players on the title, each with their ball (tapped for a head start, shown on it as "+20"), a name, and a
+// Bumpers switch (pressed or not).
 function drawPlayers(list) {
   const ol = $('players');
-  ol.innerHTML = list.map((q, i) => `<li><span class="ball" style="background:radial-gradient(circle at 35% 30%, ${colourOf(i)[0]}, ${colourOf(i)[1]} 55%, ${colourOf(i)[2]})"></span>`
+  ol.innerHTML = list.map((q, i) => `<li><button type="button" class="ball" data-head="${int(q.head)}" aria-label="${esc(headSay(q.name, int(q.head)))}">`
+    + `<span class="orb" style="background:radial-gradient(circle at 35% 30%, ${colourOf(i)[0]}, ${colourOf(i)[1]} 55%, ${colourOf(i)[2]})"></span>`
+    + `<span class="plus" aria-hidden="true">${int(q.head) ? `+${int(q.head)}` : ''}</span></button>`
     + `<input type="text" maxlength="14" value="${esc(q.name)}" aria-label="Player ${i + 1}’s name" autocomplete="off" spellcheck="false">`
     + `<button type="button" class="bump" aria-pressed="${!!q.bumpers}" aria-label="Bumpers for ${esc(q.name)}">Bumpers</button>`
     + (list.length > 1 ? `<button type="button" class="remove" aria-label="Remove ${esc(q.name)}">×</button>` : '') + '</li>').join('');
@@ -979,10 +994,19 @@ function drawPlayers(list) {
   // on the name now in its place; with a finger or a mouse, on the remove button there (focusing a name would bring
   // up a phone's keyboard).
   ol.querySelectorAll('li').forEach((li, i) => {
-    const input = li.querySelector('input'), b = li.querySelector('.remove'), bump = li.querySelector('.bump');
+    const input = li.querySelector('input'), b = li.querySelector('.remove'), bump = li.querySelector('.bump'), orb = li.querySelector('.ball');
     const named = () => input.value.trim() || `Player ${i + 1}`;
     bump.addEventListener('click', () => bump.setAttribute('aria-pressed', String(bump.getAttribute('aria-pressed') !== 'true')));
-    input.addEventListener('input', () => { b?.setAttribute('aria-label', `Remove ${named()}`); bump.setAttribute('aria-label', `Bumpers for ${named()}`); });
+    orb.addEventListener('click', () => {
+      const head = HEADS[(HEADS.indexOf(+orb.dataset.head) + 1) % HEADS.length];
+      orb.dataset.head = head;
+      orb.querySelector('.plus').textContent = head ? `+${head}` : '';
+      orb.setAttribute('aria-label', headSay(named(), head));
+    });
+    input.addEventListener('input', () => {
+      b?.setAttribute('aria-label', `Remove ${named()}`); bump.setAttribute('aria-label', `Bumpers for ${named()}`);
+      orb.setAttribute('aria-label', headSay(named(), +orb.dataset.head));
+    });
     if (!b) return;
     b.addEventListener('click', e => {
       drawPlayers(readPlayers().filter((_, j) => j !== i));
@@ -995,6 +1019,7 @@ function drawPlayers(list) {
 const readPlayers = () => [...$('players').querySelectorAll('li')].map((li, i) => ({
   name: li.querySelector('input').value.trim() || `Player ${i + 1}`,
   bumpers: li.querySelector('.bump').getAttribute('aria-pressed') === 'true',
+  head: int(li.querySelector('.ball').dataset.head),
 }));
 
 function record() {
@@ -1009,11 +1034,11 @@ function record() {
       // a tie), with the same said in words for a screen reader.
       const top = Math.max(...g.scores.map(q => int(q.score)));
       const tied = g.scores.filter(q => int(q.score) === top).length > 1;
-      // A score bowled with bumpers says so.
+      // A score bowled with bumpers or a head start says so ("(bumpers, +20)").
       const pairs = g.scores.map((q, i) => {
         const won = g.scores.length > 1 && int(q.score) === top;
         const sep = i < g.scores.length - 1 ? ' ·' : '';
-        const how = q.bumpers ? ' <small>(bumpers)</small>' : '';
+        const how = q.bumpers || q.head ? ` <small>(${[q.bumpers ? 'bumpers' : '', q.head ? `+${int(q.head)}` : ''].filter(Boolean).join(', ')})</small>` : '';
         return `<span class="pair">${esc(q.name)} <b${won ? ' class="won"' : ''}>${int(q.score)}</b>${how}${won ? `<span class="sr"> ${tied ? 'tied' : 'won'}</span>` : ''}${sep}</span>`;
       });
       return `<li><span class="when">${d}</span><span class="scores">${pairs.join(' ')}</span></li>`;
@@ -1023,13 +1048,14 @@ function record() {
   $('record').innerHTML = h;
 }
 
-// Whether a player's game counts toward the bests: not with bumpers.
-const counts = q => !q.bumpers;
+// Whether a player's game counts toward the bests: not with bumpers or a head start.
+const counts = q => !q.bumpers && !int(q.head);
 
 // The game's over: keep it, with every player's balls as well as their score (for working out averages and the
-// like later), and any new bests. A game bowled with bumpers is kept marked, and never counts toward a best.
+// like later), and any new bests. A game bowled with bumpers or a head start is kept marked (its score with the head
+// start counted, as it was played), and never counts toward a best.
 function finish() {
-  const scores = game.players.map(q => ({ name: q.name, score: total(q.rolls), rolls: q.rolls.slice(), splits: (q.splits || []).slice(), ...(q.bumpers ? { bumpers: true } : {}) }));
+  const scores = game.players.map(q => ({ name: q.name, score: scoreOf(q), rolls: q.rolls.slice(), splits: (q.splits || []).slice(), ...extras(q) }));
   const counted = scores.filter((_, i) => counts(game.players[i]));
   const top = Math.max(-1, ...counted.map(s => s.score));
   // Whether there was a best here to beat, and each player's own best before this game (null for a first game).
@@ -1052,23 +1078,27 @@ const both = names => {
 // The end of the game: its title and the line under it. One player hears about their own best (by name, not
 // whoever's best is the best here); several hear who won and by how much, or who tied.
 function endWords() {
-  const scores = game.players.map(q => ({ name: q.name, score: total(q.rolls) }));
+  const scores = game.players.map(q => ({ name: q.name, score: scoreOf(q) }));
   const top = Math.max(...scores.map(s => s.score));
   const winners = scores.filter(s => s.score === top);
   if (scores.length === 1) {
     const was = game.before?.[0] ?? null;
-    if (!counts(game.players[0]) && top !== 300) return [`${top}`, 'With bumpers, so it doesn’t count toward your best.', false, false];
-    return [`${top}`, top === 300 ? 'A perfect game.' : was === null ? 'Your first game here.' : top > was ? 'Your best game yet.'
-      : top === was ? 'That equals your best.' : `Your best is ${was}.`, top === 300 || (was !== null && top > was), was !== null && top > was];
+    const q = game.players[0];
+    const helped = [q.bumpers ? 'bumpers' : '', int(q.head) ? 'a head start' : ''].filter(Boolean).join(' and ');
+    const perfect = total(q.rolls) === 300;
+    if (helped && !perfect) return [`${top}`, `With ${helped}, so it doesn’t count toward your best.`, false, false];
+    return [`${top}`, perfect ? 'A perfect game.' : was === null ? 'Your first game here.' : top > was ? 'Your best game yet.'
+      : top === was ? 'That equals your best.' : `Your best is ${was}.`, perfect || (was !== null && top > was), was !== null && top > was];
   }
   const title = winners.length === 1 ? winLine(winners[0].name) : winners.length === 2 ? `${both(winners.map(w => w.name))} tie!`
     : `A ${winners.length === 3 ? 'three' : 'four'}-way tie!`;
   let line = winners.length === 1 ? `${top} to ${Math.max(...scores.filter(s => s !== winners[0]).map(s => s.score))}` : `${top} each`;
-  if (top === 300) {
-    const names = winners.map(w => w.name);
-    line = names.length === 1 ? `${names[0]} bowled a perfect game.` : `${both(names)} bowled perfect games.`;
+  // A perfect game is twelve strikes, whatever head start anyone had.
+  const perfect = game.players.filter(q => total(q.rolls) === 300).map(q => q.name);
+  if (perfect.length) {
+    line = perfect.length === 1 ? `${perfect[0]} bowled a perfect game.` : `${both(perfect)} bowled perfect games.`;
   } else if (game.newBest && game.hadBest) line += ' · a new best here';
-  return [title, line, top === 300 || (game.newBest && game.hadBest), game.newBest && game.hadBest];
+  return [title, line, perfect.length > 0 || (game.newBest && game.hadBest), game.newBest && game.hadBest];
 }
 
 function showEnd() {
@@ -1168,7 +1198,7 @@ $('menuQuit').addEventListener('click', () => {
   store.current = null; put();
   titleScreen();
 });
-$('again').addEventListener('click', () => startGame(game.players.map(q => ({ name: q.name, bumpers: !!q.bumpers })), game.players.map(q => q.x)));
+$('again').addEventListener('click', () => startGame(game.players.map(q => ({ name: q.name, ...extras(q) })), game.players.map(q => q.x)));
 $('toTitle').addEventListener('click', titleScreen);
 // Escape closes the menu, How to play and the scorecard as their buttons do, and on the lane it opens the menu.
 document.addEventListener('keydown', e => {
