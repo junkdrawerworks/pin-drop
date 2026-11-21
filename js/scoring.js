@@ -109,7 +109,7 @@ export function callFor(before, knocked, left, { wasSplit = false, sawGutter = f
   if (left.length === 0) return [wasSplit ? 'Picked up!' : 'Spare!', [wasSplit ? 'the split' : '', more].filter(Boolean).join(' · '), 'teal'];
   if (st.fresh) {
     if (last || knocked === 0) return [count, '', 'small'];
-    if (isSplit(left)) return ['Split', `the ${left.join('–')}`, 'small'];
+    if (isSplit(left)) return ['Split', `${knocked} · the ${left.join('–')}`, 'small'];
     return [count, left.length <= 3 ? `the ${left.join('–')} left` : 'pins', 'small'];
   }
   // A second ball (or the tenth's third, after a strike) that leaves pins: the frame's over, open only without a mark.
@@ -119,14 +119,24 @@ export function callFor(before, knocked, left, { wasSplit = false, sawGutter = f
   return [count, open ? 'open frame' : '', 'small'];
 }
 
+// Which box of which frame each ball's mark goes in: [frame, box] by the ball's place in the list. A strike in frames
+// 1 to 9 goes in the second box, as X.
+export function boxes(rolls) {
+  const out = [];
+  frames(rolls).forEach((f, i) => f.balls.forEach((n, k) => out.push([i, i < 9 && f.balls[0] === 10 ? 1 : k])));
+  return out;
+}
+
 // A scorecard in words, for a screen reader: "Frame 1: 8 and 1, 9. Frame 2: 8, spare, 27. Frames 3 to 10 to come.
 // Total 27." X, / and - are read as strike, spare and miss, and a total still waiting on bonus balls as "at least".
-export function cardText(rolls) {
-  const fs = frames(rolls);
+// `splits` are the balls (by their place in the list) that left a split, ringed on the card and read as "8 split".
+export function cardText(rolls, splits = []) {
+  const fs = frames(rolls), at = boxes(rolls);
+  const ringed = new Set(splits.filter(k => at[k]).map(k => at[k].join()));
   const word = m => (m === 'X' ? 'strike' : m === '/' ? 'spare' : m === '-' ? 'miss' : m);
   const counts = m => m !== 'X' && m !== '/';
   const out = fs.map((f, i) => {
-    const ms = f.marks.filter(m => m !== '');
+    const ms = f.marks.map((m, k) => (m !== '' && ringed.has(`${i},${k}`) ? `${m} split` : m)).filter(m => m !== '');
     let said = ms.map(word).join(', ');
     // The last two balls read "8 and 1" when both are counts.
     if (ms.length >= 2 && counts(ms.at(-1)) && counts(ms.at(-2))) said = [...ms.slice(0, -2).map(word), `${word(ms.at(-2))} and ${word(ms.at(-1))}`].join(', ');

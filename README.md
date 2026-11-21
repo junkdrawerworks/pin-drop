@@ -40,9 +40,10 @@ thrown straight at the head pin.
   Once the ball is in, a tap on the lane hurries the pinsetter on, and after a strike or a 9, Watch again plays the
   ball again at half speed.
 - **Real scoring.** Ten frames, strikes and spares with their bonus balls, a tenth frame with fill balls. The card
-  marks X, / and -, and calls out doubles, turkeys and splits, each strike in a row bigger than the last, with stars
-  from a turkey on and a fanfare for a perfect game. A new best game gets a gold badge and a chime. While a second
-  ball is aimed, the pins left show under the scorecard as ten dots, the way an alley's screen shows them.
+  marks X, / and -, rings a count that left a split, and calls out doubles, turkeys and splits, each strike in a row
+  bigger than the last, with stars from a turkey on and a fanfare for a perfect game. A new best game gets a gold
+  badge and a chime. While a second ball is aimed, the pins left show under the scorecard as ten dots, the way an
+  alley's screen shows them.
 - **Up to four players** pass the phone round, each with their own ball colour. Pin Drop keeps your best game and your
   last few scores, and a game you leave half-way carries on where you were.
 - **Sound** is made on the spot (the thud of the ball landing, its rumble, the clatter of the pins, the pinsetter's

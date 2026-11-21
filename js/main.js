@@ -1,7 +1,7 @@
 // Pin Drop: the game around the lane. Turns and frames, the swipe, the pinsetter, the scorecards and the sheets.
 import { Sim, rack, LANE, BALL_R, BOARD, SPOTS } from './physics.js';
 import { Renderer, BALL_COLOURS } from './render.js';
-import { frames, next, total, pending, isSplit, callFor, cardText } from './scoring.js';
+import { frames, next, total, pending, isSplit, callFor, cardText, boxes } from './scoring.js';
 import * as sound from './sound.js';
 import { load, save as write, parse, merge, int, keeping, KEY } from './store.js';
 import { stroke, addPoints, readStroke, throwPoints, liftAs, throwOf, MOUSE } from './swipe.js';
@@ -218,6 +218,9 @@ function scoreBall() {
   const st = next(p.rolls);
   const knocked = Math.max(0, before - standing.length);
   p.rolls.push(knocked);
+  // A ball at a full rack that left a split is ringed on the card (kept by its place in the list of balls; a game
+  // kept before there were rings has none).
+  if (st.fresh && isSplit(standing.map(q => q.id))) p.splits = [...(p.splits || []), p.rolls.length - 1];
   store.throws = (store.throws || 0) + 1;
   store.thrown[p.name] = (store.thrown[p.name] || 0) + 1;
   callout(p, knocked, standing.map(q => q.id).sort((a, b) => a - b));
@@ -312,7 +315,7 @@ function carries(speed) {
 // or spare waits.
 function ballWords(p, big, small, tip) {
   const st = next(p.rolls.slice(0, -1)), st2 = next(p.rolls);
-  const said = small.replace(/\d+(?:–\d+)+/g, m => { const ns = m.split('–'); return `${ns.slice(0, -1).join(', ')} and ${ns.at(-1)}`; });
+  const said = small.replace(/\d+(?:–\d+)+/g, m => { const ns = m.split('–'); return `${ns.slice(0, -1).join(', ')} and ${ns.at(-1)}`; }).replaceAll(' · ', ', ');
   let words = `${p.name}: ${big}`;
   if (said) words += big.endsWith('!') ? ` ${said[0].toUpperCase()}${said.slice(1)}.` : `, ${said}.`;
   else if (!big.endsWith('!')) words += '.';
@@ -735,20 +738,21 @@ addEventListener('blur', unwind);
 // ---- What's on screen ----------------------------------------------------------------------------------
 
 // A scorecard: the boxes to look at, and the same in words for a screen reader (left out on the scorecard along the
-// top, which says it its own way).
-function cardHTML(rolls, now, big, words = true) {
-  const fs = frames(rolls);
+// top, which says it its own way). A count that left a split has a ring round it, as on a real card.
+function cardHTML(rolls, now, big, words = true, splits = []) {
+  const fs = frames(rolls), at = boxes(rolls);
+  const ringed = new Set(splits.filter(k => at[k]).map(k => at[k].join()));
   let h = `<span class="frames${big ? ' roomy' : ''}" aria-hidden="true">`;
   for (let i = 0; i < 10; i++) {
     const f = fs[i], boxes = i < 9 ? 2 : 3;
     let spans = '';
     for (let k = 0; k < boxes; k++) {
       const v = f?.marks[k] ?? '';
-      spans += `<span class="${v === 'X' ? 'x' : v === '/' ? 's' : ''}">${v}</span>`;
+      spans += `<span class="${v === 'X' ? 'x' : v === '/' ? 's' : ringed.has(`${i},${k}`) ? 'split' : ''}">${v}</span>`;
     }
     h += `<span class="f${i === now ? ' now' : ''}"><span class="balls">${spans}</span><span class="tot">${f && f.total !== null ? f.total : ''}</span></span>`;
   }
-  return h + `<span class="f sum${pending(rolls) > total(rolls) ? ' waiting' : ''}"><span>${sumHTML(rolls)}</span></span></span>${words ? `<span class="sr">${cardText(rolls)}</span>` : ''}`;
+  return h + `<span class="f sum${pending(rolls) > total(rolls) ? ' waiting' : ''}"><span>${sumHTML(rolls)}</span></span></span>${words ? `<span class="sr">${cardText(rolls, splits)}</span>` : ''}`;
 }
 
 // A player's total, and while a strike or spare waits for its bonus balls, the pins so far with a plus ("10+"): a
@@ -771,7 +775,7 @@ function hud() {
   const upName = passing && up >= 0 ? game.players[up].name : '';
   $('where').textContent = passing ? (up < 0 ? 'Done' : `Up next: ${isYou(upName) ? 'you' : upName}`)
     : st.done ? 'Done' : `Frame ${st.frame + 1} · ${bonus ? 'bonus ball' : `ball ${st.ball + 1}`}`;
-  $('frames').outerHTML = cardHTML(p.rolls, st.done ? -1 : st.frame, false, false).replace('<span class="frames', '<span id="frames" class="frames');
+  $('frames').outerHTML = cardHTML(p.rolls, st.done ? -1 : st.frame, false, false, p.splits).replace('<span class="frames', '<span id="frames" class="frames');
   // The button's name carries what it shows (the name, the frame and the total), then what it does.
   const t = total(p.rolls), pend = pending(p.rolls);
   $('cardSay').textContent = `total ${pend > t ? `at least ${pend}` : t}. Show the scorecard`;
@@ -797,7 +801,7 @@ function leaveCard() {
 function boardHTML(withBest) {
   const best = Math.max(...game.players.map(q => total(q.rolls)));
   const tied = game.players.filter(q => total(q.rolls) === best).length > 1;
-  return game.players.map((q, i) => `<div class="row"><div class="name"><span><i style="background:${colourOf(i)[0]}"></i>${esc(q.name)}</span>${withBest && game.players.length > 1 && total(q.rolls) === best ? `<em>${tied ? 'Tied' : 'Winner'}</em>` : ''}</div>${cardHTML(q.rolls, -1, true)}</div>`).join('');
+  return game.players.map((q, i) => `<div class="row"><div class="name"><span><i style="background:${colourOf(i)[0]}"></i>${esc(q.name)}</span>${withBest && game.players.length > 1 && total(q.rolls) === best ? `<em>${tied ? 'Tied' : 'Winner'}</em>` : ''}</div>${cardHTML(q.rolls, -1, true, true, q.splits)}</div>`).join('');
 }
 
 let callTimer = 0, callUntil = 0;   // when the callout on screen goes
@@ -995,7 +999,7 @@ function record() {
 // The game's over: keep it, with every player's balls as well as their score (for working out averages and the
 // like later), and any new bests.
 function finish() {
-  const scores = game.players.map(q => ({ name: q.name, score: total(q.rolls), rolls: q.rolls.slice() }));
+  const scores = game.players.map(q => ({ name: q.name, score: total(q.rolls), rolls: q.rolls.slice(), splits: (q.splits || []).slice() }));
   const top = Math.max(...scores.map(s => s.score));
   // Whether there was a best here to beat, and each player's own best before this game (null for a first game).
   game.hadBest = !!store.best;

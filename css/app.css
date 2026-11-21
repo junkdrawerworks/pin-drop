@@ -67,6 +67,13 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .f .balls span:first-child:not(:only-child) { border-left-color: transparent; }
 .f .balls .x { color: var(--gold); }
 .f .balls .s { color: var(--teal); }
+/* A count that left a split, ringed. */
+.f .balls span { position: relative; }
+.f .balls .split::before {
+  content: ''; position: absolute; left: 50%; top: 50%; width: min(calc(100% - 1px), 14px); aspect-ratio: 1;
+  transform: translate(-50%, -50%); border: 1px solid currentColor; border-radius: 50%; box-sizing: border-box;
+}
+.frames.roomy .f .balls .split::before { width: min(calc(100% - 1px), 19px); }
 .f .tot { display: block; text-align: center; font-size: 11.5px; letter-spacing: -0.02em; line-height: 17px; font-weight: 600; font-variant-numeric: tabular-nums; min-height: 17px; }
 .f.now { background: rgba(255, 201, 74, 0.13); box-shadow: inset 0 -2px 0 var(--gold); }
 .f.sum { display: grid; place-items: center; font-size: 15px; font-weight: 800; color: var(--gold); font-variant-numeric: tabular-nums; }

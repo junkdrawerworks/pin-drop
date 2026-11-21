@@ -1138,6 +1138,38 @@ for (const tap of ['#menuBtn', '#card']) {
   } finally { await c.close(); }
 }
 
+// A first ball that leaves a split is called with its count ("Split", "8 · the 4–10") and ringed on the scorecard,
+// along the top and on the full card (read there as "8 split"), and the ring is still there after a reload. A game
+// kept before there were rings carries on without any.
+{
+  const { isSplit } = await import('../js/scoring.js');
+  const splitSeed = [...Array(100).keys()].find(k => isSplit(play(rack(), headOn, k + 1).standing.map(q => q.id))) + 1;
+  const { c, p } = await lane({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  try {
+    await watchCalls(p);
+    await p.evaluate(({ headOn, seed }) => { pinDrop.speed = 4; pinDrop.seed = seed; pinDrop.throw(headOn); }, { headOn, seed: splitSeed });
+    await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
+    const knocked = await p.evaluate(() => pinDrop.game.players[0].rolls[0]);
+    const left = await p.evaluate(() => pinDrop.pins.filter(q => q.state === 'up').map(q => q.id).sort((a, b) => a - b));
+    assert.ok((await p.evaluate(() => window.calls)).includes(`Split${knocked} · the ${left.join('–')}`), `the split's call: ${JSON.stringify(await p.evaluate(() => window.calls))}`);
+    const ringed = () => p.$$eval('#frames .f', fs => fs.map(f => [...f.querySelectorAll('.balls span')].map(s => s.classList.contains('split'))));
+    assert.deepEqual((await ringed())[0], [true, false], 'the split is not ringed on the scorecard along the top');
+    await p.reload();
+    await p.click('#resume');
+    assert.deepEqual((await ringed())[0], [true, false], 'the ring went with a reload');
+    await p.click('#card');
+    assert.equal(await p.locator('#boardCards .split').count(), 1, 'the split is not ringed on the full scorecard');
+    assert.match(await p.textContent('#boardCards .sr'), new RegExp(`^Frame 1: ${knocked} split\\.`));
+  } finally { await c.close(); }
+  // Kept before there were rings.
+  const { c: c2, p: p2 } = await kept({}, { names: ['Ana'], current: { players: [{ name: 'Ana', rolls: [8, 2, 7], x: 0 }], turn: 0, leftover: [{ id: 3, x: 6, y: 730.4 }, { id: 6, x: 12, y: 740.8 }, { id: 10, x: 18, y: 751.2 }] } });
+  try {
+    await p2.click('#resume');
+    assert.equal(await p2.locator('#frames .split').count(), 0);
+    assert.equal(await p2.textContent('#where'), 'Frame 2 · ball 2');
+  } finally { await c2.close(); }
+}
+
 // For a screen reader: the scorecard button's name says what it shows (the name, the frame, the total) and then what it
 // does; each ball and each turn is said in one plain sentence by a polite live region; a callout leaves the page once
 // it has faded; and the scorecards are read in words, frame by frame, not as a string of marks.
