@@ -27,6 +27,8 @@ let called = false, clearedAt = null;   // Strike! or Spare! said as the last pi
 let told = new Set();     // the players (by turn) already told a ball was slow, this game
 let toldHook = new Set(); // and told why a ball hooked into the gutter
 let lastShot = null;      // the ball being bowled, as it was thrown
+let throwPins = null, throwSeed = 0;   // and the pins it faced and its seed, to play it again (see watchAgain)
+let replay = null;        // while a ball is played again: { then (the phase to go back to), felt }
 let paused = false;
 let followX = 0;          // how far across the lane the camera follows the ball, eased so it never jumps
 let timeScale = 1, fixedSeed = null;
@@ -34,7 +36,7 @@ let timeScale = 1, fixedSeed = null;
 // HURRY times as fast, until the next ball is aimed.
 const HURRY = 4;
 let hurry = false;
-const hurrying = () => hurry && (phase === 'settle' || phase === 'sweep' || phase === 'return');
+const hurrying = () => hurry && (phase === 'settle' || phase === 'sweep' || phase === 'return' || phase === 'replay');
 
 function idle(x) { return { x, y: 6, state: 'lane', roll: 0, vx: 0, vy: 0 }; }
 const current = () => game.players[game.turn];
@@ -91,6 +93,20 @@ function update(dt) {
     const moving = ball.state === 'lane' || (ball.state === 'gutter' && ball.y < LANE.deck);
     sound.roll(moving ? clamp(Math.hypot(ball.vx, ball.vy) / 380) * (1 - camT * 0.4) : 0);
     if (sim.settled) { sound.roll(0); scoreBall(); }
+  } else if (phase === 'replay') {
+    // The ball again at half speed, with the camera following and its sounds, then on as before.
+    sim.step(dt / 2);
+    ball = sim.ball;
+    for (const e of sim.events) {
+      if (e.kind === 'gutter') sound.gutter();
+      else if (e.kind !== 'pit') sound.hit(e.kind, e.power);
+      if (e.kind === 'ball' && !replay.felt) { replay.felt = true; sound.duck(); }
+    }
+    sim.events.length = 0;
+    chase(dt);
+    const moving = ball.state === 'lane' || (ball.state === 'gutter' && ball.y < LANE.deck);
+    sound.roll(moving ? clamp(Math.hypot(ball.vx, ball.vy) / 380) * (1 - camT * 0.4) : 0);
+    if (sim.settled) { sound.roll(0); readout(''); phase = replay.then; phaseT = 0; replay = null; }
   } else if (phase === 'settle') {
     view.setCamera(1, follow(0, dt));
     if (phaseT > SETTLE) startSweep();
@@ -160,6 +176,7 @@ function resumeGame() {
 // Ready for the next ball: the rack it faces, the ball where this player last stood.
 function aim() {
   phase = 'aim'; phaseT = 0; camT = 0; followX = 0; hurry = false;
+  $('replay').hidden = true;
   view.setCamera(0);
   ball = idle(current().x || 0);
   sim = null; guide = null; sweep = null;
@@ -177,7 +194,9 @@ function throwBall(shot) {
   felt = false; sawGutter = false; called = false; clearedAt = null;
   before = pins.filter(p => p.state === 'up').length;
   wasSplit = !next(current().rolls).fresh && isSplit(pins.filter(p => p.state === 'up').map(p => p.id));
-  sim = new Sim(pins, shot, fixedSeed ?? ((Math.random() * 2 ** 31) | 0));
+  throwPins = pins.map(p => ({ ...p }));
+  throwSeed = fixedSeed ?? ((Math.random() * 2 ** 31) | 0);
+  sim = new Sim(pins, shot, throwSeed);
   lastShot = shot;
   phase = 'rolling'; phaseT = 0; camT = 0;
   leaveCard();
@@ -202,6 +221,7 @@ function scoreBall() {
   store.throws = (store.throws || 0) + 1;
   store.thrown[p.name] = (store.thrown[p.name] || 0) + 1;
   callout(p, knocked, standing.map(q => q.id).sort((a, b) => a - b));
+  if (knocked >= 9) $('replay').hidden = false;
   const st2 = next(p.rolls);
   if (!st2.done && st2.frame === st.frame) {
     game.leftover = st2.fresh ? null : standing;
@@ -261,6 +281,7 @@ function callout(p, knocked, left) {
 function callCleared() {
   const [big, small, kind] = callFor(current().rolls, before, [], { wasSplit, sawGutter });
   readout('');
+  if (before >= 9) $('replay').hidden = false;
   say(big, small, kind, '');
   cheer(kind, big);
 }
@@ -306,6 +327,7 @@ function ballWords(p, big, small, tip) {
 
 function startSweep() {
   phase = 'sweep'; phaseT = 0;
+  $('replay').hidden = true;
   sweep = { on: false, y: LANE.head - 28, z: 26, swapped: false };
   for (const p of pins) if (p.state === 'gutter') p.state = 'pit';
   sound.sweep(hurry ? HURRY : 1);
@@ -351,6 +373,32 @@ function runSweep() {
     }
   }
 }
+
+// ---- Watch again ---------------------------------------------------------------------------------------
+// After a strike, or any ball that knocks down 9 or more, a button stays up until the pinsetter comes: it plays the
+// ball again at half speed from the same pins and seed, which play out exactly the same way (the physics steps in
+// fixed slices whatever the frame rate), so nothing needs recording. A strike is called before the deadwood has
+// stopped: pressed then, the ball is finished off first, in no time, and counted.
+function watchAgain() {
+  if (paused || replay || !throwPins) return;
+  if (phase === 'rolling') {
+    while (!sim.settled) sim.step(1 / 60);
+    sim.events.length = 0;
+    sound.roll(0);
+    pins = sim.pins; ball = sim.ball;
+    scoreBall();
+  }
+  if (phase !== 'settle' && phase !== 'over') return;
+  $('replay').hidden = true;
+  hush();
+  replay = { then: phase, felt: false };
+  sim = new Sim(throwPins.map(p => ({ ...p })), lastShot, throwSeed);
+  pins = sim.pins; ball = sim.ball;
+  phase = 'replay'; phaseT = 0; camT = 0; followX = ball.x;
+  view.setCamera(0, 0);
+  readout('Again, at half speed');
+}
+$('replay').addEventListener('click', watchAgain);
 
 // ---- Where to stand and aim, and the hint under the ball -----------------------------------------------------
 
@@ -525,8 +573,9 @@ canvas.addEventListener('pointerdown', e => {
   // The main button, or the right one: pressing a trackpad down with two fingers is a right click, and some people
   // hold the ball that way. (The menu that would pop up is kept shut, below.) Not the middle button.
   if (e.pointerType === 'mouse' && e.button !== 0 && e.button !== 2) return;
-  // A tap while the pins settle, the pinsetter sweeps or the camera comes back hurries the rest of it on.
-  if (!paused && !hurry && (phase === 'settle' || phase === 'sweep' || phase === 'return')) { hurry = true; sound.hurry(); }
+  // A tap while the pins settle, the pinsetter sweeps or the camera comes back (or a ball is played again) hurries the
+  // rest of it on.
+  if (!paused && !hurry && (phase === 'settle' || phase === 'sweep' || phase === 'return' || phase === 'replay')) { hurry = true; sound.hurry(); }
   // A flick at the end of the camera's way back, once the ball is coming onto the screen (0.65 s in, on a phone or a
   // tablet either way up): the camera jumps the rest of the way so the flick throws. One started earlier on its way
   // back is followed all the same, and counts once aiming begins (see lift).
@@ -807,7 +856,7 @@ function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<':
 const sheets = ['title', 'menu', 'howSheet', 'board', 'end'];
 const dialogs = ['menu', 'howSheet', 'board', 'end'];
 // Everything behind a sheet, out of reach of Tab and a screen reader while one is up.
-const behind = ['lane', 'hud', 'others', 'call', 'hint', 'readout'];
+const behind = ['lane', 'hud', 'others', 'call', 'hint', 'readout', 'replay'];
 // One How to play: the title's folded-up copy is the sheet's list.
 document.querySelector('#title .how ul').innerHTML = document.querySelector('#howSheet .howlist').innerHTML;
 let shown = null;    // the sheet that's up
@@ -872,7 +921,8 @@ function titleScreen() {
   nudgeText = '';
   $('hud').hidden = true; $('others').hidden = true; $('hint').hidden = true;
   readout('');
-  pins = rack(); ball = idle(0); sweep = null; guide = null; lesson = null;
+  pins = rack(); ball = idle(0); sweep = null; guide = null; lesson = null; replay = null;
+  $('replay').hidden = true;
   view.setCamera(0);
   resumeButton();
   blockedDue = false;   // the title says it
@@ -987,6 +1037,7 @@ function endWords() {
 
 function showEnd() {
   hush();   // the last ball's callout, which can outlast the wait for this card
+  $('replay').hidden = true;
   // The fourth: a best beaten (a player's own, playing alone; the best here, with others), with a gold badge and a chime.
   const [title, line, best, beaten] = endWords();
   $('endTitle').textContent = title;

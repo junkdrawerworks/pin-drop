@@ -1098,6 +1098,46 @@ for (const tap of ['#menuBtn', '#card']) {
   } finally { await c.close(); }
 }
 
+// After a strike, a "Watch again" button stays up until the pinsetter comes. Pressed while the deadwood is still
+// moving, it finishes the ball and counts it, then plays it again from the start at half speed, the camera following,
+// ending with the very same pins down, and play carries on: the strike counted once, a fresh rack for the next frame.
+// A ball that knocks down fewer than 9 gets no button.
+{
+  const { c, p } = await lane({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  try {
+    await p.evaluate(({ pocket, seed }) => {
+      window.rolled = null;
+      const t0 = performance.now();
+      pinDrop.seed = seed; pinDrop.throw(pocket);
+      (function f() { if (pinDrop.phase === 'rolling' && pinDrop.ball.state === 'pit' && window.rolled === null) window.rolled = (performance.now() - t0) / 1000; requestAnimationFrame(f); })();
+    }, { pocket, seed: strikeSeed });
+    await until(() => p.isVisible('#replay'), 20000, 'no Watch again after a strike');
+    assert.equal(await p.evaluate(() => pinDrop.phase), 'rolling', 'Watch again came only once the pins had stopped');
+    const before = await p.evaluate(() => pinDrop.pins.map(q => q.id));
+    await p.click('#replay');
+    assert.deepEqual(await p.evaluate(() => pinDrop.game.players[0].rolls), [10], 'the strike was not counted');
+    const start = await p.evaluate(() => ({ phase: pinDrop.phase, near: pinDrop.ball.y < 40, up: pinDrop.pins.filter(q => q.state === 'up').length, cam: pinDrop.view.cam.y }));
+    assert.deepEqual(start, { phase: 'replay', near: true, up: before.length, cam: await p.evaluate(() => pinDrop.view.aimView.y) }, 'the replay did not start from the throw');
+    assert.equal(await p.isVisible('#replay'), false, 'the button stayed up through the replay');
+    const t = await p.evaluate(() => new Promise(done => {
+      const t0 = performance.now();
+      (function f() { if (pinDrop.ball.state === 'pit') done((performance.now() - t0) / 1000); else requestAnimationFrame(f); })();
+    }));
+    const rolled = await p.evaluate(() => window.rolled);
+    assert.ok(t > rolled * 1.7, `the replay took the ball ${t.toFixed(2)} s to the pit, the throw ${rolled.toFixed(2)} s`);
+    await until(() => p.evaluate(() => pinDrop.phase !== 'replay'), 20000, 'the replay never ended');
+    assert.equal(await p.evaluate(() => pinDrop.pins.filter(q => q.state === 'up').length), 0, 'the replay left pins the strike did not');
+    await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
+    assert.deepEqual(await p.evaluate(() => pinDrop.game.players[0].rolls), [10], 'the replay changed the card');
+    assert.deepEqual(await upPins(p), freshRack, 'no fresh rack after the replay');
+    console.log(`  watch again: the ball took ${rolled.toFixed(2)} s, and ${t.toFixed(2)} s played again`);
+    // A gutter ball: no button.
+    await p.evaluate(() => { window.shown = false; pinDrop.throw({ x: 14, speed: 300, angle: 0.02, hook: 0 }); (function f() { if (!document.getElementById('replay').hidden) window.shown = true; if (pinDrop.phase !== 'aim') requestAnimationFrame(f); })(); });
+    await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
+    assert.equal(await p.evaluate(() => window.shown), false, 'Watch again after a gutter ball');
+  } finally { await c.close(); }
+}
+
 // For a screen reader: the scorecard button's name says what it shows (the name, the frame, the total) and then what it
 // does; each ball and each turn is said in one plain sentence by a polite live region; a callout leaves the page once
 // it has faded; and the scorecards are read in words, frame by frame, not as a string of marks.

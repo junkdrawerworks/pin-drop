@@ -162,6 +162,13 @@ button { font: inherit; color: inherit; cursor: pointer; }
 @media (min-width: 768px) { .hint { font-size: 18px; } }
 @keyframes breathe { 50% { opacity: 0.8; } }
 .readout { bottom: calc(var(--safe-b) + 18px); padding: 0 16px; color: var(--gold); transition: opacity 0.4s; }
+/* After a strike or a 9: play it again, until the pinsetter comes. */
+.replay {
+  position: fixed; left: 50%; bottom: calc(var(--safe-b) + 18px); transform: translateX(-50%);
+  min-height: 44px; padding: 10px 20px; border-radius: 99px; font-weight: 700; font-size: 16px;
+  background: rgba(13, 18, 34, 0.82); border: 1px solid var(--teal); color: var(--teal);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.4); white-space: nowrap;
+}
 
 /* On a phone held on its side: a note asking for it upright, over the lane. */
 .upright {
