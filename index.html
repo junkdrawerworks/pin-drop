@@ -22,15 +22,17 @@
   <canvas id="lane" aria-label="A bowling lane seen from behind the ball, with the pins at the far end"></canvas>
 
   <header class="hud" id="hud" hidden>
-    <button type="button" class="card" id="card" aria-label="Show the scorecard">
-      <span class="who"><b id="who">You</b><span id="where">Frame 1</span></span>
-      <span class="frames" id="frames"></span>
-    </button>
+    <div class="col">
+      <button type="button" class="card" id="card" aria-label="Show the scorecard">
+        <span class="who"><b id="who">You</b><span id="where">Frame 1</span></span>
+        <span class="frames" id="frames"></span>
+      </button>
+      <div class="others" id="others" hidden></div>
+    </div>
     <button type="button" class="icon" id="menuBtn" aria-label="Menu">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
     </button>
   </header>
-  <div class="others" id="others" hidden></div>
 
   <div class="call" id="call" aria-live="polite"></div>
   <p class="hint" id="hint" hidden></p>

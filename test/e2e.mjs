@@ -321,6 +321,31 @@ const state = p => p.evaluate(() => ({ phase: pinDrop.phase, x: pinDrop.ball.x }
   } finally { await c.close(); }
 }
 
+// The scorecard along the top keeps clear of the other players' scores under it, once there are totals in it too,
+// with four players whose long names wrap the scores onto two lines, on a phone and a tablet either way up.
+for (const names of [['Ana', 'Ben'], ['Alexandrinaaaa', 'Bartholomewwww', 'Christabellaaa', 'Dmitrijevichhh']]) {
+  const current = { players: names.map(name => ({ name, rolls: [7, 2, 10, 8, 1], x: 0 })), turn: 0, leftover: null };
+  const c = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 390, height: 844 }, hasTouch: true });
+  const p = await c.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  await p.addInitScript(k => { if (!sessionStorage.getItem('set')) { sessionStorage.setItem('set', '1'); localStorage.setItem('pin-drop.v1', JSON.stringify(k)); } }, { names, current });
+  try {
+    await p.goto(base);
+    await p.click('#resume');
+    for (const [width, height] of [[390, 844], [820, 1180], [1180, 820]]) {
+      await p.setViewportSize({ width, height });
+      await wait(50);
+      const { card, chips, wrapped } = await p.evaluate(() => {
+        const r = id => document.getElementById(id).getBoundingClientRect();
+        const spans = [...document.querySelectorAll('#others span')].map(el => el.getBoundingClientRect().top);
+        return { card: r('card').bottom, chips: r('others').top, wrapped: new Set(spans).size > 1 };
+      });
+      assert.ok(card <= chips, `${names.length} players at ${width}x${height}: the scorecard (bottom ${card}) runs over the other players' scores (top ${chips})`);
+      if (names.length === 4 && width === 390) assert.ok(wrapped, 'the long names fit on one line, so this checks less than it means to');
+    }
+  } finally { await c.close(); }
+}
+
 // The rumble of a rolling ball stops behind the menu (the roll stands still there), and nothing plays while the page
 // is out of sight. Every gain node is watched; the rumble is the one that isn't a fixed level.
 {
