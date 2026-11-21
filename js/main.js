@@ -98,8 +98,8 @@ function startGame(names, spots = []) {
   told = new Set(); toldHook = new Set();
   store.names = names;
   keep();
-  show(null);
   $('hud').hidden = false;
+  show(null);
   pins = rack();
   aim();
   if (names.length > 1) say(turnLine(names[0]), '', 'small', '', 'aim');
@@ -109,8 +109,8 @@ function startGame(names, spots = []) {
 function resumeGame() {
   game = store.current;
   told = new Set(); toldHook = new Set();
-  show(null);
   $('hud').hidden = false;
+  show(null);
   pins = rack(game.leftover || undefined);
   aim();
   say(`${current().name}`, `Frame ${next(current().rolls).frame + 1}`, 'small', '', 'aim');
@@ -509,10 +509,30 @@ function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<':
 // ---- Sheets --------------------------------------------------------------------------------------------
 
 const sheets = ['title', 'menu', 'howSheet', 'board', 'end'];
+const dialogs = ['menu', 'howSheet', 'board', 'end'];
+// Everything behind a sheet, out of reach of Tab and a screen reader while one is up.
+const behind = ['lane', 'hud', 'others', 'call', 'hint', 'readout'];
 // One How to play: the title's folded-up copy is the sheet's list.
 document.querySelector('#title .how ul').innerHTML = document.querySelector('#howSheet .howlist').innerHTML;
+let shown = null;    // the sheet that's up
+let opener = null;   // what had the focus when a sheet opened over the lane (or the menu), to go back to after it
+const visible = el => !!el?.isConnected && el.getClientRects().length > 0;
+// Shows one sheet, or none (the lane). A sheet is a dialog: the focus goes to its heading, so a screen reader reads
+// "Paused", "Scorecard" or "Ana wins!", and back to whatever opened it when it closes (the menu button, if that's
+// gone with the menu). The title, opened from another sheet, starts at its heading too.
 function show(id) {
+  const was = shown;
+  shown = id;
+  if (dialogs.includes(id) && (was === null || was === 'menu')) opener = document.activeElement;
   for (const s of sheets) $(s).hidden = s !== id;
+  for (const s of behind) $(s).inert = !!id;
+  if (dialogs.includes(id)) $(id).querySelector('h2').focus({ preventScroll: true });
+  else if (id === 'title') { opener = null; if (was) $('title').querySelector('h1').focus({ preventScroll: true }); }
+  else if (!visible(document.activeElement) || document.activeElement === document.body) {
+    const back = visible(opener) ? opener : game ? $('menuBtn') : null;
+    back?.focus({ preventScroll: true });
+  }
+  if (!id) opener = null;
   paused = id === 'menu' || id === 'howSheet' || id === 'board';
   // The rumble only changes as the ball rolls, which stops behind a sheet: so it stops too, and the next step of
   // the roll starts it again. Back on the lane, the sound carries on if it was put to sleep while the page was hidden.
@@ -690,14 +710,18 @@ for (const type of ['pointerdown', 'keydown', 'input']) {
   $('title').addEventListener(type, e => { if (startArmed && !e.target.closest?.('#start')) disarmStart(); });
 }
 $('resume').addEventListener('click', () => { sound.wake(); resumeGame(); });
-$('menuBtn').addEventListener('click', () => { touch = null; guide = null; quitArmed = false; $('menuQuit').textContent = 'End this game'; show('menu'); });
+function openMenu() { touch = null; guide = null; quitArmed = false; $('menuQuit').textContent = 'End this game'; show('menu'); }
+$('menuBtn').addEventListener('click', openMenu);
 $('menuResume').addEventListener('click', () => show(null));
 $('menuBoard').addEventListener('click', () => { $('boardCards').innerHTML = boardHTML(false); show('board'); });
 $('card').addEventListener('click', () => { $('boardCards').innerHTML = boardHTML(false); show('board'); });
 $('boardDone').addEventListener('click', () => show(null));
 $('menuHow').addEventListener('click', () => show('howSheet'));
 $('howDone').addEventListener('click', () => show(game ? null : 'title'));
-const soundLabel = () => { $('menuSound').textContent = `Sound: ${store.sound ? 'on' : 'off'}`; };
+const soundLabel = () => {
+  $('menuSound').textContent = `Sound: ${store.sound ? 'on' : 'off'}`;
+  $('menuSound').setAttribute('aria-pressed', String(!!store.sound));
+};
 soundLabel();
 $('menuSound').addEventListener('click', () => { store.sound = !store.sound; sound.setSound(store.sound); soundLabel(); put(); });
 let quitArmed = false;
@@ -708,6 +732,15 @@ $('menuQuit').addEventListener('click', () => {
 });
 $('again').addEventListener('click', () => startGame(game.players.map(q => q.name), game.players.map(q => q.x)));
 $('toTitle').addEventListener('click', titleScreen);
+// Escape closes the menu, How to play and the scorecard as their buttons do, and on the lane it opens the menu.
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape' || e.defaultPrevented) return;
+  if (shown === 'menu' || shown === 'board') show(null);
+  else if (shown === 'howSheet') show(game ? null : 'title');
+  else if (!shown && game && phase !== 'over') openMenu();
+  else return;
+  e.preventDefault();
+});
 
 // Another window of Pin Drop kept something (see merge in store.js): take in its records, so this one shows them and
 // never writes over them. The game in progress stays this window's while it's being played; on the title, or at the

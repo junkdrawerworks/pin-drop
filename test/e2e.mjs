@@ -995,6 +995,56 @@ for (const names of [['Ana', 'Ben'], ['Alexandrinaaaa', 'Bartholomewwww', 'Chris
   } finally { await c2.close(); }
 }
 
+// The sheets are dialogs: opening one puts the focus on its heading, with the lane and the scorecard along the top out
+// of reach behind it; closing it puts the focus back on what opened it (the menu button, when that was in the menu).
+// Escape closes the menu, How to play and the scorecard, and on the lane opens the menu.
+{
+  const { c, p } = await kept({ viewport: { width: 1280, height: 800 }, isMobile: false, hasTouch: false },
+    { names: ['Ana', 'Ben'], current: { players: [{ name: 'Ana', rolls: Array(19).fill(0), x: 0 }, { name: 'Ben', rolls: Array(18).fill(0), x: 0 }], turn: 0, leftover: null } });
+  const focus = () => p.evaluate(() => { const a = document.activeElement; return `${a.closest('section, header')?.id || ''} ${a.id || a.tagName} ${a.textContent.trim().slice(0, 20)}`.trim(); });
+  try {
+    await p.click('#resume');
+    await p.click('#menuBtn');
+    assert.equal(await p.evaluate(() => document.getElementById('menu').contains(document.activeElement)), true, 'the focus stayed behind the menu');
+    assert.equal(await focus(), 'menu menuTitle Paused');
+    assert.match(await p.locator('#menu').ariaSnapshot(), /dialog "Paused"/);
+    assert.deepEqual(await p.evaluate(() => ['lane', 'hud', 'hint', 'readout', 'call'].map(id => document.getElementById(id).inert)), [true, true, true, true, true], 'the lane can still be reached behind the menu');
+    assert.equal(await p.getAttribute('#menuSound', 'aria-pressed'), 'true');
+    await p.click('#menuSound');
+    assert.equal(await p.getAttribute('#menuSound', 'aria-pressed'), 'false');
+    await p.keyboard.press('Escape');
+    assert.equal(await p.isHidden('#menu'), true, 'Escape left the menu open');
+    assert.equal(await focus(), 'hud menuBtn', 'the focus did not come back to the menu button');
+    assert.equal(await p.evaluate(() => document.getElementById('lane').inert), false);
+    // The scorecard from the menu: back on the menu button. From the card along the top: back on the card.
+    await p.click('#menuBtn'); await p.click('#menuBoard');
+    assert.equal(await focus(), 'board boardTitle Scorecard');
+    await p.keyboard.press('Escape');
+    assert.equal(await focus(), 'hud menuBtn');
+    await p.click('#card');
+    await p.keyboard.press('Escape');
+    assert.equal(await p.isHidden('#board'), true);
+    assert.match(await focus(), /^hud card /, 'the focus did not come back to the scorecard button');
+    // How to play from the menu, closed with Escape.
+    await p.click('#menuBtn'); await p.click('#menuHow');
+    assert.equal(await focus(), 'howSheet howTitle How to play');
+    await p.keyboard.press('Escape');
+    assert.deepEqual([await p.isHidden('#howSheet'), await focus()], [true, 'hud menuBtn']);
+    // Escape on the lane opens the menu.
+    await p.keyboard.press('Escape');
+    assert.equal(await p.isVisible('#menu'), true, 'Escape on the lane did not open the menu');
+    await p.click('#menuResume');
+    // The end of the game: the focus on who won, with the line under it.
+    await p.evaluate(() => { pinDrop.speed = 10; pinDrop.throw({ x: 14, speed: 300, angle: 0.02, hook: 0 }); });
+    await until(() => p.evaluate(() => { if (pinDrop.phase === 'aim') pinDrop.throw({ x: 14, speed: 300, angle: 0.02, hook: 0 }); return !document.getElementById('end').hidden; }), 30000, 'no end of the game');
+    assert.equal(await focus(), 'end endTitle Ana and Ben tie!');
+    assert.equal(await p.getAttribute('#end', 'aria-describedby'), 'endLine');
+    // Bowl again: on the lane, the focus on the menu button.
+    await p.click('#again');
+    assert.equal(await focus(), 'hud menuBtn');
+  } finally { await c.close(); }
+}
+
 // Two windows of Pin Drop (a home-screen copy and a browser tab share what's kept): A finishes a game while B sits on
 // the title, and B's title shows it straight away. Then B starts a game and throws a ball, and A's game and the best
 // it set are still kept (B used to write its own stale copy over them).

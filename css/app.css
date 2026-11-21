@@ -147,6 +147,8 @@ h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.08em; color: 
 .panel > h2:first-child { margin-top: 0; text-align: center; font-size: 26px; text-transform: none; letter-spacing: 0; color: var(--cream); font-family: Shrikhand, Georgia, serif; font-weight: 400; }
 .panel > h2.score { font-size: 72px; line-height: 1; color: var(--gold); text-shadow: 0 3px 0 #a3461c; margin-top: 4px; }
 .tag { text-align: center; color: var(--muted); margin: 8px 0 4px; }
+/* A sheet's heading takes the focus as it opens, so a screen reader starts there; it isn't a control, so no ring. */
+h1[tabindex]:focus, h2[tabindex]:focus { outline: none; }
 
 .players { list-style: none; padding: 0; margin: 0; display: grid; gap: 8px; }
 .players li { display: flex; align-items: center; gap: 10px; }
