@@ -425,3 +425,22 @@ test('a swipe is timed by its events\' own clock, unless that clock can\'t be tr
     assert.ok(v > 11, `a fling stamped ${what} read as only ${v.toFixed(1)} mph`);
   }
 });
+
+// The lane's wander moves a ball about an inch either way by the head pin, the same at any speed: a slow trackpad
+// ball used to wander more than three times as far as the fastest one, because the wander built up with the time on
+// the lane rather than the distance.
+test('the lane wanders a slow ball no more than a fast one', () => {
+  const spread = speed => {
+    const xs = [];
+    for (let seed = 1; seed <= 200; seed++) {
+      const s = new Sim([], { x: 0, speed, angle: 0, hook: 0 }, seed);
+      while (s.ball.y < 720) s.step(1 / 60);
+      xs.push(s.ball.x);
+    }
+    const m = xs.reduce((a, b) => a + b) / xs.length;
+    return Math.sqrt(xs.reduce((a, b) => a + (b - m) ** 2, 0) / xs.length);
+  };
+  const slow = spread(170), usual = spread(290), fast = spread(390);
+  assert.ok(usual > 0.8 && usual < 1.3, `16.5 mph wanders ${usual.toFixed(2)} in`);
+  assert.ok(slow / fast < 1.25 && slow / fast > 0.8, `9.7 mph wanders ${slow.toFixed(2)} in, 22 mph ${fast.toFixed(2)} in`);
+});

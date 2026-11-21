@@ -87,8 +87,11 @@ export class Sim {
         b.vx += dv; b.spin -= dv;
         if (b.hookAt === null && into > 0 && Math.abs(dv) > 0) b.hookAt = { x: b.x, y: b.y };
       }
-      // The lane isn't perfect: a ball wanders about an inch either way over 60 feet.
-      b.vx += (this.rand() - 0.5) * 40 * dt;
+      // The lane isn't perfect: a ball wanders about an inch either way over 60 feet, whatever its speed. The wander
+      // goes with the distance rolled, not the time taken, so a slow ball wanders no more than a fast one: each step
+      // nudges the ball's line (vx / vy) by an amount that grows with the square root of the inches it covered. Its
+      // size is the one a 16.5 mph ball (290 in/s) always had.
+      b.vx += (this.rand() - 0.5) * 40 * dt * Math.pow(b.vy / 290, 1.5);
       b.vy = Math.max(60, b.vy - mu * G * 0.12 * dt);
       b.x += b.vx * dt; b.y += b.vy * dt;
       if (Math.abs(b.x) > LANE.half && b.y < LANE.deck) {
