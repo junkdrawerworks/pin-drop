@@ -1064,6 +1064,9 @@ for (const names of [['Ana', 'Ben'], ['Alexandrinaaaa', 'Bartholomewwww', 'Chris
     await p.fill('#players li:nth-child(1) input', 'Ana');
     await p.keyboard.press('Enter');
     assert.equal(await p.evaluate(() => pinDrop.phase), 'aim', 'Enter in a name did not bowl');
+    // Nothing keeps the focus on the lane: the name's focus ring would otherwise go on to the menu button and stay
+    // there all game (Go on a phone's keyboard is Enter too).
+    assert.equal(await p.evaluate(() => document.activeElement === document.body), true, 'the focus ring went from the name to the menu button');
     assert.deepEqual(await p.evaluate(() => pinDrop.game.players.map(q => q.name)), ['Ana', 'Player 3']);
     // Over a saved game, Enter asks again first, like Bowl.
     await p.reload();

@@ -528,6 +528,10 @@ function show(id) {
   for (const s of behind) $(s).inert = !!id;
   if (dialogs.includes(id)) $(id).querySelector('h2').focus({ preventScroll: true });
   else if (id === 'title') { opener = null; if (was) $('title').querySelector('h1').focus({ preventScroll: true }); }
+  // From the title to the lane, the focus is let go rather than handed to the menu button: coming from a name just
+  // typed (Go on a phone's keyboard, or a tap on Bowl that leaves the name focused, as Safari does), the browser would
+  // draw a focus ring round the menu button for the whole game, and a swipe on the lane never takes it away.
+  else if (was === 'title') document.activeElement?.blur?.();
   else if (!visible(document.activeElement) || document.activeElement === document.body) {
     const back = visible(opener) ? opener : game ? $('menuBtn') : null;
     back?.focus({ preventScroll: true });
