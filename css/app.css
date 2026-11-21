@@ -233,6 +233,8 @@ h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.08em; color: 
 .panel > h2:first-child { margin-top: 0; text-align: center; font-size: 26px; text-transform: none; letter-spacing: 0; color: var(--cream); font-family: Shrikhand, Georgia, serif; font-weight: 400; }
 .panel > h2.score { font-size: 72px; line-height: 1; color: var(--gold); text-shadow: 0 3px 0 #a3461c; margin-top: 4px; }
 .tag { text-align: center; color: var(--muted); margin: 8px 0 4px; }
+/* Tonight's wins, playing again and again. */
+.tally { text-align: center; color: var(--teal); font-weight: 700; margin: 2px 0 4px; text-wrap: balance; }
 /* The end of a game fades in over the lane, and a new best gets a gold badge. */
 #end:not([hidden]) { animation: fade-in 0.45s ease-out; }
 #end:not([hidden]) .panel { animation: rise 0.45s ease-out; }

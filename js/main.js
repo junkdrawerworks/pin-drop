@@ -17,7 +17,7 @@ const SETTLE = 1.2, SWEEP = 1.75, RETURN = 0.85;   // seconds
 const clamp = (v, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, v));
 const ease = t => { t = clamp(t); return t * t * (3 - 2 * t); };
 
-let game = null;          // { players: [{ name, rolls, x, splits, bumpers, head }], turn, leftover }
+let game = null;          // { players: [{ name, rolls, x, c, splits, bumpers, head }], turn, leftover }
 let phase = 'title';      // title, aim, rolling, settle, sweep, return, over
 let phaseT = 0, camT = 0;
 let pins = rack(), ball = idle(0), sim = null;
@@ -40,7 +40,9 @@ const hurrying = () => hurry && (phase === 'settle' || phase === 'sweep' || phas
 
 function idle(x) { return { x, y: 6, state: 'lane', roll: 0, vx: 0, vy: 0 }; }
 const current = () => game.players[game.turn];
-const colourOf = i => BALL_COLOURS[i % BALL_COLOURS.length];
+// A player's ball colours, by their place in the game: their own colour (`c`, which stays with them when Bowl again
+// changes who leads off), or on the title, the colour of that row.
+const colourOf = i => BALL_COLOURS[(game?.players[i]?.c ?? i) % BALL_COLOURS.length];
 
 // ---- The lane, every frame -------------------------------------------------------------------------------
 
@@ -148,16 +150,19 @@ function follow(x, dt) {
 
 // ---- A game --------------------------------------------------------------------------------------------
 
-// A new game for these players ([{ name, bumpers, head }]), each standing where `spots` says (Bowl again keeps where
-// each one stood). Each player's switches on the title are kept by name for next time.
-function startGame(lineup, spots = []) {
+// A new game for these players ([{ name, bumpers, head, c, x }]), each with their own ball colour (`c`, or their place)
+// and standing where they last stood (Bowl again keeps it). Begun from the title, the players and their switches are
+// kept for next time.
+function startGame(lineup, fromTitle = false) {
   hush();
   $('handoff').hidden = true;
   const names = lineup.map(q => q.name);
-  game = { players: lineup.map((q, i) => ({ name: q.name, rolls: [], x: spots[i] || 0, ...extras(q) })), turn: 0, leftover: null };
+  game = { players: lineup.map((q, i) => ({ name: q.name, rolls: [], x: q.x || 0, c: q.c ?? i, ...extras(q) })), turn: 0, leftover: null };
   told = new Set(); toldHook = new Set();
-  store.names = names;
-  store.opts = Object.fromEntries(lineup.filter(q => q.bumpers || q.head).map(q => [q.name, extras(q)]));
+  if (fromTitle) {
+    store.names = names;
+    store.opts = Object.fromEntries(lineup.filter(q => q.bumpers || q.head).map(q => [q.name, extras(q)]));
+  }
   keep();
   $('hud').hidden = false;
   show(null);
@@ -976,6 +981,7 @@ document.addEventListener('visibilitychange', () => {
 
 function titleScreen() {
   phase = 'title';
+  tonight = null;
   hush();
   $('handoff').hidden = true;
   game = null;
@@ -1089,7 +1095,25 @@ const counts = q => !q.bumpers && !int(q.head);
 // The game's over: keep it, with every player's balls as well as their score (for working out averages and the
 // like later), and any new bests. A game bowled with bumpers or a head start is kept marked (its score with the head
 // start counted, as it was played), and never counts toward a best.
+// Tonight's games with the same players, one after another with Bowl again: { games, wins (by name) }, kept until
+// Change players (or the end of a game from the menu) or a reload. A tie wins nobody a game.
+let tonight = null;
+function tally() {
+  if (game.players.length < 2) return;
+  tonight ??= { games: 0, wins: Object.create(null) };
+  tonight.games++;
+  const top = Math.max(...game.players.map(scoreOf)), won = game.players.filter(q => scoreOf(q) === top);
+  if (won.length === 1) tonight.wins[won[0].name] = (tonight.wins[won[0].name] || 0) + 1;
+}
+// "Tonight: Ben 2 · Ana 1", most wins first, from the second game on (after one, it only says who won).
+function tallyLine() {
+  if (!tonight || tonight.games < 2 || game.players.length < 2) return '';
+  const wins = q => tonight.wins[q.name] || 0;
+  return `Tonight: ${[...game.players].sort((a, b) => wins(b) - wins(a)).map(q => `${q.name} ${wins(q)}`).join(' · ')}`;
+}
+
 function finish() {
+  tally();
   const scores = game.players.map(q => ({ name: q.name, score: scoreOf(q), rolls: q.rolls.slice(), splits: (q.splits || []).slice(), ...extras(q) }));
   const counted = scores.filter((_, i) => counts(game.players[i]));
   const top = Math.max(-1, ...counted.map(s => s.score));
@@ -1145,6 +1169,8 @@ function showEnd() {
   $('endBadge').hidden = !beaten;
   $('endTitle').classList.toggle('score', game.players.length === 1);
   $('endLine').textContent = line;
+  $('endTally').textContent = tallyLine();
+  $('endTally').hidden = !$('endTally').textContent;
   $('endCards').innerHTML = boardHTML(true);
   show('end');
   $('hud').hidden = true; $('others').hidden = true;
@@ -1193,7 +1219,7 @@ $('lineup').addEventListener('submit', e => {
     return;
   }
   disarmStart();
-  startGame(readPlayers());
+  startGame(readPlayers(), true);
 });
 // Anything else done on the title calls it off (but Enter in a name is a second go at Bowl).
 for (const type of ['pointerdown', 'keydown', 'input']) {
@@ -1233,7 +1259,12 @@ $('menuQuit').addEventListener('click', () => {
   store.current = null; put();
   titleScreen();
 });
-$('again').addEventListener('click', () => startGame(game.players.map(q => ({ name: q.name, ...extras(q) })), game.players.map(q => q.x)));
+// Bowl again: the same players, the second leading off this time (and the first going last), each with their own ball
+// colour and spot on the approach.
+$('again').addEventListener('click', () => {
+  const lineup = game.players.map((q, i) => ({ name: q.name, x: q.x, c: q.c ?? i, ...extras(q) }));
+  startGame([...lineup.slice(1), lineup[0]]);
+});
 $('toTitle').addEventListener('click', titleScreen);
 // Escape closes the menu, How to play and the scorecard as their buttons do, and on the lane it opens the menu.
 document.addEventListener('keydown', e => {

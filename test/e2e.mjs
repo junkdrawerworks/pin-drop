@@ -932,10 +932,10 @@ for (const tap of ['#menuBtn', '#card']) {
     // A short buzz as the ball dropped into the gutter, and one for the new best (on a phone that can buzz).
     assert.deepEqual(await p.evaluate(() => window.buzzes), ['15', '[40,60,40]']);
     assert.deepEqual(await p.$$eval('#endCards .row .name em', els => els.map(e => e.textContent)), ['Tied', 'Tied']);
-    // Bowl again: each stands where they stood.
+    // Bowl again: each stands where they stood, and Cal, who went second, leads off.
     await p.evaluate(() => { pinDrop.game.players[0].x = -6; pinDrop.game.players[1].x = 9; });
     await p.click('#again');
-    assert.deepEqual(await p.evaluate(() => [pinDrop.ball.x, pinDrop.game.players.map(q => [q.x, q.rolls.length])]), [-6, [[-6, 0], [9, 0]]], 'Bowl again moved the players');
+    assert.deepEqual(await p.evaluate(() => [pinDrop.ball.x, pinDrop.game.players.map(q => [q.name, q.x, q.rolls.length])]), [9, [['Cal', 9, 0], ['Ana', -6, 0]]], 'Bowl again moved the players');
     await p.click('#menuBtn'); await p.click('#menuQuit'); await p.click('#menuQuit');
     assert.equal(await p.textContent('#record .best'), 'Best game · Ana & Cal90');
   } finally { await c.close(); }
@@ -1946,7 +1946,7 @@ for (const motion of ['reduce', 'no-preference']) {
     await p.evaluate(() => { pinDrop.speed = 10; pinDrop.throw({ x: 14, speed: 300, angle: 0.02, hook: 0 }); });
     await until(() => p.evaluate(() => { if (pinDrop.phase === 'aim') pinDrop.throw({ x: 14, speed: 300, angle: 0.02, hook: 0 }); return !document.getElementById('end').hidden; }), 30000, 'no end of the game');
     assert.equal(await focus(), 'end endTitle Ana and Ben tie!');
-    assert.equal(await p.getAttribute('#end', 'aria-describedby'), 'endBadge endLine');   // the badge, when there's a new best
+    assert.equal(await p.getAttribute('#end', 'aria-describedby'), 'endBadge endLine endTally');   // the badge, when there's a new best
     // Bowl again: on the lane, the focus on the menu button.
     await p.click('#again');
     assert.equal(await focus(), 'hud menuBtn');
@@ -2154,6 +2154,45 @@ for (const motion of ['reduce', 'no-preference']) {
     assert.deepEqual(shown.map(m => m.seen), [String(most(ana)), String(most(ben) + 10)], 'the most each can still reach');
     assert.equal(shown[0].said, 'Ana can still reach ');
     assert.equal(await p.$eval('#boardCards .max [aria-hidden]', e => e.textContent), 'max ');
+  } finally { await c.close(); }
+}
+
+// Bowl again: Ben, who went second, leads off the next game, each keeping their ball's colour and spot on the
+// approach; from the second game on, the end shows tonight's tally, and Change players starts it again.
+{
+  const all = SPOTS.map((q, i) => ({ id: i + 1, ...q }));
+  const { c, p } = await kept({}, { names: ['Ana', 'Ben'], current: { players: [{ name: 'Ana', rolls: [...nineAndMiss, 9, 0], x: -5 }, { name: 'Ben', rolls: [...nineAndMiss, 0], x: 6 }], turn: 1, leftover: all } });
+  // The last ball of a game: whoever's `last` throws in the gutter, after the rest of the game is set to `rolls`.
+  const finishWith = (rolls, last) => p.evaluate(async ({ rolls, last }) => {
+    await new Promise(r => { const t = setInterval(() => { if (pinDrop.phase === 'aim') { clearInterval(t); r(); } }, 30); });
+    pinDrop.game.players.forEach((q, i) => { q.rolls = rolls[i].slice(); });
+    pinDrop.game.turn = last;
+    pinDrop.speed = 10;
+    pinDrop.throw({ x: 14, speed: 300, angle: 0.02, hook: 0 });
+  }, { rolls, last });
+  const tallied = async () => { await until(() => p.isVisible('#end'), 20000, 'no end of the game'); return p.isVisible('#endTally') ? p.textContent('#endTally') : ''; };
+  try {
+    await p.click('#resume');
+    await p.evaluate(() => { pinDrop.speed = 10; pinDrop.throw({ x: 14, speed: 300, angle: 0.02, hook: 0 }); });
+    assert.equal(await tallied(), '', 'a tally after one game');
+    assert.equal(await p.textContent('#endTitle'), 'Ana wins!');
+    await p.click('#again');
+    assert.deepEqual(await p.evaluate(() => pinDrop.game.players.map(q => [q.name, q.x, q.c])), [['Ben', 6, 1], ['Ana', -5, 0]], 'Bowl again');
+    assert.deepEqual(await p.evaluate(() => [pinDrop.game.turn, pinDrop.ball.x]), [0, 6]);
+    assert.equal(await p.$eval('#who i', e => e.style.background), 'rgb(255, 122, 107)', 'Ben is not in his own colour');
+    // Ben wins this one: Ana's last ball is in the gutter.
+    await finishWith([[...nineAndMiss, 9, 0], [...nineAndMiss, 0]], 1);
+    assert.equal(await tallied(), 'Tonight: Ben 1 · Ana 1');
+    await p.click('#again');
+    assert.deepEqual(await p.evaluate(() => pinDrop.game.players.map(q => q.name)), ['Ana', 'Ben']);
+    await finishWith([[...nineAndMiss, 9, 0], [...nineAndMiss, 0]], 1);
+    assert.equal(await tallied(), 'Tonight: Ana 2 · Ben 1');
+    // Change players: a new start.
+    await p.click('#toTitle');
+    await p.click('#start');
+    assert.deepEqual(await p.evaluate(() => pinDrop.game.players.map(q => q.name)), ['Ana', 'Ben'], 'the title kept the order the players were set up in');
+    await finishWith([[...nineAndMiss, 9, 0], [...nineAndMiss, 0]], 1);
+    assert.equal(await tallied(), '', 'the tally carried on after Change players');
   } finally { await c.close(); }
 }
 

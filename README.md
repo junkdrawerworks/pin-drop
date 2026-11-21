@@ -46,7 +46,9 @@ thrown straight at the head pin.
   alley's screen shows them.
 - **Up to four players** pass the phone round, each with their own ball colour. As the turn passes, the next player's
   card comes up over the lane ("Ben's turn · Tap to bowl"), and nothing can be thrown until they tap it. The
-  Scorecard shows under each player's total the most they can still reach ("max 212"). Pin Drop keeps your best game and your
+  Scorecard shows under each player's total the most they can still reach ("max 212"). On Bowl again, the second
+  player leads off the next game, and from the second game the end shows tonight's tally ("Tonight: Ben 2 · Ana 1")
+  until you change players. Pin Drop keeps your best game and your
   last few scores, and a game you leave half-way carries on where you were. **Bumpers**, switched on next to a player's
   name, keep their ball out of the gutters: it comes off a rail along each side of the lane. A game with bumpers is
   marked in the recent games and doesn't count toward a best. Tapping a player's ball on the title gives them a **head
@@ -94,7 +96,7 @@ GitHub Pages serves it from `main`, at its own address set by `CNAME`.
   and played from file://) and `e2e.mjs` (a whole two-player game in Chromium, three players, strikes in a
   four-player tenth frame and a spare in a one-player one, carrying on after a reload at any moment, every sound
   finishing, two windows open at once, the first ball's marks and the lessons for a new player, bowling from the
-  keyboard, the note on a phone on its side, bumpers, a head start, the card as the turn passes, the most each player can still reach, Sound off stopping the buzz, the thud and the pinsetter's clunks, a tap
+  keyboard, the note on a phone on its side, bumpers, a head start, the card as the turn passes, the most each player can still reach, Bowl again's change of who leads off and tonight's tally, Sound off stopping the buzz, the thud and the pinsetter's clunks, a tap
   hurrying the pinsetter, the pins left under the scorecard, strikes in a row building up to a perfect game and a new
   best, Watch again, the ring for a split, the camera cutting with Reduce Motion, offline, installable). `aim.mjs` aims the tests' balls: the angle that
   sends a ball through a spot at the head pin, and the pocket ball, 2.5 in right of the head pin's middle, that strikes
