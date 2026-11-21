@@ -317,7 +317,7 @@ canvas.addEventListener('wheel', e => {
 // later on doesn't set it off.
 let glide = [];
 function gliding(e) {
-  if (e.pointerType !== 'mouse' || e.buttons !== 0 || touch || phase !== 'aim' || paused) { glide = []; return; }
+  if (e.pointerType !== 'mouse' || e.buttons !== 0 || strokes.size || phase !== 'aim' || paused) { glide = []; return; }
   const now = performance.now();
   glide.push({ y: e.clientY, t: now });
   while (now - glide[0].t > 300) glide.shift();
@@ -332,7 +332,24 @@ function seen(e) {
 
 // ---- The swipe -----------------------------------------------------------------------------------------
 
+// Each finger (or the mouse) on the lane is a stroke of its own, so a second finger landing mid-swipe (a palm, a thumb
+// holding the phone, a child's finger) doesn't take the swipe's place. The one that has moved furthest is `touch`:
+// the ball, the guide and the hint follow it. Whichever reads as a throw when it lifts throws, and the rest are
+// dropped.
+const strokes = new Map();   // by pointerId
 let touch = null;
+const reach = t => { const a = t.pts[0], b = t.pts[t.pts.length - 1]; return Math.hypot(b.x - a.x, b.y - a.y); };
+function leading() {
+  let lead = touch && strokes.has(touch.id) ? touch : null;
+  for (const t of strokes.values()) if (!lead || reach(t) > reach(lead)) lead = t;
+  if (lead === touch) return;
+  // The ball carries on from where it is, not from where it was when the new lead began.
+  if (lead) lead.x0 = ball.x - (lead.mode === 'move' ? lead.pts[lead.pts.length - 1].x - lead.pts[0].x : lead.mode === 'throw' ? lead.slid || 0 : 0) / perInch();
+  touch = lead;
+  guide = null;
+  hint();
+}
+function dropStrokes() { strokes.clear(); touch = null; guide = null; }
 canvas.addEventListener('pointerdown', e => {
   sound.wake();
   seen(e);
@@ -345,7 +362,9 @@ canvas.addEventListener('pointerdown', e => {
   if (phase === 'return' && !paused && phaseT >= 0.65) aim();
   if (phase !== 'aim' || paused) return;
   try { canvas.setPointerCapture(e.pointerId); } catch { /* fine without */ }
-  touch = { ...stroke(e, performance.now()), id: e.pointerId, x0: ball.x };
+  // `extra`: another finger was already down, so this one tapping or brushing the lane gets no word about it.
+  strokes.set(e.pointerId, { ...stroke(e, performance.now()), id: e.pointerId, x0: ball.x, extra: strokes.size > 0 });
+  leading();
 });
 // Each finger position an event brings, with the times it happened (see addPoints in swipe.js).
 function track(t, e) {
@@ -353,18 +372,21 @@ function track(t, e) {
   addPoints(t, evs.length ? evs : [e], performance.now());
 }
 // Slides the ball across the approach, dx px on screen from where it stood when the stroke began.
+const perInch = () => view.cam.f / (ball.y - view.cam.y);
 function slide(t, dx) {
-  const perInch = view.cam.f / (ball.y - view.cam.y);
-  ball.x = clamp(t.x0 + dx / perInch, -LANE.half + BALL_R + 0.5, LANE.half - BALL_R - 0.5);
+  ball.x = clamp(t.x0 + dx / perInch(), -LANE.half + BALL_R + 0.5, LANE.half - BALL_R - 0.5);
   current().x = ball.x;
 }
 canvas.addEventListener('pointermove', e => {
   seen(e);
   gliding(e);
-  if (!touch || e.pointerId !== touch.id) return;
-  track(touch, e);
-  const was = touch.mode;
-  readStroke(touch);
+  const t = strokes.get(e.pointerId);
+  if (!t) return;
+  track(t, e);
+  const was = t.mode;
+  readStroke(t);
+  leading();
+  if (t !== touch) return;
   if ((touch.mode === 'throw') !== (was === 'throw')) hint();   // out of the way of a throw, and back for a move
   if (touch.mode === 'move') {
     // The ball follows the finger, from where it stood when the stroke began (a stroke that started with a wobble
@@ -381,23 +403,26 @@ canvas.addEventListener('pointermove', e => {
   }
 });
 const lift = e => {
-  if (!touch || e.pointerId !== touch.id) return;
-  const t = touch; touch = null;
-  guide = null;
+  const t = strokes.get(e.pointerId);
+  if (!t) return;
+  strokes.delete(e.pointerId);
+  const led = t === touch;   // only the lead stroke moves the ball
+  if (led) { touch = null; guide = null; leading(); }
   hint();
-  if (e.type !== 'pointerup') { if (t.mode === 'move') keep(); return; }
+  if (e.type !== 'pointerup') { if (t.mode === 'move' && led) keep(); return; }
   const end = t.pts[t.pts.length - 1];
   if (Math.hypot(e.clientX - end.x, e.clientY - end.y) > 2) { track(t, e); readStroke(t); }
   const as = liftAs(t), p = throwPoints(t);
   if (as === 'throw') {
-    slide(t, t.slid || 0);
+    if (led) slide(t, t.slid || 0);
     const shot = shotFrom(p, true);
-    if (shot) { throwBall(shot); return; }
+    if (shot) { dropStrokes(); throwBall(shot); return; }
   } else if (as === 'move') {
-    slide(t, t.pts[t.pts.length - 1].x - t.pts[0].x);
+    if (led) slide(t, t.pts[t.pts.length - 1].x - t.pts[0].x);
     keep();
-  } else if (as !== 'cancel') {
-    // A tap, a stroke that only went down, or a flick too short to throw.
+  } else if (as === 'short' || (as !== 'cancel' && !t.extra && !strokes.size)) {
+    // A tap, a stroke that only went down, or a flick too short to throw. (Not a tap or a brush from a finger that
+    // came down while another was on the lane, or that lifts while one still is: that's a hand holding the phone.)
     const mouse = e.pointerType === 'mouse';
     nudge(as === 'short' ? (mouse ? 'Flick further up to roll' : 'Swipe further up to roll')
       : mouse ? 'Hold the click and flick up to roll' : 'Swipe up to roll');
@@ -735,7 +760,7 @@ for (const type of ['pointerdown', 'keydown', 'input']) {
   });
 }
 $('resume').addEventListener('click', () => { sound.wake(); resumeGame(); });
-function openMenu() { touch = null; guide = null; quitArmed = false; $('menuQuit').textContent = 'End this game'; show('menu'); }
+function openMenu() { dropStrokes(); quitArmed = false; $('menuQuit').textContent = 'End this game'; show('menu'); }
 $('menuBtn').addEventListener('click', openMenu);
 $('menuResume').addEventListener('click', () => show(null));
 $('menuBoard').addEventListener('click', () => { $('boardCards').innerHTML = boardHTML(false); show('board'); });

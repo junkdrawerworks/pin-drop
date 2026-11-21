@@ -345,6 +345,33 @@ const state = p => p.evaluate(() => ({ phase: pinDrop.phase, x: pinDrop.ball.x }
       assert.ok(Math.abs(shot.hook) < 5 && Math.abs(shot.angle) < 0.01, `sliding over and swiping up threw a hook of ${shot.hook}, at ${shot.angle}`);
       await p.evaluate(() => { pinDrop.speed = 10; });
     }
+
+    // A second finger landing mid-swipe (a hand holding the phone, a child's finger) doesn't throw the swipe away and
+    // say "Swipe up to roll". With real touch: the second finger lands on the fifth move, and both lift together.
+    // Then a tap from another finger (a pointer of its own) mid-swipe, lifted before the swipe is: no word, and the
+    // swipe still throws.
+    for (const how of ['lands', 'taps']) {
+      await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
+      await wait(4100);   // one word every four seconds at most: room for one now
+      await p.evaluate(() => { pinDrop.speed = 1; });
+      const at = (i, more) => [{ x: 195, y: 700 - 30 * i, id: 0 }, ...(more ? [{ x: 20, y: 600, id: 1 }] : [])];
+      const finger = (type, pointerId) => p.evaluate(([type, pointerId]) => document.getElementById('lane').dispatchEvent(new PointerEvent(type, { pointerId, pointerType: 'touch', isPrimary: false, clientX: 30, clientY: 600, bubbles: true })), [type, pointerId]);
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: at(0) });
+      for (let i = 1; i <= 10; i++) {
+        await wait(16);
+        if (how === 'lands') await cdp.send('Input.dispatchTouchEvent', { type: i === 5 ? 'touchStart' : 'touchMove', touchPoints: at(i, i >= 5) });
+        else {
+          await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: at(i) });
+          if (i === 4) await finger('pointerdown', 77);
+          if (i === 6) await finger('pointerup', 77);
+        }
+      }
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await wait(50);
+      assert.equal((await state(p)).phase, 'rolling', `a swipe with a second finger that ${how} mid-swipe threw nothing`);
+      assert.notEqual(await p.textContent('#hint'), 'Swipe up to roll', `a second finger that ${how} mid-swipe was told to swipe up`);
+      await p.evaluate(() => { pinDrop.speed = 10; });
+    }
   } finally { await c.close(); }
 }
 
