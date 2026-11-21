@@ -505,6 +505,10 @@ server.close();
 // index.html; the first 8 hex of the sha1 of those).
 const sw = await readFile(join(root, 'sw.js'), 'utf8');
 const shell = [...sw.match(/SHELL = \[([^\]]*)\]/)[1].replace(/\/\/.*/g, '').matchAll(/'([^']*)'/g)].map(m => m[1]);
+// Every icon the page and the manifest name is kept for offline too (adding to the home screen with no signal).
+const manifest = JSON.parse(await readFile(join(root, 'manifest.webmanifest'), 'utf8'));
+const linked = [...(await readFile(join(root, 'index.html'), 'utf8')).matchAll(/<link rel="(?:icon|apple-touch-icon|manifest)" href="([^"]+)"/g)].map(m => m[1]);
+for (const f of [...manifest.icons.map(i => i.src), ...linked]) assert.ok(shell.includes(f), `${f} isn't in sw.js's SHELL, so it isn't there offline`);
 const all = createHash('sha1');
 for (const f of shell) all.update(createHash('sha1').update(await readFile(join(root, f.endsWith('/') ? f + 'index.html' : f))).digest());
 const files = all.digest('hex').slice(0, 8);
