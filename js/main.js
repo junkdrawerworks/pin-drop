@@ -263,8 +263,9 @@ let nudgeText = '', nudgeAt = -Infinity, nudgeTimer = 0;
 function hint() {
   const el = $('hint');
   const [a, b] = HINTS[clicking() ? 'mouse' : 'touch'];
-  if (nudgeText) el.textContent = nudgeText;
-  else el.innerHTML = `<span>${a}</span><span class="dot"> · </span><span>${b}</span>`;
+  // On a dark pill, to read over the light wood of the approach.
+  el.innerHTML = nudgeText ? `<span class="pill">${esc(nudgeText)}</span>`
+    : `<span class="pill"><span>${a}</span><span class="dot"> · </span><span>${b}</span></span>`;
   el.classList.toggle('nudge', !!nudgeText);
   el.hidden = !(nudgeText || hintDue()) || phase !== 'aim' || touch?.mode === 'throw';
 }
@@ -449,7 +450,7 @@ const winLine = name => (isYou(name) ? 'You win!' : `${name} wins!`);
 function hush() { clearTimeout(callTimer); $('call').className = 'call'; }
 
 function readout(text) {
-  $('readout').textContent = text;
+  $('readout').innerHTML = text ? `<span class="pill">${esc(text)}</span>` : '';
 }
 
 function buzz(p) { try { navigator.vibrate?.(p); } catch { /* not on this device */ } }

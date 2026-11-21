@@ -249,10 +249,16 @@ const state = p => p.evaluate(() => ({ phase: pinDrop.phase, x: pinDrop.ball.x }
     await touchStroke(cdp, [[30, 0, 3]]);
     assert.equal(await p.isVisible('#hint'), true, 'no hint on the first ball');
     assert.match(await p.textContent('#hint'), /^Swipe up from the ball to roll/);
+    // On a dark pill, in one piece over its two lines: cream on the bare wood of the approach was about 2.4:1.
+    const pill = sel => p.evaluate(sel => { const el = document.querySelector(sel); return el && { bg: getComputedStyle(el).backgroundColor, h: el.getBoundingClientRect().height }; }, sel);
+    const hintPill = await pill('#hint .pill');
+    assert.equal(hintPill?.bg, 'rgba(13, 18, 34, 0.75)', 'the hint is not on its dark pill');
+    assert.ok(hintPill.h > 50, `the hint's pill is ${hintPill.h} px tall, so it does not hold both lines`);
     await p.evaluate(() => { pinDrop.speed = 10; });
     // A backswing: 13 px down, then a quick fling up.
     await touchStroke(cdp, [[0, 13, 2], [0, -280, 6]]);
     assert.equal((await state(p)).phase, 'rolling', 'a backswing and then a fling up threw nothing');
+    assert.equal((await pill('#readout .pill'))?.bg, 'rgba(13, 18, 34, 0.75)', 'the speed readout is not on its dark pill');
     await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
 
     // A hook swipe that starts 15 px sideways, then goes up: it throws, from where the ball was.

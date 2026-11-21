@@ -104,15 +104,21 @@ button { font: inherit; color: inherit; cursor: pointer; }
 }
 .hint { bottom: calc(var(--safe-b) + 18px); padding: 0 16px; font-size: 16px; animation: breathe 2.6s ease-in-out infinite; }
 .hint.nudge { animation: none; color: var(--gold); }
+/* The words sit on a dark pill like the other players' scores: the approach behind them is light wood. */
+.hint .pill, .readout .pill {
+  display: inline-block; padding: 6px 14px; border-radius: 99px;
+  background: rgba(13, 18, 34, 0.75); border: 1px solid var(--line);
+}
 @media (max-width: 519px) {
-  /* Two lines on a phone, one for each half. */
-  .hint span { display: block; }
-  .hint span:last-child::first-letter { text-transform: uppercase; }
-  .hint .dot { display: none; }
+  /* Two lines on a phone, one for each half, in one pill. */
+  .hint .pill { border-radius: 16px; }
+  .hint .pill > span { display: block; }
+  .hint .pill > span:last-child::first-letter { text-transform: uppercase; }
+  .hint .pill > .dot { display: none; }
 }
 @media (min-width: 768px) { .hint { font-size: 18px; } }
-@keyframes breathe { 50% { opacity: 0.55; } }
-.readout { bottom: calc(var(--safe-b) + 18px); color: var(--gold); transition: opacity 0.4s; }
+@keyframes breathe { 50% { opacity: 0.8; } }
+.readout { bottom: calc(var(--safe-b) + 18px); padding: 0 16px; color: var(--gold); transition: opacity 0.4s; }
 
 /* Sheets over the lane: the title, the menu, the scorecard, the end of a game. */
 .sheet {
