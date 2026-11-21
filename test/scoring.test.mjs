@@ -120,3 +120,33 @@ test('a swipe\'s speed: its fastest stretch at the end, whatever the points arri
   // A gentle push is slower than a fling.
   assert.ok(swipeSpeed(line(10, 8, 16)) < swipeSpeed(line(10, 30, 16)) / 3);
 });
+
+test('a stroke on the lane: a move, a throw, or a throw that started as something else', async () => {
+  const { readStroke, liftAs, throwPoints } = await import('../js/swipe.js');
+  // Feeds a stroke's points in one at a time, the way pointermove does, and says what it was read as.
+  const stroke = moves => {
+    const s = { pts: [{ x: 0, y: 0, t: 0 }], mode: null };
+    let x = 0, y = 0;
+    for (const [dx, dy, n = 1] of moves) for (let i = 1; i <= n; i++) { s.pts.push({ x: x + dx * i / n, y: y + dy * i / n, t: s.pts.length * 16 }); readStroke(s); if (i === n) { x += dx; y += dy; } }
+    return s;
+  };
+  // Straight up throws; straight across moves.
+  assert.equal(liftAs(stroke([[0, -300, 10]])), 'throw');
+  assert.equal(liftAs(stroke([[80, 3, 8]])), 'move');
+  // A backswing: 13 px down, then a fling up. The throw starts from the lowest point.
+  const back = stroke([[0, 13, 2], [0, -280, 8]]);
+  assert.equal(liftAs(back), 'throw');
+  assert.equal(throwPoints(back)[0].y, 13);
+  // A hook swipe that starts sideways, then goes well up.
+  assert.equal(liftAs(stroke([[15, 0, 2], [0, -330, 10]])), 'throw');
+  // ...but a sideways drag that drifts up a little stays a move.
+  assert.equal(stroke([[60, 0, 6], [0, -50, 4]]).mode, 'move');
+  // Moving the ball: 12 px up, then 80 px across and 33 px up. Lifting there moves the ball, it doesn't throw it
+  // into the gutter.
+  assert.equal(liftAs(stroke([[0, -12, 1], [80, -33, 8]])), 'move');
+  // Too short, a tap, heading down, and pulled back to where it started.
+  assert.equal(liftAs(stroke([[0, -30, 3]])), 'short');
+  assert.equal(liftAs(stroke([])), 'tap');
+  assert.equal(liftAs(stroke([[0, 60, 4]])), 'none');
+  assert.equal(liftAs(stroke([[0, -80, 4], [0, 85, 4]])), 'cancel');
+});

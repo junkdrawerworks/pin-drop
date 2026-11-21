@@ -4,7 +4,7 @@ import { Renderer, BALL_COLOURS } from './render.js';
 import { frames, next, total, isSplit } from './scoring.js';
 import * as sound from './sound.js';
 import { load, save } from './store.js';
-import { swipeSpeed } from './swipe.js';
+import { swipeSpeed, readStroke, throwPoints, liftAs } from './swipe.js';
 
 const $ = id => document.getElementById(id);
 const canvas = $('lane');
@@ -230,7 +230,7 @@ canvas.addEventListener('pointerdown', e => {
   sound.wake();
   if (phase !== 'aim' || paused) return;
   try { canvas.setPointerCapture(e.pointerId); } catch { /* fine without */ }
-  touch = { id: e.pointerId, pts: [{ x: e.clientX, y: e.clientY, t: performance.now() }], mode: null, x0: ball.x };
+  touch = { id: e.pointerId, pts: [{ x: e.clientX, y: e.clientY, t: performance.now() }], mode: null, from: 0, x0: ball.x };
 });
 // Each point of the swipe, timed by the page's own clock. Touch screens hand over several finger positions at once
 // (coalesced events), and some report their times on a different clock from the page's, which made every fling
@@ -242,31 +242,42 @@ function addPoints(t, e) {
   const last = t.pts[t.pts.length - 1];
   list.forEach((c, i) => t.pts.push({ x: c.clientX, y: c.clientY, t: last.t + (now - last.t) * (i + 1) / list.length }));
 }
+// Slides the ball across the approach, dx px on screen from where it stood when the stroke began.
+function slide(t, dx) {
+  const perInch = view.cam.f / (ball.y - view.cam.y);
+  ball.x = clamp(t.x0 + dx / perInch, -LANE.half + BALL_R + 0.5, LANE.half - BALL_R - 0.5);
+  current().x = ball.x;
+}
 canvas.addEventListener('pointermove', e => {
   if (!touch || e.pointerId !== touch.id) return;
   addPoints(touch, e);
-  const a = touch.pts[0], dx = e.clientX - a.x, dy = e.clientY - a.y;
-  if (!touch.mode && Math.hypot(dx, dy) > 10) touch.mode = Math.abs(dx) > Math.abs(dy) ? 'move' : dy < 0 ? 'throw' : 'none';
+  const was = touch.mode;
+  readStroke(touch);
   if (touch.mode === 'move') {
-    // Slide the ball across the approach, under the finger.
-    const perInch = view.cam.f / (ball.y - view.cam.y);
-    ball.x = clamp(touch.x0 + dx / perInch, -LANE.half + BALL_R + 0.5, LANE.half - BALL_R - 0.5);
-    current().x = ball.x;
+    slide(touch, touch.pts[touch.pts.length - 1].x - touch.pts[0].x);   // the ball follows the finger
   } else if (touch.mode === 'throw') {
-    guide = shotFrom(touch.pts, false);
+    if (was === 'move') slide(touch, 0);   // a hook swipe that started sideways: the ball goes back where it stood
+    const p = throwPoints(touch), a = p[0], b = p[p.length - 1];
+    // The guide shows only while letting go would throw, so pulling back down calls it off where you can see it.
+    guide = -(b.y - a.y) < 12 || Math.abs(b.x - a.x) > Math.abs(b.y - a.y) ? null : shotFrom(p, false);
   }
 });
 const lift = e => {
   if (!touch || e.pointerId !== touch.id) return;
   const t = touch; touch = null;
-  if (t.mode === 'throw' && e.type === 'pointerup') {
-    const end = t.pts[t.pts.length - 1];
-    if (Math.hypot(e.clientX - end.x, e.clientY - end.y) > 2) addPoints(t, e);
-    const shot = shotFrom(t.pts, true);
-    if (shot) { throwBall(shot); return; }
-  }
-  if (t.mode === 'move') keep();
   guide = null;
+  if (e.type !== 'pointerup') { if (t.mode === 'move') keep(); return; }
+  const end = t.pts[t.pts.length - 1];
+  if (Math.hypot(e.clientX - end.x, e.clientY - end.y) > 2) { addPoints(t, e); readStroke(t); }
+  const as = liftAs(t), p = throwPoints(t);
+  if (as === 'throw') {
+    slide(t, 0);
+    const shot = shotFrom(p, true);
+    if (shot) { throwBall(shot); return; }
+  } else if (as === 'move') {
+    slide(t, p[p.length - 1].x - p[0].x);
+    keep();
+  }
 };
 canvas.addEventListener('pointerup', lift);
 canvas.addEventListener('pointercancel', lift);

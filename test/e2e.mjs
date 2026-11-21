@@ -185,6 +185,66 @@ await until(() => page.evaluate(async () => !!(await (await caches.match('index.
   10000, "the new release's offline copy kept the old index.html");
 release = false;
 
+// ---- Throwing, on a phone's touch screen and with a mouse or trackpad -----------------------------------------
+
+// A fresh page with what's kept on this device set to `kept`, already on the lane.
+async function lane(options, kept = {}, names = ['You']) {
+  const c = await browser.newContext({ serviceWorkers: 'block', ...options });
+  const p = await c.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  p.on('console', m => { if (m.type() === 'error') problems.push(m.text()); });
+  await p.addInitScript(k => { if (!sessionStorage.getItem('set')) { sessionStorage.setItem('set', '1'); localStorage.setItem('pin-drop.v1', JSON.stringify(k)); } }, { names, ...kept });
+  await p.goto(base);
+  await p.click('#start');
+  return { c, p, cdp: await c.newCDPSession(p) };
+}
+const wait = ms => new Promise(r => setTimeout(r, ms));
+// A touch stroke with real touch events: `moves` is a list of [dx, dy, steps], each step 16 ms apart.
+async function touchStroke(cdp, moves, x = 195, y = 640) {
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x, y }] });
+  for (const [dx, dy, n] of moves) {
+    for (let i = 1; i <= n; i++) { await wait(16); await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: x + dx * i / n, y: y + dy * i / n }] }); }
+    x += dx; y += dy;
+  }
+  await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await wait(50);
+}
+const state = p => p.evaluate(() => ({ phase: pinDrop.phase, x: pinDrop.ball.x }));
+
+{
+  const { c, p, cdp } = await lane({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  try {
+    await p.evaluate(() => { pinDrop.speed = 10; });
+    // A backswing: 13 px down, then a quick fling up.
+    await touchStroke(cdp, [[0, 13, 2], [0, -280, 6]]);
+    assert.equal((await state(p)).phase, 'rolling', 'a backswing and then a fling up threw nothing');
+    await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
+
+    // A hook swipe that starts 15 px sideways, then goes up: it throws, from where the ball was.
+    await p.evaluate(() => { pinDrop.speed = 0.01; });
+    const x0 = (await state(p)).x;
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 195, y: 640 }] });
+    for (let i = 1; i <= 2; i++) { await wait(16); await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 195 + 7.5 * i, y: 640 }] }); }
+    assert.notEqual((await state(p)).x, x0, 'the sideways start did not move the ball');
+    for (let i = 1; i <= 10; i++) { await wait(16); await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 210, y: 640 - 33 * i }] }); }
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await wait(50);
+    const thrown = await state(p);
+    assert.equal(thrown.phase, 'rolling', 'a swipe that started sideways threw nothing');
+    assert.ok(Math.abs(thrown.x - x0) < 0.2, `the ball was thrown from ${thrown.x}, not where it stood (${x0})`);
+    await p.evaluate(() => { pinDrop.speed = 10; });
+    await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
+
+    // Moving the ball with a stroke that starts upward: 12 px up, then 80 px right and 33 px up. It moves, and
+    // isn't thrown into the gutter.
+    const before = (await state(p)).x;
+    await touchStroke(cdp, [[0, -12, 1], [80, -33, 8]]);
+    const moved = await state(p);
+    assert.equal(moved.phase, 'aim', 'moving the ball diagonally threw it');
+    assert.ok(moved.x > before + 3, `the ball only moved from ${before} to ${moved.x}`);
+  } finally { await c.close(); }
+}
+
 assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems while using it');
 await browser.close();
 server.close();
