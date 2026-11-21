@@ -322,6 +322,8 @@ h1[tabindex]:focus, h2[tabindex]:focus { outline: none; }
 .cards .row .name em { font-style: normal; color: var(--gold); font-size: 13px; }
 /* Under a total on the Scorecard sheet: the most that player can still reach. */
 .cards .row .max { margin: 3px 2px 0 0; text-align: right; font-size: 12px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
+/* Under each card at the end of a game: its strikes, spares and open frames. */
+.cards .row .count { margin: 4px 0 0 2px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
 
 .jd-foot { margin-top: 18px; text-align: center; font-size: 13px; color: var(--muted); }
 /* Padded out to 44 px tall for a thumb, the padding taken back off so the line stays where it was. */

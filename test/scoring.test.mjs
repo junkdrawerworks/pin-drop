@@ -1,7 +1,7 @@
 // The scoring rules and the physics, without a browser:  node --test test/
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { frames, next, total, pending, best, isSplit, callFor, cardText, boxes } from '../js/scoring.js';
+import { frames, next, total, pending, best, isSplit, callFor, cardText, boxes, stats, statsLine } from '../js/scoring.js';
 import { play, rack, Sim, rng } from '../js/physics.js';
 import { through } from './aim.mjs';
 
@@ -65,6 +65,24 @@ test('the best a game can still reach', () => {
 test('which box each ball goes in', () => {
   assert.deepEqual(boxes([8, 2, 10, 7]), [[0, 0], [0, 1], [1, 1], [2, 0]]);
   assert.deepEqual(boxes([...Array(9).fill(10), 10, 8, 2]).slice(9), [[9, 0], [9, 1], [9, 2]]);
+});
+
+test('a game summed up: strikes, spares and open frames, and the chances at each', () => {
+  // X, 7/, 9-, X, X, 8/, 6 2, X, 9/, then X 7/ in the tenth.
+  const g = [10, 7, 3, 9, 0, 10, 10, 8, 2, 6, 2, 10, 9, 1, 10, 7, 3];
+  assert.equal(next(g).done, true);
+  assert.deepEqual(stats(g), { strikes: 5, spares: 4, open: 2, strikeChances: 11, spareChances: 6 });
+  assert.equal(statsLine(g), '5 strikes · 4 spares · 2 open');
+  // A perfect game: twelve strikes from twelve chances, and nothing else to say.
+  assert.deepEqual(stats(Array(12).fill(10)), { strikes: 12, spares: 0, open: 0, strikeChances: 12, spareChances: 0 });
+  assert.equal(statsLine(Array(12).fill(10)), '12 strikes');
+  // One of each is said in the singular; an open tenth counts, but a tenth with a strike in it never does.
+  assert.equal(statsLine([10, 5, 5, ...Array(16).fill(0)]), '1 strike · 1 spare · 8 open');
+  assert.equal(statsLine([...Array(18).fill(0), 10, 7, 2]), '1 strike · 9 open');
+  assert.equal(statsLine(Array(20).fill(0)), '10 open');
+  // A game still going counts only the frames that are over.
+  assert.deepEqual(stats([10, 7]), { strikes: 1, spares: 0, open: 0, strikeChances: 2, spareChances: 0 });
+  assert.equal(statsLine([]), '');
 });
 
 test('splits', () => {

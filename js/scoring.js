@@ -119,6 +119,33 @@ export function callFor(before, knocked, left, { wasSplit = false, sawGutter = f
   return [count, open ? 'open frame' : '', 'small'];
 }
 
+// How a game went, counted the way an alley's screen sums it up: its strikes and spares (every X and / on the card,
+// the tenth's bonus balls included) and its open frames (a finished frame with no strike or spare in it, USBC Playing
+// Rules, Rule 2g). With the chances for each, for a strike and spare percentage: every ball at a full rack is a chance
+// at a strike (twelve in a perfect game), and every ball at pins left is a chance at a spare.
+export function stats(rolls) {
+  const out = { strikes: 0, spares: 0, open: 0, strikeChances: 0, spareChances: 0 };
+  for (let k = 0; k < rolls.length; k++) {
+    const before = rolls.slice(0, k), st = next(before);
+    if (st.done) break;
+    if (st.fresh) { out.strikeChances++; if (rolls[k] === 10) out.strikes++; }
+    else { out.spareChances++; if (rolls[k - 1] + rolls[k] === 10) out.spares++; }
+  }
+  const done = next(rolls).done;
+  frames(rolls).forEach((f, i) => {
+    const over = i < 9 ? f.balls.length === 2 || f.balls[0] === 10 : done;
+    if (over && !f.marks.some(m => m === 'X' || m === '/')) out.open++;
+  });
+  return out;
+}
+
+// "3 strikes · 2 spares · 4 open": the parts that are more than nothing, one of a kind said in the singular.
+export function statsLine(rolls) {
+  const s = stats(rolls);
+  return [[s.strikes, 'strike', 'strikes'], [s.spares, 'spare', 'spares'], [s.open, 'open', 'open']]
+    .filter(([n]) => n > 0).map(([n, one, more]) => `${n} ${n === 1 ? one : more}`).join(' · ');
+}
+
 // Which box of which frame each ball's mark goes in: [frame, box] by the ball's place in the list. A strike in frames
 // 1 to 9 goes in the second box, as X.
 export function boxes(rolls) {

@@ -2,7 +2,7 @@
 import { Sim, rack, rng, LANE, BALL_R, BOARD, SPOTS } from './physics.js';
 import { plan, cpuName, LEVELS, LEVEL_KEYS } from './computer.js';
 import { Renderer, BALL_COLOURS, CPU_COLOURS } from './render.js';
-import { frames, next, total, pending, isSplit, callFor, cardText, boxes, best as most } from './scoring.js';
+import { frames, next, total, pending, isSplit, callFor, cardText, boxes, best as most, statsLine } from './scoring.js';
 import * as sound from './sound.js';
 import { load, save as write, parse, merge, int, keeping, KEY } from './store.js';
 import { stroke, addPoints, readStroke, throwPoints, liftAs, throwOf, MOUSE } from './swipe.js';
@@ -891,15 +891,18 @@ function leaveCard() {
   el.setAttribute('aria-label', up.length ? `Pins left: ${up.length === 1 ? up[0] : `${up.slice(0, -1).join(', ')} and ${up.at(-1)}`}` : 'No pins left');
 }
 
-// The scorecards of everyone in the game: at the end, with the winner marked; on the Scorecard sheet during a game,
-// with the most each player can still reach under their total ("max 212"), as a league's screen shows it, so in a
-// close finish everyone can see whether the player behind can still catch up.
+// The scorecards of everyone in the game: at the end, with the winner marked and under each card how the game went
+// ("3 strikes · 2 spares · 4 open", as an alley's screen sums it up); on the Scorecard sheet during a game, with the
+// most each player can still reach under their total ("max 212"), as a league's screen shows it, so in a close finish
+// everyone can see whether the player behind can still catch up.
 function boardHTML(withBest) {
-  const best = Math.max(...game.players.map(scoreOf));
-  const tied = game.players.filter(q => scoreOf(q) === best).length > 1;
-  const max = q => (withBest || next(q.rolls).done ? ''
-    : `<p class="max"><span aria-hidden="true">max </span><span class="sr">${esc(q.name)} can still reach </span>${most(q.rolls) + int(q.head)}</p>`);
-  return game.players.map((q, i) => `<div class="row"><div class="name"><span><i style="background:${colourOf(i)[0]}"></i>${esc(q.name)}</span>${withBest && game.players.length > 1 && scoreOf(q) === best ? `<em>${tied ? 'Tied' : 'Winner'}</em>` : ''}</div>${cardHTML(q.rolls, -1, true, true, q.splits, int(q.head))}${max(q)}</div>`).join('');
+  const players = game.players;
+  const best = Math.max(...players.map(scoreOf));
+  const tied = players.filter(q => scoreOf(q) === best).length > 1;
+  const under = q => (withBest ? `<p class="count">${statsLine(q.rolls)}</p>`
+    : next(q.rolls).done ? ''
+      : `<p class="max"><span aria-hidden="true">max </span><span class="sr">${esc(q.name)} can still reach </span>${most(q.rolls) + int(q.head)}</p>`);
+  return players.map((q, i) => `<div class="row"><div class="name"><span><i style="background:${colourOf(i)[0]}"></i>${esc(q.name)}</span>${withBest && players.length > 1 && scoreOf(q) === best ? `<em>${tied ? 'Tied' : 'Winner'}</em>` : ''}</div>${cardHTML(q.rolls, -1, true, true, q.splits, int(q.head))}${under(q)}</div>`).join('');
 }
 
 let callTimer = 0, callUntil = 0, callAt = null;   // when the callout on screen goes, and where it is ('pins' or 'aim')

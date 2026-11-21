@@ -4,7 +4,7 @@
   "type": "module",
   "description": "Ten-pin bowling with one swipe.",
   "scripts": {
-    "test": "node --test test/scoring.test.mjs test/swipe.test.mjs test/standing.test.mjs test/clean.test.mjs test/store.test.mjs test/computer.test.mjs && node test/build.mjs && node test/e2e.mjs",
+    "test": "node --test test/scoring.test.mjs test/swipe.test.mjs test/standing.test.mjs test/clean.test.mjs test/store.test.mjs test/computer.test.mjs && node test/build.mjs && node test/records.mjs && node test/e2e.mjs",
     "build": "node tools/build.mjs"
   },
   "devDependencies": {
