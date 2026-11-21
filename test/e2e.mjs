@@ -1032,6 +1032,31 @@ for (const tap of ['#menuBtn', '#card']) {
   } finally { await c.close(); }
 }
 
+// A player's first ball of a game shows where to stand and which arrow to roll over: a ring on the dot on board 8 and
+// the second arrow from the right lit up. The second ball of the frame, and the next frame, show neither, and nor does
+// the lane while the ball rolls. Each player gets them for their own first ball.
+{
+  const { c, p } = await lane({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true }, { thrown: { Ana: 9, Ben: 9 } }, ['Ana', 'Ben']);
+  const marked = () => p.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => r(pinDrop.view.marked)))));
+  try {
+    const m = await marked();
+    assert.ok(m && Math.abs(m.stand - 12.77) < 0.01 && m.target === 10, `the first ball's marks: ${JSON.stringify(m)}`);
+    await p.evaluate(() => { pinDrop.speed = 10; pinDrop.seed = 7; pinDrop.throw({ x: 0, speed: 300, angle: 0.01, hook: 0 }); });
+    assert.equal(await marked(), null, 'the marks stayed up while the ball rolled');
+    await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
+    assert.equal(await p.evaluate(() => pinDrop.game.players[0].rolls.length), 1, 'the first ball struck, so this checks less than it means to');
+    assert.equal(await marked(), null, "the marks are up for the frame's second ball");
+    await p.evaluate(() => pinDrop.throw({ x: 0, speed: 300, angle: 0, hook: 0 }));
+    await until(() => p.evaluate(() => pinDrop.phase === 'aim' && pinDrop.game.turn === 1), 20000, "Ben's turn never came");
+    assert.ok(await marked(), "no marks for Ben's first ball");
+    await until(() => p.evaluate(() => {
+      if (pinDrop.phase === 'aim' && pinDrop.game.turn === 1) pinDrop.throw({ x: 0, speed: 300, angle: 0, hook: 0 });
+      return pinDrop.phase === 'aim' && pinDrop.game.turn === 0;
+    }), 30000, "Ana's second frame never came");
+    assert.equal(await marked(), null, "the marks are up in Ana's second frame");
+  } finally { await c.close(); }
+}
+
 // The first player keeps the name You: it's "Your turn" (never "You’s turn") as the turn comes round, and "You win!".
 {
   const { c, p } = await lane({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true }, {}, ['You', 'Player 2']);

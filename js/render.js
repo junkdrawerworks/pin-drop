@@ -8,6 +8,9 @@ const GOLD_TO = 600;   // the guide's gold arrow ends 50 feet down
 // slowest (170), half way to the end of the oil at 15.9 mph, and all 40 feet at the top speed (390). It grows as the
 // swipe speeds up, so the speed shows before letting go.
 export const litTo = speed => 48 + (LANE.oil - 48) * Math.max(0, Math.min(1, (speed - 170) / 220));
+// How far down the lane (inches) the arrow on board b (counted from the right) starts: 13 feet for the two
+// outside arrows, on boards 5 and 35, and a foot further for each arrow in, to 16 feet for the middle one.
+const arrowY = b => 144 + (b <= 20 ? b : 40 - b) / 5 * 12;
 const NEXT_LANE = 41.5 + LANE.gutter * 2 + 9;   // centre to centre, with the ball return between
 // A pin's outline: height up the pin (inches) and its radius there.
 const PROFILE = [[0, 1.02], [0.75, 1.41], [2.25, 1.96], [3.4, 2.25], [4.5, 2.38], [5.9, 2.28], [7.25, 1.92], [8.6, 1.4],
@@ -145,6 +148,8 @@ export class Renderer {
     this.lane(0, false);
     // The neighbours' pins, dimmer, the back row first so the front ones stand in front of them.
     for (const k of [-2, -1, 1, 2]) for (let i = SPOTS.length - 1; i >= 0; i--) this.uprightPin(k * NEXT_LANE + SPOTS[i].x, SPOTS[i].y, 0, 0, true);
+    this.marked = s.marks || null;
+    if (s.marks) this.marks(s.marks, s.ball);
     if (s.guide) this.guide(s.guide);
 
     // Near things over far ones.
@@ -269,8 +274,7 @@ export class Renderer {
     g.fillStyle = 'rgba(86,46,20,0.75)';
     for (const b of [5, 10, 15, 20, 25, 30, 35]) {
       const x = X + half - (b - 0.5) * BOARD;
-      const y = 144 + (b <= 20 ? b : 40 - b) / 5 * 12;
-      this.arrow(x, y);
+      this.arrow(x, arrowY(b));
     }
     g.fillStyle = 'rgba(86,46,20,0.45)';
     for (const b of [10, 30]) { const x = X + half - (b - 0.5) * BOARD; if (this.quad(x - 0.3, x + 0.3, 408, 456)) g.fill(); }
@@ -301,6 +305,47 @@ export class Renderer {
     if (!a || !b || !c) return;
     const g = this.g;
     g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.lineTo(c[0], c[1]); g.closePath(); g.fill();
+  }
+
+  // For a player's first frame: a ring where to stand, on the line of the dots at the start of the lane, and the arrow
+  // to roll over lit up gold, each with a word on a dark pill. The ring sits where the ball rests, so the ball covers
+  // it once it's there (and its word goes).
+  marks({ stand, target }, ball) {
+    const g = this.g, gold = 'rgba(255,201,74,0.95)';
+    g.save();
+    // The arrow: gold and glowing, drawn over the brown one twice its size.
+    const tx = LANE.half - (target - 0.5) * BOARD, ty = arrowY(target);
+    const a = this.p(tx, ty + 20), b = this.p(tx - 2, ty - 2), c = this.p(tx + 2, ty - 2);
+    if (a && b && c) {
+      g.fillStyle = gold; g.shadowColor = 'rgba(255,170,60,1)'; g.shadowBlur = 14;
+      g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.lineTo(c[0], c[1]); g.closePath(); g.fill();
+      g.shadowBlur = 0;
+      this.tag('Aim here', a[0], a[1] - 8);
+    }
+    // The ring, dashed, the ball's size.
+    const r = this.p(stand, ball ? ball.y : 6, 0);
+    if (r) {
+      const R = BALL_R * r[2];
+      g.strokeStyle = 'rgba(255,255,255,0.85)'; g.lineWidth = Math.max(1.5, R * 0.09);
+      g.setLineDash([R * 0.32, R * 0.22]);
+      g.beginPath(); g.ellipse(r[0], r[1] - R * 0.15, R, R * Math.max(0.35, this.squash(ball ? ball.y : 6)), 0, 0, Math.PI * 2); g.stroke();
+      g.setLineDash([]);
+      if (!ball || Math.abs(ball.x - stand) > 1.5) this.tag('Stand here', r[0], r[1] - R * 1.25);
+    }
+    g.restore();
+  }
+
+  // A few words on a dark pill, centred over (x, bottom).
+  tag(text, x, bottom) {
+    const g = this.g, size = Math.round(Math.max(12, Math.min(15, this.H * 0.017)));
+    g.font = `700 ${size}px Figtree, system-ui, sans-serif`;
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    const w = g.measureText(text).width + size * 1.3, h = size * 1.75;
+    const x0 = Math.max(4, Math.min(this.W - 4 - w, x - w / 2)), y0 = bottom - h;
+    g.fillStyle = 'rgba(13,18,34,0.78)';
+    g.beginPath(); g.roundRect(x0, y0, w, h, h / 2); g.fill();
+    g.fillStyle = '#f6eedc';
+    g.fillText(text, x0 + w / 2, y0 + h / 2 + 0.5);
   }
 
   // While a throw is being swiped: the way the ball will go, worked out with the real physics less the lane's small

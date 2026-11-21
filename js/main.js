@@ -1,5 +1,5 @@
 // Pin Drop: the game around the lane. Turns and frames, the swipe, the pinsetter, the scorecards and the sheets.
-import { Sim, rack, LANE, BALL_R } from './physics.js';
+import { Sim, rack, LANE, BALL_R, BOARD } from './physics.js';
 import { Renderer, BALL_COLOURS } from './render.js';
 import { frames, next, total, pending, isSplit, callFor, cardText } from './scoring.js';
 import * as sound from './sound.js';
@@ -55,7 +55,7 @@ function loop(now) {
   document.body.classList.toggle('dragging', !!touch);
   const resting = shown !== null || (phase === 'aim' && !strokes.size && !guide);
   if (stale || phase !== drawnPhase || !resting || (shown === null && now - drawnAt >= 80)) {
-    view.draw({ t: now / 1000, pins, ball: phase === 'sweep' ? null : ball, guide, sweep, colour: colourOf(game ? game.turn : 0) });
+    view.draw({ t: now / 1000, pins, ball: phase === 'sweep' ? null : ball, guide, sweep, colour: colourOf(game ? game.turn : 0), marks: marks() });
     stale = false; drawnAt = now; drawnPhase = phase;
   }
   requestAnimationFrame(loop);
@@ -316,7 +316,17 @@ function runSweep() {
   }
 }
 
-// ---- The hint under the ball ----------------------------------------------------------------------------
+// ---- Where to stand and aim, and the hint under the ball -----------------------------------------------------
+
+// Each player's first ball of a game, while it waits to be thrown: a ring on the lane where to stand and the arrow to
+// roll over lit up (see marks in render.js). From the dot on board 8 (12.8 in right of the middle) over the second
+// arrow from the right, a straight ball comes into the pocket at an angle and strikes about one time in four.
+const STAND = LANE.half - 7.5 * BOARD, TARGET = 10;
+function marks() {
+  if (phase !== 'aim' || !game) return null;
+  const st = next(current().rolls);
+  return st.frame === 0 && st.ball === 0 ? { stand: STAND, target: TARGET } : null;
+}
 
 // It says how to throw with whatever is being used on the lane: a mouse or trackpad, where the click has to be held
 // down, or a finger or pen. Each player sees it for their first three balls on this device. Anything tried on the
