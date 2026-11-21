@@ -34,6 +34,8 @@ const G = 386;                   // in/s²
 const FALL_T = 0.14;             // how long a pin takes to go over
 const TOPPLE = 65;               // a push this hard (in/s) always tips a pin over
 const NUDGE = 7;                 // anything softer than this just rocks it
+const FAST = 317;                // 18 mph: a ball thrown harder than this starts to skid the pins it hits (see skid)
+const SKID = 0.25;               // how much straighter they go at the top speed
 
 // A small seeded random generator, so the same throw always plays out the same way.
 export function rng(seed) {
@@ -249,10 +251,23 @@ export class Sim {
     if (ka.rot) A.w += (rax * jy - ray * jx) * ka.invI;
     if (kb.rot) B.w -= (rbx * jy - rby * jx) * kb.invI;
 
-    if (isBall) this.hitPins = true;
+    if (isBall) { this.hitPins = true; this.skid(A === this.ball ? B : A); }
     this.events.push({ kind: isBall ? 'ball' : 'pin', x: cx, y: cy, power: Math.min(1, -vn / (isBall ? 300 : 260)) });
     this.knock(A, jn * ka.inv);
     this.knock(B, jn * kb.inv);
+  }
+
+  // A ball thrown much harder than about 19 mph sends the pins it hits low and straight back, skidding into the pit
+  // rather than flying up and across the deck into their neighbours, so it leaves more corner pins and the hardest
+  // throw isn't always the best. Past FAST, the part of a struck pin's speed that's across the ball's line shrinks, a
+  // little at first and by SKID (a quarter) at the top speed, 22 mph.
+  skid(p) {
+    const k = Math.min(1, Math.max(0, (this.release - FAST) / (390 - FAST))) * SKID;
+    if (!k) return;
+    const b = this.ball, v = Math.hypot(b.vx, b.vy) || 1, ux = b.vx / v, uy = b.vy / v;
+    const along = p.vx * ux + p.vy * uy, across = -p.vx * uy + p.vy * ux;
+    p.vx = along * ux - across * (1 - k) * uy;
+    p.vy = along * uy + across * (1 - k) * ux;
   }
 
   // How fast the point a fraction f of the way up a falling pin is swinging, across the deck (in/s, x and y).

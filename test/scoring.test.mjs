@@ -474,3 +474,16 @@ test('the ball bounces off a pin at nearly the full angle', () => {
   const free = (1 + 0.72) * 290 * cos * (3.5 / (3.5 + 15)) * sin;   // the ball's sideways speed with no rub at all
   assert.ok(s.ball.vx > 0.75 * free, `the ball came away at ${s.ball.vx.toFixed(1)} in/s sideways, against ${free.toFixed(1)}`);
 });
+
+// Throwing as hard as you can isn't always best: a pocket ball at the top speed, 22 mph, sends the pins low and
+// straight back and leaves more corner pins than one at a firm 17.6 mph. Before, the hardest ball struck most.
+test('the hardest ball strikes less than a firm one', () => {
+  const rate = speed => {
+    const angle = through(10, 2.5, -40, speed);
+    let n = 0;
+    for (let seed = 1; seed <= 60; seed++) if (play(rack(), { x: 10, speed, angle, hook: -40 }, seed).standing.length === 0) n++;
+    return n / 60;
+  };
+  const firm = rate(310), hardest = rate(390);
+  assert.ok(hardest < firm - 0.1, `22 mph strikes ${hardest.toFixed(2)}, 17.6 mph ${firm.toFixed(2)}`);
+});

@@ -24,6 +24,8 @@ thrown straight at the head pin.
   grips the dry back end and curves. Coming into the pocket at an angle (just right of the head pin, for a ball that
   hooks left) is how most strikes happen. Straight balls work too, and leave more splits. The throw is forgiving about
   speed: a swipe a little faster or slower than your best throws much the same ball, and firm flicks still differ.
+  Firm beats flat out: thrown much harder than about 19 mph, the ball sends the pins low and straight back, and they
+  leave more corner pins.
 - **The pins are simulated, not decided.** Each one stands until something pushes it hard enough to tip it, then
   cartwheels across the deck taking out its neighbours, bounces off the side walls or drops into the pit or gutter. A
   soft hit makes a pin wobble, and it may or may not go. Real leaves turn up: the 10 pin, the 4–7, the 7–10 split.
