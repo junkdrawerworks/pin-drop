@@ -183,8 +183,13 @@ h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.08em; color: 
 .record .best { display: flex; justify-content: space-between; align-items: baseline; border-top: 1px solid var(--line); padding-top: 12px; }
 .record .best b { color: var(--gold); font-size: 22px; font-variant-numeric: tabular-nums; }
 .record ol { list-style: none; margin: 8px 0 0; padding: 0; }
-.record li { display: flex; justify-content: space-between; padding: 3px 0; }
+.record li { display: grid; grid-template-columns: auto 1fr; column-gap: 12px; align-items: baseline; padding: 3px 0; }
+.record .when { white-space: nowrap; }
+.record .scores { text-align: right; }
+/* A name stays with its score: a long line of players breaks between them. */
+.record .pair { white-space: nowrap; }
 .record li b { color: var(--cream); font-variant-numeric: tabular-nums; }
+.record li b.won { color: var(--gold); }
 
 .cards { display: grid; gap: 14px; margin-top: 12px; }
 .cards .row .name { display: flex; justify-content: space-between; font-weight: 700; margin-bottom: 4px; }

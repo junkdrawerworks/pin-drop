@@ -570,7 +570,16 @@ function record() {
   if (games.length) {
     h += '<ol>' + games.slice(0, 5).map(g => {
       const d = new Date(g.at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-      return `<li><span>${d}</span><span>${g.scores.map(s => `${esc(s.name)} <b>${int(s.score)}</b>`).join(' · ')}</span></li>`;
+      // Each name with its score, never parted at the end of a line, and the winner's score in gold (each top score, in
+      // a tie), with the same said in words for a screen reader.
+      const top = Math.max(...g.scores.map(q => int(q.score)));
+      const tied = g.scores.filter(q => int(q.score) === top).length > 1;
+      const pairs = g.scores.map((q, i) => {
+        const won = g.scores.length > 1 && int(q.score) === top;
+        const sep = i < g.scores.length - 1 ? ' ·' : '';
+        return `<span class="pair">${esc(q.name)} <b${won ? ' class="won"' : ''}>${int(q.score)}</b>${won ? `<span class="sr"> ${tied ? 'tied' : 'won'}</span>` : ''}${sep}</span>`;
+      });
+      return `<li><span class="when">${d}</span><span class="scores">${pairs.join(' ')}</span></li>`;
     }).join('') + '</ol>';
   }
   $('record').innerHTML = h;

@@ -904,6 +904,40 @@ for (const names of [['Ana', 'Ben'], ['Alexandrinaaaa', 'Bartholomewwww', 'Chris
   } finally { await c.close(); }
 }
 
+// The recent games on the title, with four players at the longest names there can be: the date stays on one line, a
+// name never parts from its score at the end of a line, and the winner's score is gold (each top score in a tie, and
+// nobody's in a game bowled alone). Kept text where a score belongs is shown as a number, never as HTML.
+{
+  const names = ['Wolfgang-Maxim', 'Bartholomew Jo', 'Gwendolyn Rose', 'Maximilian Wxy'];
+  const games = [
+    { at: Date.UTC(2026, 10, 21, 15), scores: names.map((name, i) => ({ name, score: [182, 240, 151, 99][i] })) },
+    { at: Date.UTC(2026, 10, 21, 14), scores: [{ name: 'Ben', score: 120 }, { name: 'Cal', score: 120 }, { name: 'Ana', score: 97 }] },
+    { at: Date.UTC(2026, 10, 20, 14), scores: [{ name: 'Ana', score: 133 }] },
+    { at: Date.UTC(2026, 10, 19, 14), scores: [{ name: 'Ana', score: '<img src=x onerror="window.ran=1">' }] },
+  ];
+  const { c, p } = await kept({ viewport: { width: 360, height: 640 } }, { names, games });
+  try {
+    for (const width of [360, 390]) {
+      await p.setViewportSize({ width, height: 800 });
+      const rows = await p.$$eval('#record li', els => els.map(li => ({
+        whenLines: li.querySelector('.when').getClientRects().length,
+        whenTall: li.querySelector('.when').getBoundingClientRect().height,
+        pairsSplit: [...li.querySelectorAll('.pair')].filter(s => s.getBoundingClientRect().height > 30).map(s => s.textContent),
+        gold: [...li.querySelectorAll('b.won')].map(b => b.textContent),
+        lineHeight: parseFloat(getComputedStyle(li).lineHeight),
+      })));
+      for (const r of rows) {
+        assert.ok(r.whenTall < r.lineHeight * 1.5, `at ${width} px a date wraps onto two lines`);
+        assert.deepEqual(r.pairsSplit, [], `at ${width} px a name is parted from its score`);
+      }
+      assert.deepEqual(rows.map(r => r.gold), [['240'], ['120', '120'], [], []]);
+    }
+    assert.equal(await p.textContent('#record li:nth-child(4) .scores'), 'Ana 0');
+    assert.equal(await p.evaluate(() => window.ran), undefined, 'kept text was put on the page as HTML');
+    assert.match(await p.textContent('#record li:nth-child(2) .scores'), /Ben 120 tied · Cal 120 tied · Ana 97/);
+  } finally { await c.close(); }
+}
+
 // Two windows of Pin Drop (a home-screen copy and a browser tab share what's kept): A finishes a game while B sits on
 // the title, and B's title shows it straight away. Then B starts a game and throws a ball, and A's game and the best
 // it set are still kept (B used to write its own stale copy over them).
