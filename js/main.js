@@ -1352,8 +1352,9 @@ function finish() {
   game.hadBest = !!store.best;
   game.newBest = counted.length > 0 && top > (store.best || 0);
   game.before = scores.map(s => (Object.hasOwn(store.bests, s.name) ? store.bests[s.name] : null));
-  // When each best was bowled, so Forget these scores knows which came before it (see merge in store.js).
-  const at = Date.now();
+  // When each best was bowled, so Forget these scores knows which came before it (see merge in store.js). Always after
+  // the last Forget known here: one tapped on a device whose clock runs a little ahead mustn't take this game too.
+  const at = Math.max(Date.now(), int(store.forgot) + 1);
   if (game.newBest) { store.best = top; store.bestBy = [...new Set(counted.filter(s => s.score === top).map(s => s.name))].join(' & '); store.bestAt = at; }
   for (const s of counted) if (!Object.hasOwn(store.bests, s.name) || s.score > store.bests[s.name]) { store.bests[s.name] = s.score; store.bestsAt[s.name] = at; }
   store.games = [{ at, scores }, ...(store.games || [])].slice(0, GAMES);

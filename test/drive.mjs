@@ -87,6 +87,17 @@ async function finishGame(p, name) {
   problems.splice(before, Infinity, ...problems.slice(before).filter(m => !/ERR_FAILED/.test(m)));
 }
 
+// A game finished just after a Forget tapped on a device whose clock runs a minute ahead is kept, and its best too.
+{
+  const g = fakeGoogle();
+  const { c, p } = await device(g, { names: ['Ana'], forgot: Date.now() + 60000 }, { allow: false });
+  try {
+    await finishGame(p, 'Ana');
+    const s = await saved(p);
+    assert.deepEqual([s.games.length, s.best, s.bests.Ana], [1, 90, 90], 'a game after a Forget from a clock ahead was lost');
+  } finally { await c.close(); }
+}
+
 {
   const g = fakeGoogle();
   // A phone with two games, a game in progress and the sound off.
