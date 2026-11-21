@@ -10,9 +10,11 @@ export function setSound(v) {
   if (master) master.gain.value = v ? 0.9 : 0;
 }
 
-// Browsers only start audio after a tap, so the first touch calls this.
-export function wake() {
+// Browsers only start audio after a tap, so the first touch calls this. wake(false) only carries on after sleep(),
+// never starting the sound from nothing (which a browser refuses without a tap).
+export function wake(start = true) {
   if (!ctx) {
+    if (!start) return;
     const AC = window.AudioContext || window.webkitAudioContext;
     if (!AC) return;
     ctx = new AC();
@@ -32,6 +34,11 @@ export function wake() {
     for (let i = 0; i < len; i++) wd[i] = Math.random() * 2 - 1;
   }
   if (ctx.state === 'suspended') ctx.resume();
+}
+
+// Everything stops where it is, while the page is out of sight, until wake().
+export function sleep() {
+  if (ctx && ctx.state === 'running') ctx.suspend();
 }
 
 // The ball on the wood. level 0–1 follows its speed; call with 0 to stop. A steady low rumble (the slow swells of

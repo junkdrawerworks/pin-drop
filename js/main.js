@@ -448,7 +448,17 @@ document.querySelector('#title .how ul').innerHTML = document.querySelector('#ho
 function show(id) {
   for (const s of sheets) $(s).hidden = s !== id;
   paused = id === 'menu' || id === 'howSheet' || id === 'board';
+  // The rumble only changes as the ball rolls, which stops behind a sheet: so it stops too, and the next step of
+  // the roll starts it again. Back on the lane, the sound carries on if it was put to sleep while the page was hidden.
+  if (id) sound.roll(0);
+  else sound.wake(false);
 }
+
+// Out of sight (another app, another tab), nothing plays; back again, it carries on unless a sheet is up.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) sound.sleep();
+  else if (!paused) sound.wake(false);
+});
 
 function titleScreen() {
   phase = 'title';

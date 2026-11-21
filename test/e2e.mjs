@@ -321,6 +321,41 @@ const state = p => p.evaluate(() => ({ phase: pinDrop.phase, x: pinDrop.ball.x }
   } finally { await c.close(); }
 }
 
+// The rumble of a rolling ball stops behind the menu (the roll stands still there), and nothing plays while the page
+// is out of sight. Every gain node is watched; the rumble is the one that isn't a fixed level.
+{
+  const { c, p } = await lane({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  try {
+    await p.evaluate(() => {
+      const AC = window.AudioContext, make = AC.prototype.createGain;
+      window.gains = [];
+      AC.prototype.createGain = function () { const g = make.call(this); window.gains.push(g); return g; };
+      const resume = AC.prototype.resume, suspend = AC.prototype.suspend;
+      AC.prototype.resume = function () { window.audio = this; return resume.call(this); };
+      AC.prototype.suspend = function () { window.audio = this; return suspend.call(this); };
+    });
+    // A rumble is the gain that changes; the others are set once (the master, the pulse and its depth).
+    const loudest = () => p.evaluate(() => Math.max(0, ...gains.filter(g => ![0.9, 1, 0.28].includes(+g.gain.value.toFixed(3))).map(g => g.gain.value)));
+    await p.evaluate(() => { pinDrop.seed = 1; pinDrop.throw({ x: 0, speed: 290, angle: 0, hook: 0 }); });
+    await wait(1000);
+    assert.equal(await p.evaluate(() => pinDrop.phase), 'rolling');
+    assert.ok(await loudest() > 0.1, 'no rumble while the ball rolls, so this check checks nothing');
+    await p.click('#menuBtn');
+    await wait(300);
+    const left = await loudest();
+    assert.ok(left < 0.02, `the rumble is still at ${left.toFixed(3)} behind the menu`);
+    await p.click('#menuResume');
+    await wait(300);
+    assert.ok(await loudest() > 0.1, 'the rumble did not come back on the lane');
+    // Another app or tab: the sound stops, and carries on when the page is back.
+    const hide = on => p.evaluate(h => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => h }); document.dispatchEvent(new Event('visibilitychange')); }, on);
+    await hide(true); await wait(100);
+    assert.equal(await p.evaluate(() => window.audio?.state), 'suspended', 'the sound plays on while the page is hidden');
+    await hide(false); await wait(100);
+    assert.equal(await p.evaluate(() => window.audio?.state), 'running', 'the sound did not come back with the page');
+  } finally { await c.close(); }
+}
+
 // A game left half-way: one tap on Bowl doesn't throw it away. It asks for a second tap, which starts over.
 {
   const current = { players: [{ name: 'Ana', rolls: [7, 2, 10], x: 0 }, { name: 'Ben', rolls: [5, 4], x: 0 }], turn: 1, leftover: null };
