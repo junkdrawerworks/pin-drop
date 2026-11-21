@@ -96,7 +96,8 @@ function update(dt) {
     if (phaseT > SETTLE) startSweep();
   } else if (phase === 'over') {
     view.setCamera(1, follow(0, dt));
-    if (phaseT > 1.9 && $('end').hidden) showEnd();
+    // A perfect game's call (or a turkey's) has its say before the end of the game covers it.
+    if (phaseT > 1.9 && performance.now() > callUntil - 250 && $('end').hidden) showEnd();
   } else if (phase === 'sweep') {
     runSweep();
     view.setCamera(1, follow(0, dt));
@@ -252,7 +253,7 @@ function callout(p, knocked, left) {
   }
   const [big, small, kind] = callFor(p.rolls.slice(0, -1), knocked, left, { wasSplit, sawGutter });
   // A strike or spare was called as the last pin went (see update), and is still on screen.
-  if (!called) { say(big, small, kind, kind === 'small' ? tip : ''); cheer(kind); }
+  if (!called) { say(big, small, kind, kind === 'small' ? tip : ''); cheer(kind, big); }
   tell(ballWords(p, big, small, kind === 'small' ? tip : ''));
 }
 
@@ -261,10 +262,14 @@ function callCleared() {
   const [big, small, kind] = callFor(current().rolls, before, [], { wasSplit, sawGutter });
   readout('');
   say(big, small, kind, '');
-  cheer(kind);
+  cheer(kind, big);
 }
-function cheer(kind) {
-  if (kind === '') { sound.chime(true); buzz([30, 50, 60]); }
+// Strikes build: 1 for a strike, 2 a double, 3 a turkey or a longer run, 4 a perfect game. Each step up is bigger on
+// screen, stays longer, and has a longer fanfare and buzz.
+const level = big => (big === 'Perfect!' ? 4 : big === 'Turkey!' || / in a row!$/.test(big) ? 3 : big === 'Double!' ? 2 : 1);
+const BUZZ = [null, [30, 50, 60], [30, 40, 30, 40, 60], [30, 40, 30, 40, 30, 40, 80], [40, 50, 40, 50, 40, 50, 40, 50, 160]];
+function cheer(kind, big) {
+  if (kind === '') { const n = level(big); sound.fanfare(n); buzz(BUZZ[n]); }
   else if (kind === 'teal') { sound.chime(false); buzz(30); }
 }
 
@@ -746,7 +751,7 @@ function boardHTML(withBest) {
   return game.players.map((q, i) => `<div class="row"><div class="name"><span><i style="background:${colourOf(i)[0]}"></i>${esc(q.name)}</span>${withBest && game.players.length > 1 && total(q.rolls) === best ? `<em>${tied ? 'Tied' : 'Winner'}</em>` : ''}</div>${cardHTML(q.rolls, -1, true)}</div>`).join('');
 }
 
-let callTimer = 0;
+let callTimer = 0, callUntil = 0;   // when the callout on screen goes
 // A callout. A ball's goes just above the sign over the pins, where there's room under the scorecard, or else over
 // the lane in front of the pins (a tablet on its side). A turn's (at 'aim') goes over the lane in front of the pins
 // as the next player sees them, so it doesn't hide them while they aim.
@@ -756,9 +761,16 @@ function say(big, small, kind, tip, at = 'pins') {
   el.innerHTML = `${esc(big)}${small ? `<small>${esc(small)}</small>` : ''}${tip ? `<small class="tip">${esc(tip)}</small>` : ''}`;
   void el.offsetWidth;
   el.style.fontSize = '';
-  el.className = `call go ${kind || ''}${tip ? ' long' : ''}`;   // longer, to read the tip
+  // A double, a turkey or more, and a perfect game, each bigger and longer than the last (see level).
+  const n = kind === '' ? level(big) : 1;
+  el.className = `call go ${kind || ''}${tip ? ' long' : ''}${n > 1 ? ` x${n}` : ''}`;   // longer, to read the tip
   // A long name in the big letters is made smaller until it fits across the screen.
   if (el.scrollWidth > el.clientWidth + 1) el.style.fontSize = `${parseFloat(getComputedStyle(el).fontSize) * 0.97 * (el.clientWidth - 24) / (el.scrollWidth - 24)}px`;
+  // From a turkey on, a burst of the sign's gold and teal stars behind the word.
+  if (n >= 3) {
+    const stars = Array.from({ length: 14 }, (_, i) => `<i style="--a:${Math.round(i * 360 / 14 + (i % 2) * 9)}deg;--d:${(i % 3 === 0 ? 1.5 : i % 3 === 1 ? 1.15 : 1.85).toFixed(2)}em"${i % 2 ? ' class="teal"' : ''}></i>`).join('');
+    el.insertAdjacentHTML('afterbegin', `<span class="burst" aria-hidden="true">${stars}</span>`);
+  }
   const s = view.spots(), h = el.offsetHeight, grow = h * 0.04;  // it pops up to 8% bigger
   const below = $('hud').hidden ? 0 : $('hud').getBoundingClientRect().bottom + 6;
   let top = at === 'aim' ? s.aimDeckFront + 12 + grow : s.signTop - 12 - grow - h;
@@ -766,7 +778,9 @@ function say(big, small, kind, tip, at = 'pins') {
   el.style.top = `${Math.round(Math.max(below, Math.min(top, view.H - h - grow - 8)))}px`;
   clearTimeout(callTimer);
   // Gone once it has faded, so a screen reader reading the page doesn't come across it later.
-  callTimer = setTimeout(() => { el.className = 'call'; el.innerHTML = ''; }, tip ? 2900 : 1800);
+  const ms = tip ? 2900 : [0, 1800, 2300, 2700, 3600][n];
+  callUntil = performance.now() + ms;
+  callTimer = setTimeout(() => { el.className = 'call'; el.innerHTML = ''; }, ms);
 }
 
 // The first player is called You until they type a name, and "You’s turn" won't do.
@@ -774,7 +788,7 @@ const isYou = name => name.trim().toLowerCase() === 'you';
 const turnLine = name => (isYou(name) ? 'Your turn' : `${name}’s turn`);
 const winLine = name => (isYou(name) ? 'You win!' : `${name} wins!`);
 
-function hush() { clearTimeout(callTimer); $('call').className = 'call'; $('call').innerHTML = ''; }
+function hush() { clearTimeout(callTimer); callUntil = 0; $('call').className = 'call'; $('call').innerHTML = ''; }
 
 // One sentence for a screen reader to say (the callouts come and go too fast, and say less): what each ball did and
 // whose turn it is, read out by the polite live region #said.
@@ -959,7 +973,7 @@ function endWords() {
   if (scores.length === 1) {
     const was = game.before?.[0] ?? null;
     return [`${top}`, top === 300 ? 'A perfect game.' : was === null ? 'Your first game here.' : top > was ? 'Your best game yet.'
-      : top === was ? 'That equals your best.' : `Your best is ${was}.`, top === 300 || (was !== null && top > was)];
+      : top === was ? 'That equals your best.' : `Your best is ${was}.`, top === 300 || (was !== null && top > was), was !== null && top > was];
   }
   const title = winners.length === 1 ? winLine(winners[0].name) : winners.length === 2 ? `${both(winners.map(w => w.name))} tie!`
     : `A ${winners.length === 3 ? 'three' : 'four'}-way tie!`;
@@ -968,19 +982,22 @@ function endWords() {
     const names = winners.map(w => w.name);
     line = names.length === 1 ? `${names[0]} bowled a perfect game.` : `${both(names)} bowled perfect games.`;
   } else if (game.newBest && game.hadBest) line += ' · a new best here';
-  return [title, line, top === 300 || (game.newBest && game.hadBest)];
+  return [title, line, top === 300 || (game.newBest && game.hadBest), game.newBest && game.hadBest];
 }
 
 function showEnd() {
   hush();   // the last ball's callout, which can outlast the wait for this card
-  const [title, line, best] = endWords();
+  // The fourth: a best beaten (a player's own, playing alone; the best here, with others), with a gold badge and a chime.
+  const [title, line, best, beaten] = endWords();
   $('endTitle').textContent = title;
+  $('endBadge').hidden = !beaten;
   $('endTitle').classList.toggle('score', game.players.length === 1);
   $('endLine').textContent = line;
   $('endCards').innerHTML = boardHTML(true);
   show('end');
   $('hud').hidden = true; $('others').hidden = true;
   if (best) buzz([40, 60, 40]);   // a best, or a perfect game
+  if (beaten && !game.cheered) { game.cheered = true; sound.best(); }   // once, not each time the card is opened again
 }
 
 // What's on this device, saved; the first time the browser won't keep it, a word about that, once: in a game, in the

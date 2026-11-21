@@ -1028,6 +1028,76 @@ for (const tap of ['#menuBtn', '#card']) {
   } finally { await c.close(); }
 }
 
+// Strikes build: Strike!, then Double! a little bigger and up longer, then Turkey! and each longer run bigger still
+// with a burst of gold and teal stars, each with a longer fanfare (more notes of the bell). A first game ends with no
+// badge; a perfect game that beats the player's best is the biggest and longest call of all, and its end card fades in
+// with a gold "New best!" badge and a rising chime.
+{
+  const watch = p => p.evaluate(() => {
+    window.calls = []; window.bells = [];
+    const make = BaseAudioContext.prototype.createOscillator;
+    BaseAudioContext.prototype.createOscillator = function (...a) {
+      const o = make.apply(this, a), start = o.start;
+      o.start = function (...w) { if (o.type === 'square') window.bells.push(performance.now()); return start.apply(this, w); };
+      return o;
+    };
+    const el = document.getElementById('call');
+    let now = null;
+    new MutationObserver(() => {
+      const t = el.firstChild?.nodeType === 3 ? el.firstChild.textContent : el.childNodes[1]?.textContent ?? '';
+      if (now && now.word !== t) { now.gone = performance.now() - now.at; now = null; }
+      if (t && !now) {
+        now = { word: t, at: performance.now(), cls: el.className, stars: el.querySelectorAll('.burst i').length, size: parseFloat(getComputedStyle(el).fontSize) };
+        window.calls.push(now);
+      }
+    }).observe(el, { childList: true, subtree: true });
+  });
+  const bellsAt = (calls, bells) => calls.map(c => bells.filter(b => b >= c.at - 50 && b < c.at + 50).length);
+  const phone = { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true };
+  const seven = Array.from({ length: 14 }, (_, i) => (i % 2 ? 4 : 3));
+  let { c, p } = await kept(phone, { names: ['Ana'], current: { players: [{ name: 'Ana', rolls: seven, x: 0 }], turn: 0, leftover: null } });
+  try {
+    await p.click('#resume');
+    await watch(p);
+    await p.evaluate(seed => { pinDrop.speed = 2; pinDrop.seed = seed; }, strikeSeed);
+    for (let k = 0; k < 5; k++) {
+      await until(() => p.evaluate(() => pinDrop.phase === 'aim' || pinDrop.phase === 'over'), 20000, 'never ready for the next ball');
+      await p.evaluate(pocket => pinDrop.throw(pocket), pocket);
+      await until(() => p.evaluate(n => pinDrop.game.players[0].rolls.length === n, 15 + k), 20000, 'the ball never finished');
+    }
+    await until(() => p.isVisible('#end'), 10000, 'no end of the game');
+    await wait(3700);   // the last call has gone
+    const { calls, bells } = await p.evaluate(() => ({ calls: window.calls, bells: window.bells }));
+    const strikes = calls.filter(c => /!$/.test(c.word));
+    assert.deepEqual(strikes.map(c => c.word), ['Strike!', 'Double!', 'Turkey!', '4 in a row!', '5 in a row!'], `the calls: ${JSON.stringify(calls)}`);
+    const [x1, x2, x3] = strikes;
+    assert.ok(x2.size > x1.size && x3.size > x2.size, `the calls didn't grow: ${strikes.map(c => c.size).join(', ')} px`);
+    assert.ok(x2.gone > x1.gone + 300 && x3.gone > x2.gone + 300, `the calls didn't stay longer: ${strikes.map(c => Math.round(c.gone)).join(', ')} ms`);
+    assert.deepEqual(strikes.map(c => c.stars), [0, 0, 14, 14, 14], 'the stars behind a turkey or more');
+    assert.deepEqual(bellsAt(strikes, bells), [4, 5, 6, 6, 6], 'the notes in each fanfare');
+    assert.equal(await p.isVisible('#endBadge'), false, 'a first game here was a new best');
+  } finally { await c.close(); }
+  // The perfect game.
+  ({ c, p } = await kept(phone, { names: ['Ana'], bests: { Ana: 250 }, best: 250, current: { players: [{ name: 'Ana', rolls: Array(11).fill(10), x: 0 }], turn: 0, leftover: null } }));
+  try {
+    await p.click('#resume');
+    await watch(p);
+    await p.evaluate(({ pocket, seed }) => { pinDrop.speed = 2; pinDrop.seed = seed; pinDrop.throw(pocket); }, { pocket, seed: strikeSeed });
+    await until(() => p.isVisible('#end'), 20000, 'no end of the game');
+    assert.equal(await p.evaluate(() => document.getElementById('end').getAnimations({ subtree: true }).length > 0), true, 'the end of the game did not fade in');
+    assert.equal(await p.textContent('#endTitle'), '300');
+    assert.equal(await p.isVisible('#endBadge'), true, 'no badge for a new best');
+    assert.equal(await p.textContent('#endBadge'), 'New best!');
+    await wait(3700);
+    const { calls, bells } = await p.evaluate(() => ({ calls: window.calls, bells: window.bells }));
+    const perfect = calls.find(c => c.word === 'Perfect!');
+    assert.ok(perfect && /\bx4\b/.test(perfect.cls) && perfect.stars === 14 && perfect.gone > 3300, `the perfect game's call: ${JSON.stringify(calls)}`);
+    assert.ok(bellsAt([perfect], bells)[0] >= 11, `a perfect game's fanfare had ${bellsAt([perfect], bells)[0]} notes`);
+    const endAt = perfect.at + 1000;   // the end card comes 1.9 s after the ball, well after the fanfare's notes are set going
+    assert.equal(bells.filter(b => b > endAt).length, 4, 'no rising chime for the new best');
+  } finally { await c.close(); }
+}
+
 // For a screen reader: the scorecard button's name says what it shows (the name, the frame, the total) and then what it
 // does; each ball and each turn is said in one plain sentence by a polite live region; a callout leaves the page once
 // it has faded; and the scorecards are read in words, frame by frame, not as a string of marks.

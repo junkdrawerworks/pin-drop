@@ -149,20 +149,38 @@ export function gutter() {
   o.connect(g); g.connect(master); o.start(t); o.stop(t + 0.35);
 }
 
+// One note of the bell, `at` seconds from now, ringing for `len`.
+function bell(f, at, len = 0.5, gain = 0.057) {
+  const o = ctx.createOscillator(); o.type = 'square'; o.frequency.value = f;
+  const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2400;
+  const g = ctx.createGain();
+  const s = ctx.currentTime + at;
+  g.gain.setValueAtTime(0.0001, s); g.gain.exponentialRampToValueAtTime(gain, s + 0.01);   // under the crash, not as loud
+  g.gain.exponentialRampToValueAtTime(0.0001, s + len);
+  o.connect(lp); lp.connect(g); g.connect(master); o.start(s); o.stop(s + len + 0.05);
+}
+const C5 = 523.25, E5 = 659.25, G5 = 783.99, C6 = 1046.5, E6 = 1318.51, G6 = 1567.98;
+
 // A little bell for a strike or a spare.
 export function chime(big) {
   if (!ctx || !on) return;
-  const t = ctx.currentTime;
-  const notes = big ? [523.25, 659.25, 783.99, 1046.5] : [587.33, 880];
-  notes.forEach((f, i) => {
-    const o = ctx.createOscillator(); o.type = 'square'; o.frequency.value = f;
-    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2400;
-    const g = ctx.createGain();
-    const s = t + i * 0.09;
-    g.gain.setValueAtTime(0.0001, s); g.gain.exponentialRampToValueAtTime(0.057, s + 0.01);   // under the crash, not as loud
-    g.gain.exponentialRampToValueAtTime(0.0001, s + 0.5);
-    o.connect(lp); lp.connect(g); g.connect(master); o.start(s); o.stop(s + 0.55);
-  });
+  (big ? [C5, E5, G5, C6] : [587.33, 880]).forEach((f, i) => bell(f, i * 0.09));
+}
+
+// A strike's bell, longer the bigger the moment (see level in main.js): 1 a strike, 2 a double, 3 a turkey or more in a
+// row, each going a note higher; 4, a perfect game, a fanfare of two rising runs and a held chord, about two seconds.
+export function fanfare(n) {
+  if (!ctx || !on) return;
+  if (n < 4) { [C5, E5, G5, C6, E6, G6].slice(0, 3 + n).forEach((f, i, a) => bell(f, i * 0.09, i === a.length - 1 ? 0.35 + 0.15 * n : 0.5)); return; }
+  [C5, E5, G5, C6].forEach((f, i) => bell(f, i * 0.09));
+  [G5, C6, E6, G6].forEach((f, i) => bell(f, 0.5 + i * 0.09));
+  for (const f of [C6, E6, G6]) bell(f, 1.0, 1.2, 0.04);
+}
+
+// A new best game: a rising run of the bell, softer, as the end of the game shows it.
+export function best() {
+  if (!ctx || !on) return;
+  [G5, 987.77, 1174.66, G6].forEach((f, i) => bell(f, 0.2 + i * 0.13, i === 3 ? 0.9 : 0.4, 0.045));
 }
 
 // The ball landing on the boards as it's let go: a brief low thud with a little wood in it (all of it under 150 Hz would

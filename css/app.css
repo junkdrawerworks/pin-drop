@@ -109,6 +109,28 @@ button { font: inherit; color: inherit; cursor: pointer; }
 }
 .call.go { animation: pop 1.7s ease-out forwards; }
 .call.go.long { animation-duration: 2.8s; }
+/* Strikes build: a double a little bigger and longer, a turkey or a longer run bigger still with a burst of stars, and a
+   perfect game the biggest and longest of all. */
+.call.x2 { font-size: clamp(50px, 14.5vw, 104px); }
+.call.go.x2 { animation-duration: 2.2s; }
+.call.x3 { font-size: clamp(56px, 16vw, 116px); }
+.call.go.x3 { animation-duration: 2.6s; }
+.call.x4 { font-size: clamp(58px, 17vw, 124px); }
+.call.go.x4 { animation-duration: 3.5s; }
+.call .burst { position: absolute; left: 50%; top: 0.5em; width: 0; height: 0; z-index: -1; }
+.call .burst i {
+  position: absolute; left: -0.11em; top: -0.11em; width: 0.22em; height: 0.22em; background: var(--gold); opacity: 0;
+  clip-path: polygon(50% 0, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+  animation: burst 1.5s 0.1s ease-out forwards;
+}
+.call .burst i.teal { background: var(--teal); width: 0.16em; height: 0.16em; left: -0.08em; top: -0.08em; }
+.call.x4 .burst i { animation-duration: 2.4s; }
+@keyframes burst {
+  0% { opacity: 0; transform: rotate(var(--a)) translateX(0.3em) scale(0.3); }
+  15% { opacity: 1; }
+  70% { opacity: 1; }
+  100% { opacity: 0; transform: rotate(var(--a)) translateX(var(--d)) scale(1) rotate(160deg); }
+}
 @keyframes pop {
   0% { opacity: 0; transform: scale(0.6) rotate(-6deg); }
   12% { opacity: 1; transform: scale(1.08) rotate(-3deg); }
@@ -176,6 +198,21 @@ h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.08em; color: 
 .panel > h2:first-child { margin-top: 0; text-align: center; font-size: 26px; text-transform: none; letter-spacing: 0; color: var(--cream); font-family: Shrikhand, Georgia, serif; font-weight: 400; }
 .panel > h2.score { font-size: 72px; line-height: 1; color: var(--gold); text-shadow: 0 3px 0 #a3461c; margin-top: 4px; }
 .tag { text-align: center; color: var(--muted); margin: 8px 0 4px; }
+/* The end of a game fades in over the lane, and a new best gets a gold badge. */
+#end:not([hidden]) { animation: fade-in 0.45s ease-out; }
+#end:not([hidden]) .panel { animation: rise 0.45s ease-out; }
+@keyframes rise { from { opacity: 0; transform: translateY(14px); } }
+.badge {
+  display: block; width: fit-content; margin: 10px auto 2px; padding: 5px 16px 6px; border-radius: 99px;
+  background: var(--gold); color: #2a1a05; font-family: Shrikhand, Georgia, serif; font-size: 20px; line-height: 1.2;
+  box-shadow: 0 3px 0 #b37b14; transform: rotate(-3deg);
+  animation: badge 0.6s 0.3s ease-out both;
+}
+@keyframes badge {
+  0% { opacity: 0; transform: rotate(-3deg) scale(0.5); }
+  60% { opacity: 1; transform: rotate(-3deg) scale(1.1); }
+  100% { transform: rotate(-3deg) scale(1); }
+}
 /* A sheet's heading takes the focus as it opens, so a screen reader starts there; it isn't a control, so no ring. */
 h1[tabindex]:focus, h2[tabindex]:focus { outline: none; }
 
@@ -242,6 +279,9 @@ h1[tabindex]:focus, h2[tabindex]:focus { outline: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   .hint, .upright .phone { animation: none; }
+  /* The stars appear where they'd end up and fade, without flying out; the end of a game and a new best only fade in. */
+  .call .burst i { animation-name: glow; transform: rotate(var(--a)) translateX(var(--d)); }
+  #end:not([hidden]) .panel, .badge { animation-name: fade-in; }
   /* A callout fades in and out where it stands, tilted as ever, instead of popping up and drifting off. */
   .call.go { animation-name: fade; transform: rotate(-3deg); }
   .big:active { transform: none; }
@@ -251,3 +291,5 @@ h1[tabindex]:focus, h2[tabindex]:focus { outline: none; }
   10%, 85% { opacity: 1; }
   100% { opacity: 0; }
 }
+@keyframes glow { 0%, 100% { opacity: 0; } 20%, 70% { opacity: 1; } }
+@keyframes fade-in { from { opacity: 0; } }
