@@ -83,6 +83,23 @@ await m.up();
 assert.equal(await page.evaluate(() => pinDrop.phase), 'rolling');
 assert.match(await page.textContent('#readout'), /mph · hook left/);
 
+// A touch fling, with real touch events: a quick flick throws harder than a slow push. (On tablets every fling
+// used to come out at the slowest speed.)
+const cdp0 = await ctx.newCDPSession(page);
+const fling = async (step, gap) => {
+  await until(() => page.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
+  await cdp0.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 195, y: 700 }] });
+  for (let i = 1; i <= 8; i++) { await new Promise(r => setTimeout(r, gap)); await cdp0.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 195, y: 700 - i * step }] }); }
+  await cdp0.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await until(() => page.evaluate(() => pinDrop.phase === 'rolling'), 3000, 'the fling did not throw');
+  return parseFloat(await page.textContent('#readout'));
+};
+await page.evaluate(() => { pinDrop.speed = 10; });
+const slowMph = await fling(12, 60), quickMph = await fling(60, 8);
+assert.ok(quickMph > slowMph + 3, `a quick fling threw at ${quickMph} mph, a slow push at ${slowMph} mph`);
+assert.ok(quickMph > 14, `a quick fling only threw at ${quickMph} mph`);
+console.log(`  touch: slow push ${slowMph} mph, quick fling ${quickMph} mph`);
+
 // Play the rest of the game fast: each ball aimed at the pocket with a hook, or at whatever's left.
 await page.evaluate(() => { pinDrop.speed = 10; });
 const deadline = Date.now() + 120000;

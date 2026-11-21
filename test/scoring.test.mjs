@@ -109,3 +109,14 @@ test('a second ball can pick up a leftover pin', () => {
   const sim = play(pins, { x: 18, speed: 280, angle: 0, hook: 0 }, 3);
   assert.equal(sim.standing.length, 0);
 });
+
+test('a swipe\'s speed: its fastest stretch at the end, whatever the points arrive like', async () => {
+  const { swipeSpeed } = await import('../js/swipe.js');
+  const line = (n, step, dt) => Array.from({ length: n + 1 }, (_, i) => ({ x: 0, y: -i * step, t: i * dt }));
+  assert.ok(Math.abs(swipeSpeed(line(10, 30, 16)) - 30 / 16) < 0.01, 'a steady fling');
+  // A finger that slows for the last few points still counts its fast stretch.
+  const slowing = [...line(10, 30, 16), { x: 0, y: -305, t: 176 }, { x: 0, y: -307, t: 196 }, { x: 0, y: -308, t: 216 }];
+  assert.ok(swipeSpeed(slowing) > 1.5, `slowing at the end read as ${swipeSpeed(slowing)}`);
+  // A gentle push is slower than a fling.
+  assert.ok(swipeSpeed(line(10, 8, 16)) < swipeSpeed(line(10, 30, 16)) / 3);
+});

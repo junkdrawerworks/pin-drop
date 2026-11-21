@@ -4,6 +4,7 @@ import { Renderer, BALL_COLOURS } from './render.js';
 import { frames, next, total, isSplit } from './scoring.js';
 import * as sound from './sound.js';
 import { load, save } from './store.js';
+import { swipeSpeed } from './swipe.js';
 
 const $ = id => document.getElementById(id);
 const canvas = $('lane');
@@ -229,12 +230,21 @@ canvas.addEventListener('pointerdown', e => {
   sound.wake();
   if (phase !== 'aim' || paused) return;
   try { canvas.setPointerCapture(e.pointerId); } catch { /* fine without */ }
-  touch = { id: e.pointerId, pts: [{ x: e.clientX, y: e.clientY, t: e.timeStamp }], mode: null, x0: ball.x };
+  touch = { id: e.pointerId, pts: [{ x: e.clientX, y: e.clientY, t: performance.now() }], mode: null, x0: ball.x };
 });
+// Each point of the swipe, timed by the page's own clock. Touch screens hand over several finger positions at once
+// (coalesced events), and some report their times on a different clock from the page's, which made every fling
+// on a tablet come out at the slowest speed. So the positions are spread evenly over the time since the last one.
+function addPoints(t, e) {
+  const now = performance.now();
+  const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
+  const list = evs.length ? evs : [e];
+  const last = t.pts[t.pts.length - 1];
+  list.forEach((c, i) => t.pts.push({ x: c.clientX, y: c.clientY, t: last.t + (now - last.t) * (i + 1) / list.length }));
+}
 canvas.addEventListener('pointermove', e => {
   if (!touch || e.pointerId !== touch.id) return;
-  const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
-  for (const c of evs.length ? evs : [e]) touch.pts.push({ x: c.clientX, y: c.clientY, t: c.timeStamp || e.timeStamp });
+  addPoints(touch, e);
   const a = touch.pts[0], dx = e.clientX - a.x, dy = e.clientY - a.y;
   if (!touch.mode && Math.hypot(dx, dy) > 10) touch.mode = Math.abs(dx) > Math.abs(dy) ? 'move' : dy < 0 ? 'throw' : 'none';
   if (touch.mode === 'move') {
@@ -250,7 +260,8 @@ const lift = e => {
   if (!touch || e.pointerId !== touch.id) return;
   const t = touch; touch = null;
   if (t.mode === 'throw' && e.type === 'pointerup') {
-    t.pts.push({ x: e.clientX, y: e.clientY, t: e.timeStamp });
+    const end = t.pts[t.pts.length - 1];
+    if (Math.hypot(e.clientX - end.x, e.clientY - end.y) > 2) addPoints(t, e);
     const shot = shotFrom(t.pts, true);
     if (shot) { throwBall(shot); return; }
   }
@@ -267,11 +278,7 @@ function shotFrom(pts, final) {
   const dx = b.x - a.x, dy = b.y - a.y;
   if (-dy < (final ? 40 : 12)) return final ? null : guide;
   const len = Math.hypot(dx, dy);
-  // Speed over the last tenth of a second or so.
-  let k = pts.length - 1;
-  while (k > 0 && b.t - pts[k - 1].t < 110) k--;
-  const s = pts[Math.max(0, k - 1)];
-  const v = Math.hypot(b.x - s.x, b.y - s.y) / Math.max(16, b.t - s.t);
+  const v = swipeSpeed(pts);
   const vn = v * 800 / clamp(view.H, 500, 1100);
   const speed = clamp(175 + (vn - 0.5) * 95, 170, 390);
   const angle = clamp(Math.atan(dx / -dy * 0.08), -0.07, 0.07);
