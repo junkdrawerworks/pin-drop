@@ -220,6 +220,19 @@ test('a pin that has gone over never stands again, so a cleared deck is known be
   assert.ok(cleared >= 10 && wobbly > 0, `only ${cleared} cleared decks and ${wobbly} wobbling frames to check this against`);
 });
 
+// Why a slow ball with a lot of hook is told to curve less or throw harder, not to stand somewhere else: from the
+// furthest right a player can stand, at 200 in/s with a hook of 60 to the left, no angle reaches a single pin (it goes
+// in the left gutter, or straight on into the right one). The slower the ball, the longer it spends on the dry back
+// end, so the further the same hook carries it.
+test('a slow ball with a big hook reaches no pin from the edge of the lane, whatever the angle', () => {
+  for (let k = 0; k <= 7; k++) {
+    for (let seed = 1; seed <= 20; seed++) {
+      const sim = play(rack(), { x: 16, speed: 200, angle: k / 100, hook: -60 }, seed);
+      assert.equal(sim.hitPins, false, `angle ${k / 100}, seed ${seed} hit a pin`);
+    }
+  }
+});
+
 test('a second ball can pick up a leftover pin', () => {
   // The 10 pin alone, and a ball sent straight at it.
   const pins = rack([{ id: 10, x: 18, y: 751.18 }]);

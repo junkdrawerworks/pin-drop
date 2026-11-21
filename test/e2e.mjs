@@ -428,6 +428,12 @@ const state = p => p.evaluate(() => ({ phase: pinDrop.phase, x: pinDrop.ball.x }
     await p.evaluate(() => pinDrop.throw({ x: 14, speed: 175, angle: 0.02, hook: 0 }));
     await until(() => p.evaluate(() => pinDrop.phase === 'settle' || pinDrop.phase === 'over'), 20000, 'the slow ball never finished');
     assert.match(await p.textContent('#call'), /Flick faster: on a trackpad, hold with one finger and flick with another/);
+    // A slow ball with more hook than it can carry, into the gutter: too much hook for its speed, and how to flick
+    // faster on a trackpad, in the same words.
+    await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
+    await p.evaluate(() => pinDrop.throw({ x: -10, speed: 175, angle: 0, hook: -45 }));
+    await until(() => p.evaluate(() => pinDrop.phase === 'settle' || pinDrop.phase === 'over'), 20000, 'the slow hooked ball never finished');
+    assert.match(await p.textContent('#call .tip'), /^Too much hook for a ball that slow: flick faster or curve less\. On a trackpad, hold with one finger and flick with another$/);
   } finally { await c.close(); }
 }
 
@@ -732,10 +738,11 @@ const nineAndMiss = Array.from({ length: 18 }, (_, i) => (i % 2 ? 0 : 9));   // 
 
 // A ball that hooks into the gutter says why, once a game for each player: Ana's swipe bows left, so it hooks right,
 // and from the right of the lane it goes in the right-hand gutter. Her next one says nothing more. Ben's straight
-// ball into the gutter isn't a hook; his hook to the left into the left gutter gets the word turned round. The word
-// comes ahead of the one about a slow ball.
+// ball into the gutter isn't a hook; his slow hook to the left into the left gutter is too much hook for its speed,
+// which comes ahead of the word about a slow ball. Cy hooks left into the gutter from the right edge of the lane, so
+// isn't told to stand further right.
 {
-  const { c, p, cdp } = await lane({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true }, {}, ['Ana', 'Ben']);
+  const { c, p, cdp } = await lane({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true }, {}, ['Ana', 'Ben', 'Cy']);
   try {
     await watchCalls(p);
     const ball = async (throwIt, who) => {
@@ -769,9 +776,14 @@ const nineAndMiss = Array.from({ length: 18 }, (_, i) => (i % 2 ? 0 : 9));   // 
     const straight = await ball(() => p.evaluate(() => pinDrop.throw({ x: 14, speed: 290, angle: 0.02, hook: 0 })), 'Ben');
     assert.equal(straight.side, 1);
     assert.doesNotMatch(straight.call, /curved/, 'a straight ball into the gutter was called a hook');
+    // At 175 in/s no spot can carry a hook of 45 to the pocket (20 is the most), so it says that, not where to stand.
     const slowLeft = await ball(() => p.evaluate(() => pinDrop.throw({ x: -10, speed: 175, angle: 0, hook: -45 })), 'Ben');
     assert.equal(slowLeft.side, -1);
-    assert.equal(slowLeft.call, 'Gutter ballopen frameYour swipe curved, so it hooked left: swipe straighter or stand further right');
+    assert.equal(slowLeft.call, 'Gutter ballopen frameToo much hook for a ball that slow: flick faster or curve less');
+    // Cy throws from the right edge of the lane and hooks into the left gutter: nothing about standing further right.
+    const edge = await ball(() => p.evaluate(() => pinDrop.throw({ x: 16, speed: 260, angle: 0, hook: -60 })), 'Cy');
+    assert.equal(edge.side, -1);
+    assert.equal(edge.call, 'Gutter ballYour swipe curved, so it hooked left: swipe straighter');
   } finally { await c.close(); }
 }
 

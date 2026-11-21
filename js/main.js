@@ -194,13 +194,20 @@ function callout(p, knocked, left) {
   // trackpad, a flick with a finger while another holds the click is quicker than dragging with the one pressing.
   const faster = clicking() ? 'Flick faster: on a trackpad, hold with one finger and flick with another' : 'Flick faster for a harder throw';
   // A ball that hooked into the gutter on the side it was hooking to: the swipe curved, maybe without meaning to. That
-  // comes first, once a game for each player too. (The readout said which way it hooked, but it's gone by now.)
+  // comes first, once a game for each player too. (The readout said which way it hooked, but it's gone by now.) A slow
+  // ball with more hook than its speed can carry to the pocket from anywhere is told so, rather than to stand somewhere
+  // else; and nobody is told to stand further over who's already at the edge.
   const way = Math.sign(lastShot?.hook || 0);
   let tip = '';
   if (sawGutter && Math.abs(lastShot.hook) >= 3 && sim.ball.side === way && !toldHook.has(game.turn)) {
     toldHook.add(game.turn);
-    tip = way > 0 ? 'Your swipe curved, so it hooked right: swipe straighter or stand further left'
-      : 'Your swipe curved, so it hooked left: swipe straighter or stand further right';
+    if (lastShot.speed < 250 && Math.abs(lastShot.hook) > carries(lastShot.speed)) {
+      told.add(game.turn);   // it says to flick faster, so the word about a slow ball isn't needed as well
+      tip = `Too much hook for a ball that slow: flick faster or curve less${clicking() ? '. On a trackpad, hold with one finger and flick with another' : ''}`;
+    } else {
+      const atEdge = Math.abs(lastShot.x + way * (LANE.half - BALL_R - 0.5)) < 2;
+      tip = `Your swipe curved, so it hooked ${way > 0 ? 'right' : 'left'}: swipe straighter${atEdge ? '' : ` or stand further ${way > 0 ? 'left' : 'right'}`}`;
+    }
   } else if (slow && !cleared && !told.has(game.turn)) {
     told.add(game.turn);
     tip = faster;
@@ -221,6 +228,19 @@ function callCleared() {
 function cheer(kind) {
   if (kind === '') { sound.chime(true); buzz([30, 50, 60]); }
   else if (kind === 'teal') { sound.chime(false); buzz(30); }
+}
+
+// The most hook (in/s) a ball thrown this fast (in/s) can carry through the pocket from any spot at any angle without
+// touching the gutter, worked out by trying them all. It's in in/s of sideways speed whatever the ball's speed, so a
+// slower ball, longer on the dry back end, hooks further: at 200 in/s a hook past 30 can't reach the pocket from anywhere.
+const CARRY = [[170, 20], [200, 30], [230, 40], [250, 65]];
+function carries(speed) {
+  if (speed <= CARRY[0][0]) return CARRY[0][1];
+  for (let i = 1; i < CARRY.length; i++) {
+    const [s0, h0] = CARRY[i - 1], [s1, h1] = CARRY[i];
+    if (speed <= s1) return h0 + (h1 - h0) * (speed - s0) / (s1 - s0);
+  }
+  return CARRY.at(-1)[1];
 }
 
 // The ball in one plain sentence, for a screen reader: "Ana: 8, open frame. 15 after frame 2." The pins left are
