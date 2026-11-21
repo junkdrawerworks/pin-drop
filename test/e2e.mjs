@@ -347,6 +347,33 @@ const state = p => p.evaluate(() => ({ phase: pinDrop.phase, x: pinDrop.ball.x }
   } finally { await c.close(); }
 }
 
+// A flick made as the camera comes back to the ball, once the ball is coming onto the screen (0.65 s into the 0.85 s
+// return), throws: it used to be dropped without a word. Earlier in the return, with no ball in sight, it's too soon.
+{
+  const { c, p, cdp } = await lane({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  try {
+    // Throws a ball and stops the clock at `at` seconds into the camera's return.
+    const into = at => p.evaluate(at => new Promise(done => {
+      pinDrop.speed = 4;
+      pinDrop.throw({ x: 0, speed: 290, angle: 0, hook: 0 });
+      (function frame() {
+        if (pinDrop.phase === 'return') pinDrop.speed = 1;
+        if (pinDrop.phase === 'return' && pinDrop.phaseT >= at) { pinDrop.speed = 0; done(pinDrop.phaseT); } else requestAnimationFrame(frame);
+      })();
+    }), at);
+    const early = await into(0.5);
+    await touchStroke(cdp, [[0, -280, 6]]);
+    assert.equal((await state(p)).phase, 'return', `a flick ${early.toFixed(2)} s into the return, before the ball is back, did something`);
+    await p.evaluate(() => { pinDrop.speed = 4; });
+    await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
+    const late = await into(0.7);
+    assert.ok(late < 0.85, `the clock stopped ${late} s into the return, after it ended`);
+    await touchStroke(cdp, [[0, -280, 6]]);
+    assert.equal((await state(p)).phase, 'rolling', `a flick ${late.toFixed(2)} s into the return threw nothing`);
+    assert.equal(await p.evaluate(() => pinDrop.view.cam.y), await p.evaluate(() => { pinDrop.camera(0); return pinDrop.view.cam.y; }), 'the camera was not back behind the ball for the throw');
+  } finally { await c.close(); }
+}
+
 // The same swipe throws the same ball on a phone, a phone on its side, a tablet either way up and a laptop. (Speed
 // was read against the screen's height, so turning a tablet made the same flick about a fifth harder, and a phone on
 // its side reached the top speed with a gentle one.)

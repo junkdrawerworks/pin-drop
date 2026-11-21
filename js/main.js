@@ -316,10 +316,14 @@ let touch = null;
 canvas.addEventListener('pointerdown', e => {
   sound.wake();
   seen(e);
-  if (phase !== 'aim' || paused) return;
   // The main button, or the right one: pressing a trackpad down with two fingers is a right click, and some people
   // hold the ball that way. (The menu that would pop up is kept shut, below.) Not the middle button.
   if (e.pointerType === 'mouse' && e.button !== 0 && e.button !== 2) return;
+  // A flick at the end of the camera's way back, once the ball is coming onto the screen (0.65 s in, on a phone or a
+  // tablet either way up): the camera jumps the rest of the way so the flick throws. Before then there's no ball to
+  // flick at yet.
+  if (phase === 'return' && !paused && phaseT >= 0.65) aim();
+  if (phase !== 'aim' || paused) return;
   try { canvas.setPointerCapture(e.pointerId); } catch { /* fine without */ }
   touch = { ...stroke(e, performance.now()), id: e.pointerId, x0: ball.x };
 });
@@ -607,6 +611,7 @@ addEventListener('resize', () => { view.resize(); view.setCamera(camT, followX);
 // For the tests and the screenshot tool.
 window.pinDrop = {
   get phase() { return phase; },
+  get phaseT() { return phaseT; },
   get game() { return game; },
   get pins() { return pins; },
   get ball() { return ball; },
