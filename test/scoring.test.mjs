@@ -290,11 +290,31 @@ test('how hard a swipe throws: the same as ever on a phone held upright, on any 
     for (let t = 0; t <= 300 / v; t += 8) pts.push({ x: 0, y: -v * t, t });
     return throwOf(pts).speed * 0.0568;
   };
-  // 1 px/ms (a gentle swipe) and 2 px/ms, as they threw on a 390 x 844 phone; 3 px/ms and up, the top speed.
-  assert.equal(mph(1).toFixed(1), '12.4');
-  assert.equal(mph(2).toFixed(1), '17.5');
-  assert.equal(mph(3).toFixed(1), '22.2');
-  assert.equal(mph(6).toFixed(1), '22.2');
+  // 1 px/ms (a gentle swipe), 2 px/ms, 3 and 6 (a firm flick and a very firm one), on a 390 x 844 phone.
+  assert.equal(mph(1).toFixed(1), '13.8');
+  assert.equal(mph(2).toFixed(1), '16.9');
+  assert.equal(mph(3).toFixed(1), '18.8');
+  assert.equal(mph(6).toFixed(1), '22.0');
+  assert.equal(mph(7).toFixed(1), '22.2');
+  assert.equal(mph(0.3).toFixed(1), '9.7');
+});
+
+test('forgiving around a good ball: a swipe 10% off it throws within half a mph, and firm flicks still differ', async () => {
+  const { throwOf } = await import('../js/swipe.js');
+  const mph = v => {
+    const pts = [];
+    for (let t = 0; t <= 300 / v; t += 8) pts.push({ x: 0, y: -v * t, t });
+    return throwOf(pts).speed * 0.0568;
+  };
+  // The flick that throws a good ball, about 16.5 mph.
+  assert.ok(Math.abs(mph(1.8) - 16.5) < 0.1, `a 1.8 px/ms flick throws ${mph(1.8).toFixed(2)} mph`);
+  // 10% slower or faster: under 1 mph between them (it was 1.8).
+  assert.ok(mph(1.98) - mph(1.62) < 1, `10% either way throws ${mph(1.62).toFixed(2)} to ${mph(1.98).toFixed(2)} mph`);
+  // Firm to very firm flicks spread from about 18 to 22 mph (they all threw 22.2 from 3 px/ms up).
+  assert.ok(Math.abs(mph(2.5) - 18) < 0.2 && Math.abs(mph(6) - 22) < 0.2, `2.5 px/ms throws ${mph(2.5).toFixed(1)}, 6 px/ms ${mph(6).toFixed(1)}`);
+  assert.ok(mph(4) > mph(3) + 1 && mph(6) > mph(4) + 1);
+  // Faster always throws harder, up to the top speed.
+  for (let v = 0.3; v < 7; v += 0.1) assert.ok(mph(v + 0.1) >= mph(v), `${(v + 0.1).toFixed(1)} px/ms throws slower than ${v.toFixed(1)}`);
 });
 
 test('a mouse or trackpad flick counts one and a half times as hard as the same flick on a touch screen', async () => {
@@ -308,7 +328,7 @@ test('a mouse or trackpad flick counts one and a half times as hard as the same 
   // A quick 300 px press-and-flick (1.2 px/ms) and an easy drag (0.6 px/ms).
   assert.equal(mph(1.2, MOUSE).toFixed(1), mph(1.8).toFixed(1));
   assert.equal(mph(0.6, MOUSE).toFixed(1), mph(0.9).toFixed(1));
-  assert.ok(mph(1.2, MOUSE) > mph(1.2) + 2, `a quick trackpad flick threw ${mph(1.2, MOUSE).toFixed(1)} mph`);
+  assert.ok(mph(1.2, MOUSE) > mph(1.2) + 1.5, `a quick trackpad flick threw ${mph(1.2, MOUSE).toFixed(1)} mph`);
 });
 
 test('hook: a thumb\'s natural arc rolls straight, a deliberate curve hooks hard', async () => {
@@ -349,7 +369,7 @@ test('a swipe is timed by its events\' own clock, unless that clock can\'t be tr
     return s;
   };
   const steady = mph(fling());
-  assert.ok(Math.abs(steady - 13.4) < 0.3, `a steady 1.2 px/ms fling read as ${steady.toFixed(1)} mph`);
+  assert.ok(Math.abs(steady - 14.6) < 0.3, `a steady 1.2 px/ms fling read as ${steady.toFixed(1)} mph`);
   // A busy page gets the same samples late and bunched up, or all at once after a stall: the same speed, within
   // 0.3 mph, every time.
   for (let seed = 1; seed <= 20; seed++) {

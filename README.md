@@ -18,9 +18,10 @@ thrown straight at the head pin.
 - **Drag the ball sideways** to choose where you stand, then **swipe up to roll**. While you swipe, a dotted line shows
   where the ball will start and an arrow shows which way it'll hook. On a trackpad, press and hold with one finger and
   flick up with another; with a mouse, hold the button down as you flick up.
-- **Hook is everything.** Bend your swipe and the ball keeps that side spin through the oil on the front 40 feet, then
+- **Hook it for strikes.** Bend your swipe and the ball keeps that side spin through the oil on the front 40 feet, then
   grips the dry back end and curves. Coming into the pocket at an angle (just right of the head pin, for a ball that
-  hooks left) is how strikes happen. Straight balls leave more splits.
+  hooks left) is how most strikes happen. Straight balls work too, and leave more splits. The throw is forgiving about
+  speed: a swipe a little faster or slower than your best throws much the same ball, and firm flicks still differ.
 - **The pins are simulated, not decided.** Each one stands until something pushes it hard enough to tip it, then
   cartwheels across the deck taking out its neighbours, bounces off the side walls or drops into the pit or gutter. A
   soft hit makes a pin wobble, and it may or may not go. Real leaves turn up: the 10 pin, the 4–7, the 7–10 split.

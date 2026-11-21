@@ -170,7 +170,11 @@ export function throwOf(pts, gain = 1) {
   const dx = b.x - a.x, dy = b.y - a.y;
   const len = Math.hypot(dx, dy);
   const vn = swipeSpeed(pts) * gain * 800 / 844;
-  const speed = clamp(175 + (vn - 0.5) * 95, 170, 390);
+  // Forgiving around a good ball: speed goes with the swipe's speed in proportion (its log), so a swipe 10% off
+  // the one that throws 16.5 mph (290 in/s, a 1.8 px/ms flick) throws within half a mph of it, and firm flicks spread
+  // from 18 mph (2.5 px/ms) to 22 (6 px/ms) rather than all reaching the top speed at 3 px/ms. Each 10% faster adds
+  // 7.7 in/s (0.44 mph). The slowest there is, 9.7 mph, is a drag under 0.4 px/ms.
+  const speed = clamp(290 + 81 * Math.log(Math.max(vn, 0.01) / 1.71), 170, 390);
   const angle = clamp(Math.atan(dx / -dy * 0.08), -0.07, 0.07);
   // The bend: how far the swipe bows out from a straight line, as a share of its length. Bowing out to the right
   // (so it finishes turning left) hooks left. A thumb swinging from the wrist draws a slight arc of its own, so up to
