@@ -37,6 +37,9 @@ function loop(now) {
   const dt = Math.min(1 / 30, (now - last) / 1000);
   last = now;
   if (!paused) update(dt * timeScale);
+  // A hand over the lane while there's a ball to pick up, closed while it's held.
+  document.body.classList.toggle('aiming', phase === 'aim' && !paused);
+  document.body.classList.toggle('dragging', !!touch);
   view.draw({ t: now / 1000, pins, ball: phase === 'sweep' ? null : ball, guide, sweep, colour: colourOf(game ? game.turn : 0) });
   requestAnimationFrame(loop);
 }
@@ -229,6 +232,7 @@ let touch = null;
 canvas.addEventListener('pointerdown', e => {
   sound.wake();
   if (phase !== 'aim' || paused) return;
+  if (e.pointerType === 'mouse' && e.button !== 0) return;   // only the main button throws
   try { canvas.setPointerCapture(e.pointerId); } catch { /* fine without */ }
   touch = { id: e.pointerId, pts: [{ x: e.clientX, y: e.clientY, t: performance.now() }], mode: null, from: 0, x0: ball.x };
 });
@@ -281,6 +285,7 @@ const lift = e => {
 };
 canvas.addEventListener('pointerup', lift);
 canvas.addEventListener('pointercancel', lift);
+canvas.addEventListener('contextmenu', e => e.preventDefault());   // no menu popping up over the lane
 
 // A swipe, read as a throw: its direction is the aim, its speed at the end is how hard, and how much it bends
 // is the hook.

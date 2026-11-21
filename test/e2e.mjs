@@ -245,6 +245,24 @@ const state = p => p.evaluate(() => ({ phase: pinDrop.phase, x: pinDrop.ball.x }
   } finally { await c.close(); }
 }
 
+{
+  const { c, p } = await lane({ viewport: { width: 1280, height: 800 } });
+  try {
+    const mouse = p.mouse;
+    // The lane shows it can be grabbed.
+    await mouse.move(640, 640);
+    assert.equal(await p.evaluate(() => getComputedStyle(document.getElementById('lane')).cursor), 'grab');
+    // A right-button drag up doesn't throw, and no menu pops up over the lane.
+    await p.evaluate(() => document.addEventListener('contextmenu', e => { window.menuBlocked = e.defaultPrevented; }));
+    await mouse.down({ button: 'right' });
+    for (let i = 1; i <= 10; i++) { await mouse.move(640, 640 - i * 35); await wait(12); }
+    await mouse.up({ button: 'right' });
+    await wait(50);
+    assert.equal((await state(p)).phase, 'aim', 'a right-button drag threw the ball');
+    assert.equal(await p.evaluate(() => window.menuBlocked), true, 'the context menu opens over the lane');
+  } finally { await c.close(); }
+}
+
 assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems while using it');
 await browser.close();
 server.close();
