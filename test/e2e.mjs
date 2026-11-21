@@ -423,7 +423,8 @@ const freshRack = SPOTS.map((s, i) => `${i + 1}@${s.x.toFixed(6)},${s.y.toFixed(
   await p.addInitScript(k => { if (!sessionStorage.getItem('set')) { sessionStorage.setItem('set', '1'); localStorage.setItem('pin-drop.v1', JSON.stringify(k)); } }, { names, current });
   try {
     await p.goto(base);
-    assert.equal(await p.textContent('#resume'), 'Carry on · frame 10');
+    // Carry on says whose turn it is, and their frame.
+    assert.equal(await p.textContent('#resume'), 'Carry on · Ana’s turn, frame 10');
     await p.click('#resume');
     await watchCalls(p);
     await p.evaluate(seed => { pinDrop.speed = 4; pinDrop.seed = seed; }, strikeSeed);
@@ -484,6 +485,7 @@ const nineAndMiss = Array.from({ length: 18 }, (_, i) => (i % 2 ? 0 : 9));   // 
 {
   const { c, p } = await kept({}, { names: ['Ana'], best: 204, bestBy: 'Ben', bests: { Ben: 204 }, current: { players: [{ name: 'Ana', rolls: [...nineAndMiss, 10, 7], x: 0 }], turn: 0, leftover: [{ id: 4 }, { id: 7 }, { id: 8 }].map(q => ({ ...q, ...SPOTS[q.id - 1] })) } });
   try {
+    assert.equal(await p.textContent('#resume'), 'Carry on · frame 10', 'Carry on for a game bowled alone');
     await p.click('#resume');
     assert.equal(await p.evaluate(() => pinDrop.pins.length), 3, 'the 4-7-8 did not come back');
     await watchCalls(p);
@@ -542,6 +544,7 @@ const nineAndMiss = Array.from({ length: 18 }, (_, i) => (i % 2 ? 0 : 9));   // 
 {
   const { c, p } = await kept({}, { names: ['Ana', 'Ben'], current: { players: [{ name: 'Ana', rolls: [8, 1, 8, 2], x: 0 }, { name: 'Ben', rolls: [9, 0, 7, 2], x: 0 }], turn: 0, leftover: null } });
   try {
+    assert.equal(await p.textContent('#resume'), 'Carry on · Ana’s turn, frame 3');
     await p.click('#resume');
     assert.equal(await p.getAttribute('#card', 'aria-label'), null, 'the scorecard button has a name that hides what it shows');
     assert.match(await p.locator('#hud').ariaSnapshot(), /button "Ana Frame 3 · ball 1 total at least 19\. Show the scorecard"/);
@@ -700,6 +703,7 @@ const nineAndMiss = Array.from({ length: 18 }, (_, i) => (i % 2 ? 0 : 9));   // 
   try {
     // lane() tapped Bowl, which asks again with a game going: carry on with it instead.
     await p2.click('#players li:first-child input');
+    assert.equal(await p2.textContent('#resume'), 'Carry on · your turn, frame 10');
     await p2.click('#resume');
     await p2.evaluate(() => { pinDrop.speed = 10; pinDrop.throw({ x: 0, speed: 300, angle: 0, hook: 0 }); });
     await until(() => p2.isVisible('#end'), 20000, 'the game never ended');

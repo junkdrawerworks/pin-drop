@@ -541,14 +541,17 @@ function titleScreen() {
   show('title');
 }
 
-// Carry on, when there's a game left half-way.
+// Carry on, when there's a game left half-way: whose turn it is and their frame, so on a phone passed round you can
+// tell whether it's your game ("Carry on · Gwendolyn’s turn, frame 3"; "Carry on · frame 3" for one player).
 function resumeButton() {
   const c = store.current;
   const going = !!c && Array.isArray(c.players) && c.players.some(q => !next(q.rolls).done);
   $('resume').hidden = !going;
   if (going) {
-    const f = Math.min(...c.players.map(q => next(q.rolls).frame)) + 1;
-    $('resume').textContent = `Carry on · frame ${f}`;
+    const up = c.players[c.turn] ?? c.players.find(q => !next(q.rolls).done);
+    const f = next(up.rolls).frame + 1;
+    $('resume').textContent = c.players.length === 1 ? `Carry on · frame ${f}`
+      : `Carry on · ${isYou(up.name) ? 'your turn' : `${up.name}’s turn`}, frame ${f}`;
   } else if (startArmed) disarmStart();
 }
 

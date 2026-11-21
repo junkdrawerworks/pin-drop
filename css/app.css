@@ -164,7 +164,8 @@ h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.08em; color: 
   box-shadow: 0 4px 0 #b37b14;
 }
 .big:active { transform: translateY(2px); box-shadow: 0 2px 0 #b37b14; }
-#resume { background: var(--teal); color: #062a2a; box-shadow: 0 4px 0 #1d8a85; margin-top: 16px; }
+/* Two lines for a long name rather than cutting it, split evenly. */
+#resume { background: var(--teal); color: #062a2a; box-shadow: 0 4px 0 #1d8a85; margin-top: 16px; white-space: normal; overflow-wrap: anywhere; text-wrap: balance; }
 .plain {
   display: block; width: 100%; margin: 10px 0 0; padding: 12px; border-radius: 14px;
   background: var(--panel-2); border: 1px solid var(--line); font-weight: 600;
