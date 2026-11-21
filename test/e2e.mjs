@@ -431,10 +431,14 @@ const freshRack = SPOTS.map((s, i) => `${i + 1}@${s.x.toFixed(6)},${s.y.toFixed(
       assert.deepEqual(await upPins(p), freshRack, `no fresh rack for Ana's ball ${k} in the tenth`);
       // The balls her strikes earned say so.
       assert.equal(await p.textContent('#where'), k === 1 ? 'Frame 10 · ball 1' : 'Frame 10 · bonus ball');
+      if (k === 3) await p.evaluate(() => { pinDrop.speed = 1; });   // time to read the scorecard as the turn passes
       await p.evaluate(pocket => pinDrop.throw(pocket), pocket);
       await until(() => p.evaluate(n => pinDrop.game.players[0].rolls.length === n, 18 + k), 20000, `Ana's ball ${k} in the tenth never finished`);
+      // As the pins settle after her last ball, the scorecard says who's next, not "Frame 10 · ball 4".
+      if (k === 3) assert.equal(await p.textContent('#where'), 'Up next: Ben', 'the scorecard as the turn passes');
       assert.equal(await p.evaluate(() => pinDrop.game.players[0].rolls.at(-1)), 10, `seed ${strikeSeed} didn't strike in the page on ball ${k}`);
     }
+    await p.evaluate(() => { pinDrop.speed = 4; });
     await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
     const ana = await p.evaluate(() => pinDrop.game.players[0].rolls);
     assert.deepEqual(frames(ana)[9].marks, ['X', 'X', 'X']);
@@ -592,6 +596,8 @@ const nineAndMiss = Array.from({ length: 18 }, (_, i) => (i % 2 ? 0 : 9));   // 
     await p.evaluate(() => {
       window.calls = [document.getElementById('call').textContent];
       new MutationObserver(() => window.calls.push(document.getElementById('call').textContent)).observe(document.getElementById('call'), { childList: true, subtree: true });
+      window.wheres = [];
+      new MutationObserver(() => window.wheres.push(document.getElementById('where').textContent)).observe(document.getElementById('where'), { childList: true, subtree: true, characterData: true });
     });
     await p.evaluate(() => { pinDrop.speed = 10; });
     let turns = 0, was = 0;
@@ -607,6 +613,9 @@ const nineAndMiss = Array.from({ length: 18 }, (_, i) => (i % 2 ? 0 : 9));   // 
     const calls = await p.evaluate(() => window.calls);
     assert.ok(calls.some(t => t.startsWith('Your turn')), `no "Your turn" among ${JSON.stringify(calls)}`);
     assert.ok(!calls.some(t => /You’s turn/i.test(t)), `"You’s turn" among ${JSON.stringify(calls)}`);
+    // And the scorecard, as the turn passes: "Up next: Player 2", then "Up next: you".
+    const wheres = await p.evaluate(() => window.wheres);
+    for (const w of ['Up next: Player 2', 'Up next: you']) assert.ok(wheres.includes(w), `no "${w}" among ${JSON.stringify(wheres)}`);
   } finally { await c.close(); }
   // The last ball of a game You win.
   const nines = Array.from({ length: 19 }, (_, i) => (i % 2 ? 0 : 9));

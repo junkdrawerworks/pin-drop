@@ -410,7 +410,12 @@ function hud() {
   $('who').innerHTML = `<i style="background:${colourOf(game.turn)[0]}"></i>${esc(p.name)}`;
   // In the tenth, a ball earned by a strike or spare is a bonus ball: the second after a strike, and the third.
   const bonus = st.frame === 9 && (st.ball === 2 || (st.ball === 1 && st.fresh));
-  $('where').textContent = st.done ? 'Done' : `Frame ${st.frame + 1} · ${bonus ? 'bonus ball' : `ball ${st.ball + 1}`}`;
+  // While the turn passes (the pins settling and the sweep), who's next rather than this player's next frame; at
+  // the end of the game, Done.
+  const up = game.nextTurn ?? null, passing = up !== null && up !== game.turn;
+  const upName = passing && up >= 0 ? game.players[up].name : '';
+  $('where').textContent = passing ? (up < 0 ? 'Done' : `Up next: ${isYou(upName) ? 'you' : upName}`)
+    : st.done ? 'Done' : `Frame ${st.frame + 1} · ${bonus ? 'bonus ball' : `ball ${st.ball + 1}`}`;
   $('frames').outerHTML = cardHTML(p.rolls, st.done ? -1 : st.frame).replace('<span class="frames', '<span id="frames" class="frames');
   const others = game.players.map((q, i) => ({ q, i })).filter(o => o.i !== game.turn);
   $('others').hidden = others.length === 0;
