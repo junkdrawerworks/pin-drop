@@ -59,6 +59,6 @@ GitHub Pages serves it from `main`, at its own address set by `CNAME`.
 - `fonts/`: [Shrikhand](https://fonts.google.com/specimen/Shrikhand) and [Figtree](https://fonts.google.com/specimen/Figtree),
   both under the SIL Open Font License, served from here so nothing loads from elsewhere.
 - `sw.js`: the offline copy. `manifest.webmanifest` and the icons: installing it to a home screen.
-- `test/`: `scoring.test.mjs` (rules and physics) and `e2e.mjs` (a whole two-player game in Chromium, resuming,
+- `test/`: `scoring.test.mjs` (rules and physics), `standing.test.mjs` (no pin left standing off the deck) and `e2e.mjs` (a whole two-player game in Chromium, resuming,
   offline, installable).
 - `tools/`: screenshots, icons and the one-file build.

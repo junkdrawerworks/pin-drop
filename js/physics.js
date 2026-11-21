@@ -49,7 +49,7 @@ export function rack(standing) {
     .map(p => { const q = standing?.find(q => q.id === p.id); if (q) { p.x = q.x; p.y = q.y; } return p; });
 }
 function pin(id, x, y) {
-  return { id, x, y, vx: 0, vy: 0, a: 0, w: 0, state: 'up', ft: 0, wob: 0, wobA: 0, fallAt: 0, fallDir: 0, gx: 0 };
+  return { id, x, y, vx: 0, vy: 0, a: 0, w: 0, state: 'up', ft: 0, wob: 0, wobA: 0, fallAt: 0, fallDir: 0, gx: 0, shove: 0 };
 }
 
 // How a throw leaves the hand: where it's released (x), how fast (in/s), its angle off straight (radians,
@@ -144,8 +144,9 @@ export class Sim {
       p.x = Math.sign(p.x) * (wall - LYING_R);
       if (Math.sign(p.vx) === Math.sign(p.x)) { this.events.push({ kind: 'wall', x: p.x, y: p.y, power: Math.min(1, Math.abs(p.vx) / 300) }); p.vx *= -0.5; p.w += p.vy * 0.02; }
     }
+    // A standing pin goes in as soon as its middle is over the edge: it has nothing left to stand on.
     const onDeck = p.y > LANE.head - 20;
-    if (Math.abs(p.x) > LANE.half + (onDeck ? 3 : 1) && (Math.hypot(p.vx, p.vy) < (onDeck ? 45 : 90) || p.state === 'up' || !onDeck)) {
+    if (Math.abs(p.x) > LANE.half + (p.state === 'up' ? 0 : onDeck ? 3 : 1) && (Math.hypot(p.vx, p.vy) < (onDeck ? 45 : 90) || p.state === 'up' || !onDeck)) {
       if (p.state === 'up') p.a = Math.atan2(p.vy, p.vx || Math.sign(p.x));
       p.state = 'gutter';
       p.gx = Math.sign(p.x) * (LANE.half + LANE.gutter / 2);
@@ -210,6 +211,13 @@ export class Sim {
     const pen = reach - d, sum = ka.inv + kb.inv;
     A.x += nx * pen * ka.inv / sum; A.y += ny * pen * ka.inv / sum;
     B.x -= nx * pen * kb.inv / sum; B.y -= ny * pen * kb.inv / sum;
+    // A standing pin pushed along like that, by a pin lying against it, is never struck, so nothing tips it: it could
+    // slide upright right off the deck. Once it's been shoved an inch, it goes over the way it's being pushed.
+    for (const [P, sg, k] of [[A, 1, ka], [B, -1, kb]]) {
+      if (P === this.ball || P.state !== 'up') continue;
+      P.shove += pen * k.inv / sum;
+      if (P.shove > 1) this.topple(P, Math.atan2(sg * ny, sg * nx));
+    }
     if (vn >= 0) return;
 
     const isBall = A === this.ball || B === this.ball;
