@@ -23,6 +23,7 @@ let phaseT = 0, camT = 0;
 let pins = rack(), ball = idle(0), sim = null;
 let guide = null, sweep = null;
 let before = 10, sawGutter = false, wasSplit = false, felt = false, slow = false;
+let called = false, clearedAt = null;   // Strike! or Spare! said as the last pin went, and when that was
 let told = new Set();     // the players (by turn) already told a ball was slow, this game
 let toldHook = new Set(); // and told why a ball hooked into the gutter
 let lastShot = null;      // the ball being bowled, as it was thrown
@@ -56,11 +57,18 @@ function update(dt) {
     sim.step(dt);
     ball = sim.ball;
     for (const e of sim.events) {
-      if (e.kind === 'gutter') { sawGutter = true; sound.gutter(); }
+      if (e.kind === 'gutter') { sawGutter = true; sound.gutter(); buzz(15); }
       else if (e.kind !== 'pit') sound.hit(e.kind, e.power);
       if (e.kind === 'ball' && !felt) { felt = true; buzz(25); }
     }
     sim.events.length = 0;
+    // Every pin the ball faced has gone over: a strike or a spare, whatever the deadwood does next (a pin that's going
+    // over never stands up again, and one that's only wobbling still counts as standing). It's called a moment after
+    // the last one goes, with the crash, rather than once everything has stopped sliding half a second later.
+    if (!called && sim.hitPins && sim.pins.every(q => q.state !== 'up')) {
+      clearedAt ??= phaseT;
+      if (phaseT - clearedAt >= 0.12) { called = true; callCleared(); }
+    }
     // Follow the ball down the lane, and into the gutter; once it's in the pit, stay where it went in.
     camT = Math.max(camT, ease((ball.y - 140) / (LANE.head - 110 - 140)));
     view.setCamera(camT, follow(ball.state === 'pit' ? followX : ball.x, dt));
@@ -133,7 +141,7 @@ function aim() {
 
 function throwBall(shot) {
   guide = null;
-  felt = false; sawGutter = false;
+  felt = false; sawGutter = false; called = false; clearedAt = null;
   before = pins.filter(p => p.state === 'up').length;
   wasSplit = !next(current().rolls).fresh && isSplit(pins.filter(p => p.state === 'up').map(p => p.id));
   sim = new Sim(pins, shot, fixedSeed ?? ((Math.random() * 2 ** 31) | 0));
@@ -198,8 +206,19 @@ function callout(p, knocked, left) {
     tip = faster;
   }
   const [big, small, kind] = callFor(p.rolls.slice(0, -1), knocked, left, { wasSplit, sawGutter });
-  say(big, small, kind, kind === 'small' ? tip : '');
+  // A strike or spare was called as the last pin went (see update), and is still on screen.
+  if (!called) { say(big, small, kind, kind === 'small' ? tip : ''); cheer(kind); }
   tell(ballWords(p, big, small, kind === 'small' ? tip : ''));
+}
+
+// Strike! or Spare! (or Double!, Picked up! and the rest), with its chime and buzz, before the ball has been counted.
+function callCleared() {
+  const [big, small, kind] = callFor(current().rolls, before, [], { wasSplit, sawGutter });
+  readout('');
+  say(big, small, kind, '');
+  cheer(kind);
+}
+function cheer(kind) {
   if (kind === '') { sound.chime(true); buzz([30, 50, 60]); }
   else if (kind === 'teal') { sound.chime(false); buzz(30); }
 }
@@ -714,7 +733,7 @@ function endWords() {
   if (scores.length === 1) {
     const was = game.before?.[0] ?? null;
     return [`${top}`, top === 300 ? 'A perfect game.' : was === null ? 'Your first game here.' : top > was ? 'Your best game yet.'
-      : top === was ? 'That equals your best.' : `Your best is ${was}.`];
+      : top === was ? 'That equals your best.' : `Your best is ${was}.`, top === 300 || (was !== null && top > was)];
   }
   const title = winners.length === 1 ? winLine(winners[0].name) : winners.length === 2 ? `${both(winners.map(w => w.name))} tie!`
     : `A ${winners.length === 3 ? 'three' : 'four'}-way tie!`;
@@ -723,17 +742,18 @@ function endWords() {
     const names = winners.map(w => w.name);
     line = names.length === 1 ? `${names[0]} bowled a perfect game.` : `${both(names)} bowled perfect games.`;
   } else if (game.newBest && game.hadBest) line += ' · a new best here';
-  return [title, line];
+  return [title, line, top === 300 || (game.newBest && game.hadBest)];
 }
 
 function showEnd() {
-  const [title, line] = endWords();
+  const [title, line, best] = endWords();
   $('endTitle').textContent = title;
   $('endTitle').classList.toggle('score', game.players.length === 1);
   $('endLine').textContent = line;
   $('endCards').innerHTML = boardHTML(true);
   show('end');
   $('hud').hidden = true; $('others').hidden = true;
+  if (best) buzz([40, 60, 40]);   // a best, or a perfect game
 }
 
 // What's on this device, saved; the first time the browser won't keep it, a word about that, once: in a game, in the

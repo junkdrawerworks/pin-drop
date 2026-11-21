@@ -194,6 +194,32 @@ test('hooking into the pocket strikes far more often than a straight ball at the
   assert.ok(pocket > head + 0.25);
 });
 
+// Strike! and Spare! are called as soon as no pin is left standing, before everything stops: so a pin that has started
+// to go over must never stand again, and one that's only wobbling (it may still go, or not) must still count as standing.
+test('a pin that has gone over never stands again, so a cleared deck is known before it stops', () => {
+  const shots = [{ x: 10, speed: 290, angle: through(10, 1.5, -40), hook: -40 }, { x: 0, speed: 290, angle: 0, hook: 0 },
+    { x: -8, speed: 220, angle: through(-8, -2, 30, 220), hook: 30 }, { x: 12, speed: 260, angle: through(12, 5, -20, 260), hook: -20 }];
+  let cleared = 0, wobbly = 0;
+  for (const shot of shots) {
+    for (let seed = 1; seed <= 30; seed++) {
+      const sim = new Sim(rack(), shot, seed), went = new Set();
+      let early = false;
+      while (!sim.settled) {
+        sim.step(1 / 60);
+        for (const q of sim.pins) {
+          if (q.state !== 'up') went.add(q.id);
+          else assert.ok(!went.has(q.id), `pin ${q.id} stood up again (seed ${seed})`);
+          if (q.state === 'up' && q.fallAt) wobbly++;
+        }
+        if (sim.hitPins && sim.pins.every(q => q.state !== 'up')) early = true;
+      }
+      assert.equal(sim.standing.length === 0, early, `seed ${seed}: called ${early ? 'cleared' : 'not cleared'} early, ${sim.standing.length} left`);
+      if (early) cleared++;
+    }
+  }
+  assert.ok(cleared >= 10 && wobbly > 0, `only ${cleared} cleared decks and ${wobbly} wobbling frames to check this against`);
+});
+
 test('a second ball can pick up a leftover pin', () => {
   // The 10 pin alone, and a ball sent straight at it.
   const pins = rack([{ id: 10, x: 18, y: 751.18 }]);

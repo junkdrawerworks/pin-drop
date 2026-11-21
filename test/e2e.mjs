@@ -629,9 +629,15 @@ const nineAndMiss = Array.from({ length: 18 }, (_, i) => (i % 2 ? 0 : 9));   // 
     current: { players: [{ name: 'Ana', rolls: ninety, x: 0 }, { name: 'Cal', rolls: ninety.slice(0, 19), x: 0 }], turn: 1, leftover: null } });
   try {
     await p.click('#resume');
+    await p.evaluate(() => {
+      window.buzzes = [];
+      Object.defineProperty(navigator, 'vibrate', { configurable: true, value: v => { window.buzzes.push(JSON.stringify(v)); return true; } });
+    });
     await p.evaluate(() => { pinDrop.speed = 4; pinDrop.throw({ x: 14, speed: 300, angle: 0.02, hook: 0 }); });
     await until(() => p.isVisible('#end'), 20000, 'no end of the game');
     assert.deepEqual([await p.textContent('#endTitle'), await p.textContent('#endLine')], ['Ana and Cal tie!', '90 each · a new best here']);
+    // A short buzz as the ball dropped into the gutter, and one for the new best (on a phone that can buzz).
+    assert.deepEqual(await p.evaluate(() => window.buzzes), ['15', '[40,60,40]']);
     assert.deepEqual(await p.$$eval('#endCards .row .name em', els => els.map(e => e.textContent)), ['Tied', 'Tied']);
     // Bowl again: each stands where they stood.
     await p.evaluate(() => { pinDrop.game.players[0].x = -6; pinDrop.game.players[1].x = 9; });
@@ -654,6 +660,44 @@ const nineAndMiss = Array.from({ length: 18 }, (_, i) => (i % 2 ? 0 : 9));   // 
     assert.equal(await p.textContent('#frames .f .tot'), '', "the strike's frame has a total before its bonus balls");
     await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
     assert.equal(await p.textContent('#others'), 'Ana 10+', "Ana's score on Ben's scorecard");
+  } finally { await c.close(); }
+}
+
+// Strike! comes with the crash, as the last pin goes over, not half a second later once the deadwood has stopped
+// sliding: within 300 ms of the last pin leaving its spot, while the ball is still rolling, once, with the strike's
+// buzz then too (on a phone that has one). A ball that leaves pins standing is called only once everything has stopped.
+{
+  const { c, p } = await lane({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true }, {}, ['Ana', 'Ben']);
+  try {
+    await p.evaluate(() => {
+      window.buzzes = [];
+      Object.defineProperty(navigator, 'vibrate', { configurable: true, value: v => { window.buzzes.push([JSON.stringify(v), pinDrop.phase]); return true; } });
+      window.called = [];
+      new MutationObserver(() => { const t = document.getElementById('call').textContent; if (t) window.called.push([t, performance.now(), pinDrop.phase]); })
+        .observe(document.getElementById('call'), { childList: true, subtree: true });
+      window.goneAt = null;
+      (function frame() {
+        if (window.goneAt === null && pinDrop.phase === 'rolling' && pinDrop.pins.every(q => q.state !== 'up')) window.goneAt = performance.now();
+        requestAnimationFrame(frame);
+      })();
+    });
+    await p.evaluate(({ pocket, seed }) => { pinDrop.seed = seed; pinDrop.throw(pocket); }, { pocket, seed: strikeSeed });
+    await until(() => p.evaluate(() => pinDrop.phase === 'settle'), 20000, 'the strike never finished');
+    assert.equal(await p.evaluate(() => pinDrop.game.players[0].rolls[0]), 10, `seed ${strikeSeed} didn't strike`);
+    const { called, goneAt, buzzes } = await p.evaluate(() => ({ called: window.called, goneAt: window.goneAt, buzzes: window.buzzes }));
+    assert.equal(called.length, 1, `the strike was called ${JSON.stringify(called)}`);
+    const [word, at, phase] = called[0];
+    assert.match(word, /^Strike!/);
+    assert.equal(phase, 'rolling', 'Strike! waited for the pins to stop');
+    assert.ok(goneAt !== null && at - goneAt < 300, `Strike! came ${Math.round(at - goneAt)} ms after the last pin went`);
+    assert.deepEqual(buzzes.filter(b => b[0] === '[30,50,60]'), [['[30,50,60]', 'rolling']], `the strike's buzz: ${JSON.stringify(buzzes)}`);
+    console.log(`  Strike! ${Math.round(at - goneAt)} ms after the last pin went`);
+    // Ben's ball at the head pin leaves pins: nothing is said while it rolls.
+    await until(() => p.evaluate(() => pinDrop.phase === 'aim' && pinDrop.game.turn === 1), 20000, "Ben's turn never came");
+    await p.evaluate(({ headOn, seed }) => { window.called = []; pinDrop.speed = 4; pinDrop.seed = seed; pinDrop.throw(headOn); }, { headOn, seed: leaveSeed });
+    await until(() => p.evaluate(() => pinDrop.phase === 'settle'), 20000, "Ben's ball never finished");
+    const leave = await p.evaluate(() => window.called.filter(c => !c[0].endsWith('turn')));
+    assert.ok(leave.length >= 1 && leave.every(c => c[2] !== 'rolling'), `a ball that left pins was called as it rolled: ${JSON.stringify(leave)}`);
   } finally { await c.close(); }
 }
 
