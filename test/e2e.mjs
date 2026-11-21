@@ -323,6 +323,28 @@ const state = p => p.evaluate(() => ({ phase: pinDrop.phase, x: pinDrop.ball.x }
     };
     assert.match(await slowBall(), /Flick faster for a harder throw$/);
     assert.doesNotMatch(await slowBall(), /Flick faster/, 'the word about slow balls came twice in a game');
+
+    // Sliding the ball over and swiping up without lifting, with a stop at the corner and with a sharp turn: thrown
+    // from where it was slid, as straight as the swipe up. (The ball went back where it stood, and the whole L-shaped
+    // stroke threw a full hook.)
+    for (const stop of [200, 0]) {
+      await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
+      await p.evaluate(() => { pinDrop.speed = 1; });
+      const from = (await state(p)).x;
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 250, y: 640 }] });
+      for (let i = 1; i <= 8; i++) { await wait(16); await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 250 - i * 10, y: 640 }] }); }
+      await wait(stop);
+      await wait(30);
+      const slid = (await state(p)).x;
+      for (let i = 1; i <= 10; i++) { await wait(16); await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 170, y: 640 - i * 25 }] }); }
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await wait(50);
+      const shot = await p.evaluate(() => pinDrop.phase === 'rolling' && pinDrop.shot);
+      assert.ok(shot, `sliding over${stop ? ', stopping' : ''} and swiping up threw nothing`);
+      assert.ok(slid < from - 5 && Math.abs(shot.x - slid) < 0.3, `slid from ${from} to ${slid}, then thrown from ${shot.x}`);
+      assert.ok(Math.abs(shot.hook) < 5 && Math.abs(shot.angle) < 0.01, `sliding over and swiping up threw a hook of ${shot.hook}, at ${shot.angle}`);
+      await p.evaluate(() => { pinDrop.speed = 10; });
+    }
   } finally { await c.close(); }
 }
 

@@ -372,7 +372,9 @@ canvas.addEventListener('pointermove', e => {
     slide(touch, touch.pts[touch.pts.length - 1].x - touch.pts[0].x);
     guide = null;
   } else if (touch.mode === 'throw') {
-    if (was === 'move') slide(touch, 0);   // a hook swipe that started sideways: the ball goes back where it stood
+    // From a move: the ball stays where it was slid to for a slide then a swipe up, or goes back where it stood for a
+    // hook swipe that started sideways (see readStroke).
+    if (was === 'move') slide(touch, touch.slid || 0);
     const p = throwPoints(touch), a = p[0], b = p[p.length - 1];
     // The guide shows only while letting go would throw, so pulling back down calls it off where you can see it.
     guide = -(b.y - a.y) < 12 || Math.abs(b.x - a.x) > Math.abs(b.y - a.y) ? null : shotFrom(p, false);
@@ -388,11 +390,11 @@ const lift = e => {
   if (Math.hypot(e.clientX - end.x, e.clientY - end.y) > 2) { track(t, e); readStroke(t); }
   const as = liftAs(t), p = throwPoints(t);
   if (as === 'throw') {
-    slide(t, 0);
+    slide(t, t.slid || 0);
     const shot = shotFrom(p, true);
     if (shot) { throwBall(shot); return; }
   } else if (as === 'move') {
-    slide(t, p[p.length - 1].x - p[0].x);
+    slide(t, t.pts[t.pts.length - 1].x - t.pts[0].x);
     keep();
   } else if (as !== 'cancel') {
     // A tap, a stroke that only went down, or a flick too short to throw.
@@ -785,6 +787,7 @@ window.pinDrop = {
   get game() { return game; },
   get pins() { return pins; },
   get ball() { return ball; },
+  get shot() { return lastShot; },
   throw(shot) { if (phase === 'aim') throwBall({ x: ball.x, ...shot }); },
   set speed(v) { timeScale = v; },
   set seed(v) { fixedSeed = v; },

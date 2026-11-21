@@ -58,3 +58,52 @@ test('a backswing, a sideways-start hook and a diagonal stay as they were', () =
   // A fling that goes up first stays a throw however much it curves.
   assert.equal(liftAs(stroke([[0, -20, 2], [40, -260, 10]])), 'throw');
 });
+
+test('sliding the ball over, then swiping up in the same stroke, throws from where it was slid', () => {
+  const shot = s => throwOf(throwPoints(s));
+  for (const [what, moves] of [
+    ['80 px across, a 150 ms stop, then 250 up', [[80, 0, 8], [0, -250, 10, 150]]],
+    ['80 px across, a 150 ms stop with the finger shaking a little, then 250 up', [[80, 0, 8], [1, 1, 5], [-1, -1, 5], [0, -250, 10]]],
+    ['a sharp turn: 80 px across, then 250 up', [[80, 0, 8], [0, -250, 10]]],
+    ['a sharp turn the other way: 60 px across, then 300 up', [[-60, 0, 6], [0, -300, 10]]],
+    ['a turn rounded off over 15 px: 70 across, then 250 up', [[70, 0, 7], [10, -4, 1], [5, -11, 1], [0, -235, 10]]],
+    ['120 px across, then 250 up (more than twice as far up as the whole stroke is across never comes)', [[120, 0, 10], [0, -250, 10]]],
+    ['a wobble down, 80 across, a stop, then 250 up', [[0, 11, 1], [80, 0, 8], [0, -250, 10, 200]]],
+  ]) {
+    const s = stroke(moves);
+    assert.equal(liftAs(s), 'throw', `${what}: no throw`);
+    const p = throwPoints(s), side = moves.reduce((x, m) => (m[1] < -100 ? x : x + m[0]), 0);
+    assert.ok(Math.abs(s.slid - side) <= 6, `${what}: the ball stays ${s.slid} px over, not ${side}`);
+    assert.ok(Math.abs(p[0].x - side) <= 6, `${what}: thrown from ${p[0].x} px over`);
+    const { hook, angle } = shot(s);
+    assert.ok(Math.abs(hook) < 5 && Math.abs(angle) < 0.005, `${what}: hook ${hook.toFixed(1)}, angle ${angle.toFixed(4)}`);
+  }
+});
+
+test('a hook swipe that starts sideways and curves up is never read as sliding then throwing', () => {
+  // A curve: `side` px across (heading right), turning up through a quarter circle of radius r, then `up` px up.
+  const curve = (side, r, up) => {
+    const moves = [[side, 0, Math.max(1, Math.round(side / 10))]];
+    let px = side, py = 0;
+    for (let i = 1; i <= 12; i++) {
+      const a = i / 12 * Math.PI / 2, x = side + r * Math.sin(a), y = -r * (1 - Math.cos(a));
+      moves.push([x - px, y - py, 1]); px = x; py = y;
+    }
+    moves.push([0, -up, 10]);
+    return stroke(moves);
+  };
+  for (const [side, r, up] of [[40, 60, 250], [60, 50, 250], [80, 80, 300], [20, 150, 150], [50, 120, 200], [100, 45, 300]]) {
+    const s = curve(side, r, up);
+    assert.ok(!s.from && !s.slid, `${side} px across and a ${r} px turn read as sliding, then throwing`);
+    // (One that goes further across than half the way up moves the ball, as it always has.)
+    if (side + r > (r + up) / 2) { assert.equal(liftAs(s), 'move'); continue; }
+    assert.equal(liftAs(s), 'throw');
+    assert.ok(throwOf(throwPoints(s)).hook < -5, `${side} px across and a ${r} px turn hooked ${throwOf(throwPoints(s)).hook}`);
+  }
+  // The thumb's own arc: a 300 px swipe that leaves heading right and bows out 20% hooks as hard as ever.
+  const pts = [];
+  for (let i = 0; i <= 20; i++) { const u = i / 20; pts.push([4 * 0.2 * 300 * u * (1 - u), -300 * u]); }
+  const s = stroke(pts.slice(1).map((q, i) => [q[0] - pts[i][0], q[1] - pts[i][1], 1]));
+  assert.ok(!s.from && !s.slid);
+  assert.equal(Math.round(throwOf(throwPoints(s)).hook), -65);
+});
