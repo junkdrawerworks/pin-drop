@@ -510,7 +510,11 @@ const nineAndMiss = Array.from({ length: 18 }, (_, i) => (i % 2 ? 0 : 9));   // 
     await until(() => p.isVisible('#end'), 20000, 'no end of the game');
     assert.deepEqual([await p.textContent('#endTitle'), await p.textContent('#endLine')], ['Ana and Cal tie!', '90 each · a new best here']);
     assert.deepEqual(await p.$$eval('#endCards .row .name em', els => els.map(e => e.textContent)), ['Tied', 'Tied']);
-    await p.click('#toTitle');
+    // Bowl again: each stands where they stood.
+    await p.evaluate(() => { pinDrop.game.players[0].x = -6; pinDrop.game.players[1].x = 9; });
+    await p.click('#again');
+    assert.deepEqual(await p.evaluate(() => [pinDrop.ball.x, pinDrop.game.players.map(q => [q.x, q.rolls.length])]), [-6, [[-6, 0], [9, 0]]], 'Bowl again moved the players');
+    await p.click('#menuBtn'); await p.click('#menuQuit'); await p.click('#menuQuit');
     assert.equal(await p.textContent('#record .best'), 'Best game · Ana & Cal90');
   } finally { await c.close(); }
 }

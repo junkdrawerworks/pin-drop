@@ -91,9 +91,10 @@ function follow(x, dt) {
 
 // ---- A game --------------------------------------------------------------------------------------------
 
-function startGame(names) {
+// A new game for these players, each standing where `spots` says (Bowl again keeps where each one stood).
+function startGame(names, spots = []) {
   hush();
-  game = { players: names.map(name => ({ name, rolls: [], x: 0 })), turn: 0, leftover: null };
+  game = { players: names.map((name, i) => ({ name, rolls: [], x: spots[i] || 0 })), turn: 0, leftover: null };
   told = new Set(); toldHook = new Set();
   store.names = names;
   keep();
@@ -641,7 +642,7 @@ $('menuQuit').addEventListener('click', () => {
   store.current = null; save(store);
   titleScreen();
 });
-$('again').addEventListener('click', () => startGame(game.players.map(q => q.name)));
+$('again').addEventListener('click', () => startGame(game.players.map(q => q.name), game.players.map(q => q.x)));
 $('toTitle').addEventListener('click', titleScreen);
 
 addEventListener('resize', () => { view.resize(); view.setCamera(camT, followX); });
