@@ -443,6 +443,8 @@ function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<':
 // ---- Sheets --------------------------------------------------------------------------------------------
 
 const sheets = ['title', 'menu', 'howSheet', 'board', 'end'];
+// One How to play: the title's folded-up copy is the sheet's list.
+document.querySelector('#title .how ul').innerHTML = document.querySelector('#howSheet .howlist').innerHTML;
 function show(id) {
   for (const s of sheets) $(s).hidden = s !== id;
   paused = id === 'menu' || id === 'howSheet' || id === 'board';

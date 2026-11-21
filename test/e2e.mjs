@@ -58,6 +58,10 @@ await page.evaluate(() => document.fonts.ready);
 
 // The title: two players.
 assert.equal(await page.isVisible('#title'), true, 'the title sheet shows first');
+// How to play says the same on the title as in the menu, and covers a trackpad.
+const howTitle = await page.$$eval('#title .how li', els => els.map(e => e.textContent));
+assert.deepEqual(howTitle, await page.$$eval('#howSheet .howlist li', els => els.map(e => e.textContent)));
+assert.ok(howTitle.some(t => /trackpad/.test(t)), 'How to play says nothing about a trackpad');
 await page.click('#addPlayer');
 await page.fill('#players li:nth-child(1) input', 'Ana');
 await page.fill('#players li:nth-child(2) input', 'Ben');
