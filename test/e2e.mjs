@@ -1821,7 +1821,7 @@ for (const motion of ['reduce', 'no-preference']) {
     await p.evaluate(() => { pinDrop.speed = 10; pinDrop.throw({ x: 14, speed: 300, angle: 0.02, hook: 0 }); });
     await until(() => p.evaluate(() => { if (pinDrop.phase === 'aim') pinDrop.throw({ x: 14, speed: 300, angle: 0.02, hook: 0 }); return !document.getElementById('end').hidden; }), 30000, 'no end of the game');
     assert.equal(await focus(), 'end endTitle Ana and Ben tie!');
-    assert.equal(await p.getAttribute('#end', 'aria-describedby'), 'endLine');
+    assert.equal(await p.getAttribute('#end', 'aria-describedby'), 'endBadge endLine');   // the badge, when there's a new best
     // Bowl again: on the lane, the focus on the menu button.
     await p.click('#again');
     assert.equal(await focus(), 'hud menuBtn');
