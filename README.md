@@ -25,7 +25,7 @@ thrown straight at the head pin.
   cartwheels across the deck taking out its neighbours, bounces off the side walls or drops into the pit or gutter. A
   soft hit makes a pin wobble, and it may or may not go. Real leaves turn up: the 10 pin, the 4–7, the 7–10 split.
 - **Real scoring.** Ten frames, strikes and spares with their bonus balls, a tenth frame with fill balls. The card
-  marks X, / and −, and calls out doubles, turkeys and splits.
+  marks X, / and -, and calls out doubles, turkeys and splits.
 - **Up to four players** pass the phone round, each with their own ball colour. Pin Drop keeps your best game and your
   last few scores, and a game you leave half-way carries on where you were.
 - **Sound** is made on the spot (the rumble of the ball, the clatter of the pins, the pinsetter), with a switch in the
@@ -41,19 +41,22 @@ npm test                           # the scoring and physics in Node, then the g
                                    # (needs Playwright, and npm install first)
 node tools/screenshots.mjs         # README screenshots and og.png (npm install first)
 node tools/make-icons.mjs          # the PNG icons from icon.svg
-npm run build                      # dist/artifact.html, the whole game in one file (npm install first)
+npm run build                      # the whole game in one file (npm install first): dist/pin-drop.html to open
+                                   # by double-clicking, and dist/artifact.html without the page around it
 ```
 
 GitHub Pages serves it from `main`, at its own address set by `CNAME`.
 
 ### Files
 
-- `index.html`: the page, its sheets (title, menu, scorecard, end of game) and the scorecard along the top.
+- `index.html`: the page, its sheets (title, How to play, menu, scorecard, end of game) and the scorecard along the top.
 - `js/physics.js`: the lane, the ball and the pins, in inches seen from above: oil and hook, pin collisions as
   capsules, toppling and wobbling. Seeded, so the same throw always plays out the same way.
 - `js/render.js`: draws the alley in perspective from behind the ball, with the camera following it to the pins.
 - `js/scoring.js`: frames, marks, running totals, the tenth frame and splits, all worked out from the list of balls.
-- `js/main.js`: turns, the swipe, the pinsetter's sweep, callouts and the sheets.
+- `js/main.js`: turns, following the finger on the lane, the pinsetter's sweep, callouts and the sheets.
+- `js/swipe.js`: reading a swipe: whether a stroke slides the ball or throws it (a backswing included), and the
+  throw's speed, aim and hook.
 - `js/sound.js`: every sound, made with Web Audio.
 - `js/store.js`: what's kept on this device, under `pin-drop.v1`.
 - `css/app.css`: the look.
@@ -61,8 +64,12 @@ GitHub Pages serves it from `main`, at its own address set by `CNAME`.
   both under the SIL Open Font License, served from here so nothing loads from elsewhere.
 - `sw.js`: the offline copy. `manifest.webmanifest` and the icons: installing it to a home screen.
 - `test/`: `scoring.test.mjs` (rules and physics), `swipe.test.mjs` (reading a stroke as a move or a throw, as the
-  finger moves), `standing.test.mjs` (no pin left standing off the deck),
-  `store.test.mjs` (what's kept, with two windows open) and `e2e.mjs` (a whole two-player game in Chromium, strikes
-  in a four-player tenth frame, carrying on after a reload at any moment, two windows open at once, offline,
-  installable). `aim.mjs` finds the angle into the pocket for both.
+  finger moves), `standing.test.mjs` (no pin left standing off the deck), `clean.test.mjs` (every ball ends clean,
+  thrown from every corner of what a swipe can make: everything settled, nothing still wobbling, and the next rack
+  just what was left), `store.test.mjs` (what's kept, with two windows open), `build.mjs` (the one-file copy, built
+  and played from file://) and `e2e.mjs` (a whole two-player game in Chromium, three players, strikes in a
+  four-player tenth frame and a spare in a one-player one, carrying on after a reload at any moment, every sound
+  finishing, two windows open at once, offline, installable). `aim.mjs` aims the tests' balls: the angle that sends a
+  ball through a spot at the head pin, and the pocket ball, 2.5 in right of the head pin's middle, that strikes about
+  half the time.
 - `tools/`: screenshots, icons and the one-file build.
