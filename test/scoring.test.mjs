@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { frames, next, total, best, isSplit } from '../js/scoring.js';
-import { play, rack, Sim } from '../js/physics.js';
+import { play, rack, Sim, rng } from '../js/physics.js';
 
 test('an all-gutter game is 0 and a perfect game is 300', () => {
   assert.equal(total(Array(20).fill(0)), 0);
@@ -73,6 +73,18 @@ test('splits', () => {
 test('the same throw plays out the same way every time', () => {
   const shot = { x: 8, speed: 290, angle: 0.004, hook: -35 };
   assert.deepEqual(play(rack(), shot, 42).standing, play(rack(), shot, 42).standing);
+});
+
+// The page steps the lane once a frame, and frames never come exactly 1/60 s apart: the same seed and throw still
+// play out the same way, as they do in play() (pinDrop.seed relies on it).
+test('the same throw plays out the same way whatever the frame times', () => {
+  const shot = { x: 10, speed: 290, angle: 0.0286, hook: -40 };
+  const jitter = rng(7);
+  for (let seed = 1; seed <= 20; seed++) {
+    const sim = new Sim(rack(), shot, seed);
+    while (!sim.settled) sim.step(1 / 60 + (jitter() - 0.5) * 0.004);
+    assert.deepEqual(sim.standing, play(rack(), shot, seed).standing, `seed ${seed}`);
+  }
 });
 
 test('a ball down the middle of the gutter knocks nothing over', () => {

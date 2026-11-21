@@ -59,16 +59,20 @@ export class Sim {
     this.pins = pins;
     this.ball = { x, y: 6, vx: speed * Math.sin(angle), vy: speed * Math.cos(angle), spin: hook, state: 'lane', roll: 0, hookAt: null };
     this.t = 0;
+    this.acc = 0;         // time not yet stepped
     this.rand = rng(seed);
     this.events = [];     // hits and drops since the last read, for the sound
     this.hitPins = false;
     this.release = speed;
   }
 
-  // Moves everything on by dt seconds (in small steps).
+  // Moves everything on by dt seconds, in steps of exactly 1/600 s. Whatever doesn't make a whole step waits for the
+  // next call, so frames that come at uneven times run the same steps (and draw the same random numbers) as even ones,
+  // and the same seed always plays out the same way.
   step(dt) {
     const h = 1 / 600;
-    for (let left = dt; left > 1e-9; left -= h) this.tick(Math.min(h, left));
+    this.acc += dt;
+    while (this.acc >= h - 1e-12) { this.tick(h); this.acc -= h; }
   }
 
   tick(dt) {
