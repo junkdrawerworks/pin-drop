@@ -30,6 +30,11 @@ let lastShot = null;      // the ball being bowled, as it was thrown
 let paused = false;
 let followX = 0;          // how far across the lane the camera follows the ball, eased so it never jumps
 let timeScale = 1, fixedSeed = null;
+// A tap on the lane after a ball plays the rest of the wait (the pins settling, the sweep and the camera coming back)
+// HURRY times as fast, until the next ball is aimed.
+const HURRY = 4;
+let hurry = false;
+const hurrying = () => hurry && (phase === 'settle' || phase === 'sweep' || phase === 'return');
 
 function idle(x) { return { x, y: 6, state: 'lane', roll: 0, vx: 0, vy: 0 }; }
 const current = () => game.players[game.turn];
@@ -49,7 +54,7 @@ function loop(now) {
   // fixed slices however long the frame, so it plays out the same); a longer gap, as after a stall, is held back.
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
-  if (!paused) update(dt * timeScale);
+  if (!paused) update(dt * timeScale * (hurrying() ? HURRY : 1));
   // A hand over the lane while there's a ball to pick up, closed while it's held.
   document.body.classList.toggle('aiming', phase === 'aim' && !paused);
   document.body.classList.toggle('dragging', !!touch);
@@ -153,7 +158,7 @@ function resumeGame() {
 
 // Ready for the next ball: the rack it faces, the ball where this player last stood.
 function aim() {
-  phase = 'aim'; phaseT = 0; camT = 0; followX = 0;
+  phase = 'aim'; phaseT = 0; camT = 0; followX = 0; hurry = false;
   view.setCamera(0);
   ball = idle(current().x || 0);
   sim = null; guide = null; sweep = null;
@@ -297,7 +302,7 @@ function startSweep() {
   phase = 'sweep'; phaseT = 0;
   sweep = { on: false, y: LANE.head - 28, z: 26, swapped: false };
   for (const p of pins) if (p.state === 'gutter') p.state = 'pit';
-  sound.sweep();
+  sound.sweep(hurry ? HURRY : 1);
 }
 
 function runSweep() {
@@ -514,15 +519,18 @@ canvas.addEventListener('pointerdown', e => {
   // The main button, or the right one: pressing a trackpad down with two fingers is a right click, and some people
   // hold the ball that way. (The menu that would pop up is kept shut, below.) Not the middle button.
   if (e.pointerType === 'mouse' && e.button !== 0 && e.button !== 2) return;
+  // A tap while the pins settle, the pinsetter sweeps or the camera comes back hurries the rest of it on.
+  if (!paused && !hurry && (phase === 'settle' || phase === 'sweep' || phase === 'return')) { hurry = true; sound.hurry(); }
   // A flick at the end of the camera's way back, once the ball is coming onto the screen (0.65 s in, on a phone or a
-  // tablet either way up): the camera jumps the rest of the way so the flick throws. Before then there's no ball to
-  // flick at yet.
+  // tablet either way up): the camera jumps the rest of the way so the flick throws. One started earlier on its way
+  // back is followed all the same, and counts once aiming begins (see lift).
   if (phase === 'return' && !paused && phaseT >= 0.65) aim();
-  if (phase !== 'aim' || paused) return;
+  if ((phase !== 'aim' && phase !== 'return') || paused) return;
   try { canvas.setPointerCapture(e.pointerId); } catch { /* fine without */ }
   // `extra`: another finger was already down, so this one tapping or brushing the lane gets no word about it.
   // `gain`: a mouse or trackpad flick counts harder (see MOUSE in swipe.js).
-  strokes.set(e.pointerId, { ...stroke(e, performance.now()), id: e.pointerId, x0: ball.x, extra: strokes.size > 0, gain: e.pointerType === 'mouse' ? MOUSE : 1 });
+  // `early`: it began as the camera came back, so a tap that only hurried things on gets no word about how to throw.
+  strokes.set(e.pointerId, { ...stroke(e, performance.now()), id: e.pointerId, x0: ball.x, extra: strokes.size > 0, early: phase === 'return', gain: e.pointerType === 'mouse' ? MOUSE : 1 });
   leading();
 });
 // Each finger position an event brings, with the times it happened (see addPoints in swipe.js).
@@ -573,14 +581,16 @@ const lift = e => {
   const end = t.pts[t.pts.length - 1];
   if (Math.hypot(e.clientX - end.x, e.clientY - end.y) > 2) { track(t, e); readStroke(t); }
   const as = liftAs(t), p = throwPoints(t);
+  if (phase !== 'aim' && phase !== 'return') return;   // thrown already, by another finger
   if (as === 'throw') {
+    if (phase === 'return') aim();   // a flick begun as the camera came back, ended before it got there
     if (led) slide(t, t.slid || 0);
     const shot = shotFrom(p, true, t.gain);
     if (shot) { dropStrokes(); throwBall(shot); return; }
   } else if (as === 'move') {
     if (led) slide(t, t.pts[t.pts.length - 1].x - t.pts[0].x);
     keep();
-  } else if (as === 'short' || (as !== 'cancel' && !t.extra && !strokes.size)) {
+  } else if (!t.early && (as === 'short' || (as !== 'cancel' && !t.extra && !strokes.size))) {
     // A tap, a stroke that only went down, or a flick too short to throw. (Not a tap or a brush from a finger that
     // came down while another was on the lane, or that lifts while one still is: that's a hand holding the phone.)
     const mouse = e.pointerType === 'mouse';

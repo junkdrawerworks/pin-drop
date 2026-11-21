@@ -184,13 +184,24 @@ export function clunk() {
   burst(white, 3200, 8, 0.05, 0.015, t);
 }
 
-// The pinsetter's whirr.
-export function sweep() {
+// The pinsetter's whirr, `rate` times as fast when it's hurried (see hurry()).
+let whirr = null;
+export function sweep(rate = 1) {
   if (!ctx || !on) return;
   const t = ctx.currentTime;
   const src = ctx.createBufferSource(); src.buffer = noise;
   const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = 320; bp.Q.value = 2;
   const g = ctx.createGain();
-  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.25, t + 0.3); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.4);
-  src.connect(bp); bp.connect(g); g.connect(master); src.start(t, 0, 1.5);
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.25, t + 0.3 / rate); g.gain.exponentialRampToValueAtTime(0.0001, t + 1.4 / rate);
+  src.connect(bp); bp.connect(g); g.connect(master); src.start(t, 0, 1.5 / rate);
+  whirr = { g, end: t + 1.4 / rate };
+}
+// A tap hurried the pinsetter on: its whirr dies away now rather than outlasting it.
+export function hurry() {
+  if (!ctx || !whirr || ctx.currentTime >= whirr.end) return;
+  const t = ctx.currentTime, g = whirr.g.gain;
+  g.cancelScheduledValues(t);
+  g.setValueAtTime(Math.max(0.0001, g.value), t);
+  g.exponentialRampToValueAtTime(0.0001, t + 0.15);
+  whirr = null;
 }

@@ -482,7 +482,8 @@ const state = p => p.evaluate(() => ({ phase: pinDrop.phase, x: pinDrop.ball.x }
 }
 
 // A flick made as the camera comes back to the ball, once the ball is coming onto the screen (0.65 s into the 0.85 s
-// return), throws: it used to be dropped without a word. Earlier in the return, with no ball in sight, it's too soon.
+// return), throws: it used to be dropped without a word. One made earlier in the return, before the ball is in sight,
+// counts too, once aiming begins (here, with the clock stopped, as the finger lifts).
 {
   const { c, p, cdp } = await lane({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   try {
@@ -495,9 +496,9 @@ const state = p => p.evaluate(() => ({ phase: pinDrop.phase, x: pinDrop.ball.x }
         if (pinDrop.phase === 'return' && pinDrop.phaseT >= at) { pinDrop.speed = 0; done(pinDrop.phaseT); } else requestAnimationFrame(frame);
       })();
     }), at);
-    const early = await into(0.5);
+    const early = await into(0.3);
     await touchStroke(cdp, [[0, -280, 6]]);
-    assert.equal((await state(p)).phase, 'return', `a flick ${early.toFixed(2)} s into the return, before the ball is back, did something`);
+    assert.equal((await state(p)).phase, 'rolling', `a flick ${early.toFixed(2)} s into the return, before the ball is back, threw nothing`);
     await p.evaluate(() => { pinDrop.speed = 4; });
     await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
     const late = await into(0.7);
@@ -505,6 +506,56 @@ const state = p => p.evaluate(() => ({ phase: pinDrop.phase, x: pinDrop.ball.x }
     await touchStroke(cdp, [[0, -280, 6]]);
     assert.equal((await state(p)).phase, 'rolling', `a flick ${late.toFixed(2)} s into the return threw nothing`);
     assert.equal(await p.evaluate(() => pinDrop.view.cam.y), await p.evaluate(() => { pinDrop.camera(0); return pinDrop.view.cam.y; }), 'the camera was not back behind the ball for the throw');
+  } finally { await c.close(); }
+}
+
+// After a ball there are about 3.8 s of waiting (the pins settling, the sweep, the camera coming back): a tap on the
+// lane plays the rest of it four times as fast. A swipe begun as the camera comes back throws once aiming begins, and
+// a tap that only hurried things on gets no word about how to throw. The turn's call for the next player stays up as
+// long as ever.
+{
+  const { c, p, cdp } = await lane({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true }, {}, ['Ana', 'Ben']);
+  try {
+    // How long from the ball being counted to the next one being aimed, with a tap `tapAt` s into the wait (or none).
+    const waitFor = tapAt => p.evaluate(tapAt => new Promise(done => {
+      pinDrop.throw({ x: 0, speed: 290, angle: 0, hook: 0 });
+      let from = null;
+      (function frame(now) {
+        if (from === null && pinDrop.phase === 'settle') from = now;
+        if (pinDrop.phase === 'aim' && from !== null) { done((now - from) / 1000); return; }
+        requestAnimationFrame(frame);
+      })();
+    }), tapAt);
+    await p.evaluate(() => { pinDrop.speed = 4; });
+    const slow = await (async () => { const t = waitFor(); await p.evaluate(() => new Promise(r => { (function f() { if (pinDrop.phase === 'settle') { pinDrop.speed = 1; r(); } else requestAnimationFrame(f); })(); })); return t; })();
+    await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
+    // The same with a tap as the pins settle.
+    await p.evaluate(() => { pinDrop.speed = 4; });
+    const timed = waitFor();
+    await p.evaluate(() => new Promise(r => { (function f() { if (pinDrop.phase === 'settle') { pinDrop.speed = 1; r(); } else requestAnimationFrame(f); })(); }));
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 195, y: 500 }] });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    const fast = await timed;
+    assert.ok(slow > 3.4, `the wait after a ball was ${slow.toFixed(2)} s without a tap`);
+    assert.ok(fast < slow / 2.5, `a tap made the wait ${fast.toFixed(2)} s, against ${slow.toFixed(2)} s`);
+    console.log(`  the wait after a ball: ${slow.toFixed(2)} s, or ${fast.toFixed(2)} s with a tap`);
+    // The turn passed to Ben (Ana's two balls are in): his call is still up a second after his ball could be aimed.
+    await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
+    assert.equal(await p.evaluate(() => pinDrop.game.turn), 1, 'the turn did not pass to Ben');
+    await wait(1000);
+    assert.match(await p.textContent('#call'), /Ben’s turn/, 'the call for Ben\'s turn went with the hurry');
+    // A swipe begun just as the camera starts back, at the normal speed, throws once aiming begins.
+    await p.evaluate(() => { pinDrop.speed = 4; pinDrop.throw({ x: 0, speed: 290, angle: 0, hook: 0 }); });
+    await p.evaluate(() => new Promise(r => { (function f() { if (pinDrop.phase === 'return') { pinDrop.speed = 1; r(); } else requestAnimationFrame(f); })(); }));
+    await touchStroke(cdp, [[0, -10, 4], [0, -280, 10]]);
+    assert.equal((await state(p)).phase, 'rolling', 'a swipe begun as the camera came back threw nothing');
+    // A tap as the camera comes back hurries it, and isn't told how to throw.
+    await p.evaluate(() => new Promise(r => { (function f() { if (pinDrop.phase === 'return') r(); else requestAnimationFrame(f); })(); }));
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 195, y: 500 }] });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 5000, 'never ready for the next ball');
+    await wait(100);
+    assert.equal(await p.evaluate(() => document.getElementById('hint').classList.contains('nudge') && !document.getElementById('hint').hidden), false, 'a tap that hurried the camera back was told how to throw');
   } finally { await c.close(); }
 }
 

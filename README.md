@@ -37,6 +37,7 @@ thrown straight at the head pin.
 - **The pins are simulated, not decided.** Each one stands until something pushes it hard enough to tip it, then
   cartwheels across the deck taking out its neighbours, bounces off the side walls or drops into the pit or gutter. A
   soft hit makes a pin wobble, and it may or may not go. Real leaves turn up: the 10 pin, the 4–7, the 7–10 split.
+  Once the ball is in, a tap on the lane hurries the pinsetter on.
 - **Real scoring.** Ten frames, strikes and spares with their bonus balls, a tenth frame with fill balls. The card
   marks X, / and -, and calls out doubles, turkeys and splits.
 - **Up to four players** pass the phone round, each with their own ball colour. Pin Drop keeps your best game and your
