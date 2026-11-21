@@ -163,6 +163,40 @@ const nineAndMiss = Array.from({ length: 18 }, (_, i) => (i % 2 ? 0 : 9));   // 
   } finally { await c.close(); }
 }
 
+// ---- Sharing a result -----------------------------------------------------------------------------------------
+
+// Share on the end card: the phone's share sheet, with the result (the winner first, You as Me) and the game's link;
+// where there's no share sheet, the same copied, and the button says so for a moment.
+{
+  const game = { names: ['You', 'Ben'], current: { players: [
+    { name: 'You', rolls: [...nineAndMiss, 9, 0], x: 0, c: 0 },
+    { name: 'Ben', rolls: [10, ...nineAndMiss.slice(2), 9], x: 0, c: 1 },
+  ], turn: 1, leftover: null } };
+  for (const sheet of [true, false]) {
+    const { c, p } = await kept(game);
+    try {
+      if (sheet) await p.evaluate(() => { navigator.share = async d => { window.shared = d; }; });
+      else {
+        await c.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: base });
+        await p.evaluate(() => { delete Navigator.prototype.share; });
+      }
+      await p.click('#resume');
+      await gutter(p);
+      await until(() => p.isVisible('#end'), 30000, 'no end of the game');
+      assert.equal(await p.isVisible('#share'), true, 'no Share button');
+      await p.click('#share');
+      if (sheet) {
+        await until(() => p.evaluate(() => !!window.shared), 2000, 'nothing went to the share sheet');
+        assert.deepEqual(await p.evaluate(() => window.shared), { text: 'Pin Drop: Ben 100, Me 90', url: 'https://pin-drop.junkdrawer.works/' });
+      } else {
+        await until(async () => (await p.textContent('#share')) === 'Copied', 2000, 'the button never said Copied');
+        assert.equal(await p.evaluate(() => navigator.clipboard.readText()), 'Pin Drop: Ben 100, Me 90 https://pin-drop.junkdrawer.works/');
+        await until(async () => (await p.textContent('#share')) === 'Share', 4000, 'the button still says Copied');
+      }
+    } finally { await c.close(); }
+  }
+}
+
 assert.deepEqual(problems, [], 'problems while using it');
 await browser.close();
 server.close();

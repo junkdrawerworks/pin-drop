@@ -1313,6 +1313,7 @@ function showEnd() {
   $('endTally').textContent = tallyLine();
   $('endTally').hidden = !$('endTally').textContent;
   $('endCards').innerHTML = boardHTML(true);
+  clearTimeout(sharedTimer); $('share').textContent = 'Share';
   show('end');
   $('hud').hidden = true; $('others').hidden = true;
   if (best) buzz([40, 60, 40]);   // a best, or a perfect game
@@ -1414,6 +1415,28 @@ $('again').addEventListener('click', () => {
   startGame([...lineup.slice(1), lineup[0]]);
 });
 $('toTitle').addEventListener('click', titleScreen);
+
+// Share: the result in a line, "Pin Drop: Ben 131, Ana 121", the winner first, and the game's link, through the phone's
+// share sheet, or where there's none, copied ("Copied" on the button for a moment). Someone still called You is "Me".
+const LINK = 'https://pin-drop.junkdrawer.works/';
+let sharedTimer = 0;
+function shareLine() {
+  const names = game.players.map(q => ({ name: isYou(q.name) ? 'Me' : q.name, score: scoreOf(q) })).sort((a, b) => b.score - a.score);
+  return `Pin Drop: ${names.map(q => `${q.name} ${q.score}`).join(', ')}`;
+}
+async function share() {
+  const text = shareLine();
+  if (navigator.share) {
+    try { await navigator.share({ text, url: LINK }); } catch { /* closed without sharing */ }
+    return;
+  }
+  try { await navigator.clipboard.writeText(`${text} ${LINK}`); } catch { return; }
+  $('share').textContent = 'Copied';
+  clearTimeout(sharedTimer);
+  sharedTimer = setTimeout(() => { $('share').textContent = 'Share'; }, 2000);
+}
+$('share').addEventListener('click', share);
+$('share').hidden = !navigator.share && !navigator.clipboard?.writeText;
 // Escape closes the menu, How to play and the scorecard as their buttons do, and on the lane it opens the menu.
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape' || e.defaultPrevented) return;
