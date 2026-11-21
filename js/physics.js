@@ -257,7 +257,8 @@ export class Sim {
   // Everything has come to rest (or the time's up).
   get settled() {
     if (this.t > 9) return true;
-    if (this.ball.state === 'lane' || (this.ball.state === 'gutter' && this.ball.y < LANE.deck)) return false;
+    // A gutter ball runs on past the deck into the pit, rather than stopping in the channel beside the 7 or 10 pin.
+    if (this.ball.state === 'lane' || this.ball.state === 'gutter') return false;
     return this.pins.every(p => {
       if (p.state === 'gutter' || p.state === 'pit') return true;
       if (p.state === 'falling' || p.fallAt) return false;

@@ -87,9 +87,11 @@ test('the same throw plays out the same way whatever the frame times', () => {
   }
 });
 
-test('a ball down the middle of the gutter knocks nothing over', () => {
+test('a ball down the middle of the gutter knocks nothing over, and runs on into the pit', () => {
   const sim = play(rack(), { x: 14, speed: 300, angle: 0.02, hook: 0 }, 1);
   assert.equal(sim.standing.length, 10);
+  // Not left lying in the channel beside the 7 pin while the pins are counted.
+  assert.equal(sim.ball.state, 'pit');
 });
 
 test('hooking into the pocket strikes far more often than a straight ball at the head pin', () => {
