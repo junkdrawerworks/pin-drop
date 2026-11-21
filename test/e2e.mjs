@@ -266,7 +266,7 @@ const state = p => p.evaluate(() => ({ phase: pinDrop.phase, x: pinDrop.ball.x }
     // A ball thrown at the slowest speed gets a word under the callout, once in the game.
     const slowBall = async () => {
       await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
-      await p.evaluate(() => pinDrop.throw({ x: 0, speed: 175, angle: 0, hook: 0 }));
+      await p.evaluate(() => pinDrop.throw({ x: 14, speed: 175, angle: 0.02, hook: 0 }));
       await until(() => p.evaluate(() => pinDrop.phase === 'settle' || pinDrop.phase === 'over'), 20000, 'the slow ball never finished');
       return p.textContent('#call');
     };
