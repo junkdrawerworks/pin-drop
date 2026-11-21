@@ -497,6 +497,25 @@ for (const [width, height, insets] of [[390, 844, { top: 47, bottom: 34, left: 0
   } finally { await c.close(); }
 }
 
+// On a phone that only manages about ten frames a second, the ball still rolls at full speed: in 1.5 s it has rolled
+// for more than 1.2 s of the game (a frame's step was capped at 1/30 s, so the whole roll played at a third of the speed).
+{
+  const c = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  await c.addInitScript(() => { const raf = window.requestAnimationFrame.bind(window); window.requestAnimationFrame = cb => setTimeout(() => raf(cb), 90); });
+  const p = await c.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  try {
+    await p.goto(base);
+    await p.click('#start');
+    await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 5000, 'never on the lane');
+    await p.evaluate(() => { pinDrop.seed = 1; pinDrop.throw({ x: 10, speed: 290, angle: 0.03, hook: -45 }); });
+    const t0 = await p.evaluate(() => pinDrop.phaseT);
+    await wait(1500);
+    const rolled = await p.evaluate(t0 => pinDrop.phase === 'rolling' && pinDrop.phaseT - t0, t0);
+    assert.ok(rolled > 1.2, `at ten frames a second the ball rolled for ${rolled} s of the game in 1.5 s`);
+  } finally { await c.close(); }
+}
+
 // A seed that makes the pocket ball strike, and one that makes a ball at the head pin leave some pins, in node: the
 // page plays the same seed and throw out exactly the same way.
 const strikeSeed = [...Array(100).keys()].find(k => play(rack(), pocket, k + 1).standing.length === 0) + 1;

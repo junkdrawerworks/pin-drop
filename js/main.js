@@ -38,7 +38,9 @@ const colourOf = i => BALL_COLOURS[i % BALL_COLOURS.length];
 
 let last = performance.now();
 function loop(now) {
-  const dt = Math.min(1 / 30, (now - last) / 1000);
+  // Up to a tenth of a second a frame, so a phone that can't keep up still rolls at full speed (the physics steps in
+  // fixed slices however long the frame, so it plays out the same); a longer gap, as after a stall, is held back.
+  const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
   if (!paused) update(dt * timeScale);
   // A hand over the lane while there's a ball to pick up, closed while it's held.
