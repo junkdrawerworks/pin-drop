@@ -181,6 +181,8 @@ test('a ball down the middle of the gutter knocks nothing over, and runs on into
   assert.equal(sim.ball.state, 'pit');
 });
 
+// A ball hooked into the pocket, 2.5 in right of the middle of the head pin, strikes about half the time (19 of these
+// 40 seeds); one thrown straight at the middle of the head pin hardly ever does (1 of 40).
 test('hooking into the pocket strikes far more often than a straight ball at the head pin', () => {
   const rate = (x0, xh, hook) => {
     const angle = through(x0, xh, hook);
@@ -188,7 +190,7 @@ test('hooking into the pocket strikes far more often than a straight ball at the
     for (let seed = 1; seed <= 40; seed++) if (play(rack(), { x: x0, speed: 290, angle, hook }, seed).standing.length === 0) n++;
     return n / 40;
   };
-  const pocket = rate(10, 1.5, -40), head = rate(0, 0, 0);
+  const pocket = rate(10, 2.5, -40), head = rate(0, 0, 0);
   assert.ok(pocket >= 0.3, `pocket strikes ${pocket}`);
   assert.ok(head <= 0.1, `head-on strikes ${head}`);
   assert.ok(pocket > head + 0.25);
@@ -197,7 +199,7 @@ test('hooking into the pocket strikes far more often than a straight ball at the
 // Strike! and Spare! are called as soon as no pin is left standing, before everything stops: so a pin that has started
 // to go over must never stand again, and one that's only wobbling (it may still go, or not) must still count as standing.
 test('a pin that has gone over never stands again, so a cleared deck is known before it stops', () => {
-  const shots = [{ x: 10, speed: 290, angle: through(10, 1.5, -40), hook: -40 }, { x: 0, speed: 290, angle: 0, hook: 0 },
+  const shots = [{ x: 10, speed: 290, angle: through(10, 2.5, -40), hook: -40 }, { x: 0, speed: 290, angle: 0, hook: 0 },
     { x: -8, speed: 220, angle: through(-8, -2, 30, 220), hook: 30 }, { x: 12, speed: 260, angle: through(12, 5, -20, 260), hook: -20 }];
   let cleared = 0, wobbly = 0;
   for (const shot of shots) {
