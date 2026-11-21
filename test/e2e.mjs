@@ -559,6 +559,31 @@ const state = p => p.evaluate(() => ({ phase: pinDrop.phase, x: pinDrop.ball.x }
   } finally { await c.close(); }
 }
 
+// While a second ball is aimed, the pins left show under the scorecard as ten dots, the standing ones filled in: gone
+// as it's thrown, and not there for a fresh rack.
+{
+  const { c, p } = await lane({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  try {
+    assert.equal(await p.isVisible('#leave'), false, 'the pins left show for a fresh rack');
+    await p.evaluate(({ headOn, seed }) => { pinDrop.speed = 4; pinDrop.seed = seed; pinDrop.throw(headOn); }, { headOn, seed: leaveSeed });
+    await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
+    const left = await p.evaluate(() => pinDrop.pins.filter(q => q.state === 'up').map(q => q.id));
+    assert.ok(left.length >= 2, `seed ${leaveSeed} left ${left.length} pins`);
+    assert.equal(await p.isVisible('#leave'), true, 'no pins left under the scorecard for the second ball');
+    const dots = await p.$$eval('#leave circle', els => els.map(e => e.classList.contains('up')));
+    assert.deepEqual(dots.map((up, i) => up ? i + 1 : 0).filter(Boolean), left.sort((a, b) => a - b), 'the dots filled in are not the pins left');
+    assert.match(await p.getAttribute('#leave', 'aria-label'), new RegExp(`^Pins left: .*${left.at(-1)}$`));
+    // It sits under the scorecard, clear of it, and above the pins at the far end.
+    const box = await p.evaluate(() => { const r = document.getElementById('leave').getBoundingClientRect(), k = document.getElementById('card').getBoundingClientRect(); return { top: r.top, bottom: r.bottom, card: k.bottom }; });
+    const pinsAt = await p.evaluate(() => pinDrop.view.p(0, 720 + 3 * 10.392, 15)[1]);
+    assert.ok(box.top >= box.card && box.bottom < pinsAt, `the pins left sit at ${box.top}-${box.bottom} px, the card ends at ${box.card} and the pins start at ${pinsAt}`);
+    await p.evaluate(() => pinDrop.throw({ x: 14, speed: 300, angle: 0.02, hook: 0 }));
+    assert.equal(await p.isVisible('#leave'), false, 'the pins left stayed up as the ball rolled');
+    await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
+    assert.equal(await p.isVisible('#leave'), false, 'the pins left show for the next frame\'s fresh rack');
+  } finally { await c.close(); }
+}
+
 // The hint sits just under the ball, or just above it where there's no room under it: on a phone on its side with a
 // home bar (an inset at the bottom of the screen) it covered the bottom of the ball.
 for (const [width, height, insets] of [[390, 844, { top: 47, bottom: 34, left: 0, right: 0 }], [844, 390, { top: 0, bottom: 21, left: 47, right: 47 }], [844, 390], [820, 1180], [1180, 820]]) {

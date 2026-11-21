@@ -1,5 +1,5 @@
 // Pin Drop: the game around the lane. Turns and frames, the swipe, the pinsetter, the scorecards and the sheets.
-import { Sim, rack, LANE, BALL_R, BOARD } from './physics.js';
+import { Sim, rack, LANE, BALL_R, BOARD, SPOTS } from './physics.js';
 import { Renderer, BALL_COLOURS } from './render.js';
 import { frames, next, total, pending, isSplit, callFor, cardText } from './scoring.js';
 import * as sound from './sound.js';
@@ -179,6 +179,7 @@ function throwBall(shot) {
   sim = new Sim(pins, shot, fixedSeed ?? ((Math.random() * 2 ** 31) | 0));
   lastShot = shot;
   phase = 'rolling'; phaseT = 0; camT = 0;
+  leaveCard();
   slow = shot.speed <= 185;   // the slowest a swipe throws is 170
   nudgeText = '';
   hint();
@@ -724,6 +725,19 @@ function hud() {
   $('others').hidden = others.length === 0;
   $('others').innerHTML = others.map(({ q, i }) =>
     `<span><i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${colourOf(i)[0]};margin-right:5px"></i>${esc(q.name)} <b>${sumHTML(q.rolls)}</b></span>`).join('');
+  leaveCard();
+}
+
+// While a second ball (or a ball in the tenth that doesn't face a fresh rack) is aimed: the pins as ten dots, the way
+// an alley's screen shows them, the standing ones filled in and the fallen ones as rings, the head pin nearest.
+const ROWS = [0, 1, 1, 2, 2, 2, 3, 3, 3, 3];
+function leaveCard() {
+  const el = $('leave'), st = game && next(current().rolls);
+  el.hidden = !(phase === 'aim' && st && !st.fresh && !st.done);
+  if (el.hidden) return;
+  const up = pins.filter(p => p.state === 'up').map(p => p.id).sort((a, b) => a - b);
+  el.firstElementChild.innerHTML = SPOTS.map((s, i) => `<circle cx="${s.x}" cy="${(3 - ROWS[i]) * 6}" r="2.6"${up.includes(i + 1) ? ' class="up"' : ''}/>`).join('');
+  el.setAttribute('aria-label', up.length ? `Pins left: ${up.length === 1 ? up[0] : `${up.slice(0, -1).join(', ')} and ${up.at(-1)}`}` : 'No pins left');
 }
 
 function boardHTML(withBest) {
