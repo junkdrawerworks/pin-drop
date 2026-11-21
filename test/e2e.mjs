@@ -292,7 +292,7 @@ const state = p => p.evaluate(() => ({ phase: pinDrop.phase, x: pinDrop.ball.x }
       await until(() => p.evaluate(() => pinDrop.phase === 'settle' || pinDrop.phase === 'over'), 20000, 'the slow ball never finished');
       return p.textContent('#call');
     };
-    assert.match(await slowBall(), /Flick faster for a harder throw/);
+    assert.match(await slowBall(), /Flick faster for a harder throw$/);
     assert.doesNotMatch(await slowBall(), /Flick faster/, 'the word about slow balls came twice in a game');
   } finally { await c.close(); }
 }
@@ -307,15 +307,15 @@ const state = p => p.evaluate(() => ({ phase: pinDrop.phase, x: pinDrop.ball.x }
     // The hint, in a mouse's words: hold the click.
     assert.match(await p.textContent('#hint'), /hold the click and flick up to roll/);
     // Gliding up the trackpad without the click held, and a two-finger swipe (wheel events), throw nothing but say
-    // what does.
+    // what does: on a trackpad, one finger holds the click and another flicks.
     for (let i = 1; i <= 8; i++) { await mouse.move(640, 640 - i * 20); await wait(16); }
-    assert.equal(await p.textContent('#hint'), 'Hold the click down while you flick up', 'gliding up without the click got no word');
+    assert.equal(await p.textContent('#hint'), 'Hold the click as you flick up (on a trackpad, hold with one finger, flick with another)', 'gliding up without the click got no word');
     await wait(4100);   // one word every four seconds at most
     await mouse.move(640, 640);
     for (let i = 0; i < 5; i++) { await mouse.wheel(0, -60); await wait(16); }
     await wait(50);
     assert.equal(await p.isVisible('#hint'), true);
-    assert.equal(await p.textContent('#hint'), 'Hold the click down while you flick up', 'a two-finger swipe got no word');
+    assert.equal(await p.textContent('#hint'), 'On a trackpad, press with one finger and flick up with another', 'a two-finger swipe got no word');
     assert.equal((await state(p)).phase, 'aim');
     // A right-button drag up (a trackpad pressed down with two fingers) throws too, and no menu pops up over the
     // lane. The middle button doesn't pick the ball up.
@@ -332,6 +332,12 @@ const state = p => p.evaluate(() => ({ phase: pinDrop.phase, x: pinDrop.ball.x }
     await wait(50);
     assert.equal((await state(p)).phase, 'rolling', 'a right-button drag (two fingers pressing a trackpad) threw nothing');
     assert.equal(await p.evaluate(() => window.menuBlocked), true, 'the context menu opens over the lane');
+    // A slow ball thrown with a mouse or trackpad: the word about it says how to flick faster on a trackpad.
+    await p.evaluate(() => { pinDrop.speed = 10; });
+    await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
+    await p.evaluate(() => pinDrop.throw({ x: 14, speed: 175, angle: 0.02, hook: 0 }));
+    await until(() => p.evaluate(() => pinDrop.phase === 'settle' || pinDrop.phase === 'over'), 20000, 'the slow ball never finished');
+    assert.match(await p.textContent('#call'), /Flick faster: on a trackpad, hold with one finger and flick with another/);
   } finally { await c.close(); }
 }
 

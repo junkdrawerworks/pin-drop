@@ -16,8 +16,8 @@ thrown straight at the head pin.
 ## How it plays
 
 - **Drag the ball sideways** to choose where you stand, then **swipe up to roll**. While you swipe, a dotted line shows
-  where the ball will start and an arrow shows which way it'll hook. With a trackpad or mouse, hold the click down while
-  you flick up.
+  where the ball will start and an arrow shows which way it'll hook. On a trackpad, press and hold with one finger and
+  flick up with another; with a mouse, hold the button down as you flick up.
 - **Hook is everything.** Bend your swipe and the ball keeps that side spin through the oil on the front 40 feet, then
   grips the dry back end and curves. Coming into the pocket at an angle (just right of the head pin, for a ball that
   hooks left) is how strikes happen. Straight balls leave more splits.

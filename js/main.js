@@ -173,8 +173,10 @@ function scoreBall() {
 function callout(st, p, knocked, left) {
   readout('');
   const cleared = left.length === 0;
-  // A ball at about the slowest speed there is: say how to throw harder, once a game for each player.
-  const tip = slow && !cleared && !told.has(game.turn) ? 'Flick faster for a harder throw' : '';
+  // A ball at about the slowest speed there is: say how to throw harder, once a game for each player. With a mouse or
+  // trackpad, a flick with a finger while another holds the click is quicker than dragging with the one pressing.
+  const faster = clicking() ? 'Flick faster: on a trackpad, hold with one finger and flick with another' : 'Flick faster for a harder throw';
+  const tip = slow && !cleared && !told.has(game.turn) ? faster : '';
   if (tip) told.add(game.turn);
   if (st.fresh) {
     if (cleared) {
@@ -277,21 +279,28 @@ function nudge(text) {
   hint();
 }
 
-// Two fingers sliding on a trackpad scroll (wheel events), which does nothing here. (Pinching to zoom sends wheel
-// events with ctrlKey set: that's the browser's business.)
+// What to do on a trackpad: one finger holds the click down while another flicks. (Pressing with the finger that
+// flicks is awkward. Two fingers pressed together are a right click, which throws too, but only on a trackpad set up
+// that way, so it isn't what the game says.)
+const TRACKPAD = 'On a trackpad, press with one finger and flick up with another';
+const HOLD = 'Hold the click as you flick up (on a trackpad, hold with one finger, flick with another)';
+
+// Two fingers sliding on a trackpad scroll (wheel events), which does nothing here. Only a trackpad or a mouse
+// wheel sends them. (Pinching to zoom sends wheel events with ctrlKey set: that's the browser's business.)
 canvas.addEventListener('wheel', e => {
-  if (phase === 'aim' && !paused && !e.ctrlKey) nudge('Hold the click down while you flick up');
+  if (phase === 'aim' && !paused && !e.ctrlKey) nudge(TRACKPAD);
 }, { passive: true });
 
-// One finger gliding up a trackpad without pressing: the pointer flies up the lane with no button held. Only while
-// the player still has the hint, so heading for the menu or the scorecard later on doesn't set it off.
+// One finger gliding up a trackpad without pressing, or a mouse moved up with its button let go: the pointer flies up
+// the lane with no button held. Only while the player still has the hint, so heading for the menu or the scorecard
+// later on doesn't set it off.
 let glide = [];
 function gliding(e) {
   if (e.pointerType !== 'mouse' || e.buttons !== 0 || touch || phase !== 'aim' || paused) { glide = []; return; }
   const now = performance.now();
   glide.push({ y: e.clientY, t: now });
   while (now - glide[0].t > 300) glide.shift();
-  if (Math.max(...glide.map(g => g.y)) - e.clientY >= 120 && hintDue()) { glide = []; nudge('Hold the click down while you flick up'); }
+  if (Math.max(...glide.map(g => g.y)) - e.clientY >= 120 && hintDue()) { glide = []; nudge(HOLD); }
 }
 
 function seen(e) {
