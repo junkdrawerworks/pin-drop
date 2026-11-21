@@ -444,3 +444,19 @@ test('the lane wanders a slow ball no more than a fast one', () => {
   assert.ok(usual > 0.8 && usual < 1.3, `16.5 mph wanders ${usual.toFixed(2)} in`);
   assert.ok(slow / fast < 1.25 && slow / fast > 0.8, `9.7 mph wanders ${slow.toFixed(2)} in, 22 mph ${fast.toFixed(2)} in`);
 });
+
+// A falling pin's top swings down into its neighbour and sends it flying, the way real pins mix on the deck. It used
+// to lean on it and tip it over with no push at all, so the neighbour dropped where it stood.
+test('a pin falling onto its neighbour knocks it away', () => {
+  for (const [a, b] of [[1, 3], [6, 10], [2, 4]]) {
+    const pins = rack().filter(p => p.id === a || p.id === b);
+    const s = new Sim(pins, { x: 0, speed: 1e-4, angle: 0, hook: 0 }, 1);
+    s.ball.state = 'pit'; s.ball.y = 900;
+    const [A, B] = [a, b].map(id => pins.find(p => p.id === id));
+    s.topple(A, Math.atan2(B.y - A.y, B.x - A.x) + 0.2);
+    let push = 0;
+    while (!s.settled) { s.step(1 / 60); push = Math.max(push, Math.hypot(B.vx, B.vy)); }
+    assert.notEqual(B.state, 'up', `${b} still standing after ${a} fell on it`);
+    assert.ok(push > 30, `${a} falling on ${b} pushed it ${push.toFixed(0)} in/s`);
+  }
+});

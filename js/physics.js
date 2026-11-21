@@ -205,8 +205,11 @@ export class Sim {
     const ka = this.mass(A), kb = this.mass(B);
     const rax = cx - A.x, ray = cy - A.y, rbx = cx - B.x, rby = cy - B.y;
     const wa = A.w ?? 0, wb = B.w ?? 0;
-    const vax = A.vx - wa * ray * (ka.rot ? 1 : 0), vay = A.vy + wa * rax * (ka.rot ? 1 : 0);
-    const vbx = B.vx - wb * rby * (kb.rot ? 1 : 0), vby = B.vy + wb * rbx * (kb.rot ? 1 : 0);
+    // A falling pin's top half swings down through the air, faster the further up it: where it meets something, that
+    // part of it is moving at the swing's speed as well as the pin's own slide.
+    const ua = this.swing(A, s), ub = this.swing(B, t);
+    const vax = A.vx - wa * ray * (ka.rot ? 1 : 0) + ua[0], vay = A.vy + wa * rax * (ka.rot ? 1 : 0) + ua[1];
+    const vbx = B.vx - wb * rby * (kb.rot ? 1 : 0) + ub[0], vby = B.vy + wb * rbx * (kb.rot ? 1 : 0) + ub[1];
     const rvx = vax - vbx, rvy = vay - vby;
     const vn = rvx * nx + rvy * ny;
 
@@ -226,7 +229,9 @@ export class Sim {
     const isBall = A === this.ball || B === this.ball;
     const e = isBall ? 0.72 : 0.45 + this.rand() * 0.2;
     const crA = rax * ny - ray * nx, crB = rbx * ny - rby * nx;
-    const den = ka.inv + kb.inv + crA * crA * ka.invI + crB * crB * kb.invI;
+    // The swinging top of a falling pin is light: a rod tipping over about its foot meets things a fraction f of the
+    // way up with a third of its weight over f squared behind it, so that part gives way more than the pin's slide.
+    const den = ka.inv + kb.inv + crA * crA * ka.invI + crB * crB * kb.invI + this.give(A, s, nx, ny) + this.give(B, t, nx, ny);
     const jn = -(1 + e) * vn / den;
     // A little friction along the contact, which is what sets lying pins spinning.
     const tx = -ny, ty = nx, vt = rvx * tx + rvy * ty;
@@ -243,6 +248,19 @@ export class Sim {
     this.events.push({ kind: isBall ? 'ball' : 'pin', x: cx, y: cy, power: Math.min(1, -vn / (isBall ? 300 : 260)) });
     this.knock(A, jn * ka.inv);
     this.knock(B, jn * kb.inv);
+  }
+
+  // How fast the point a fraction f of the way up a falling pin is swinging, across the deck (in/s, x and y).
+  swing(o, f) {
+    if (o === this.ball || o.state !== 'falling') return [0, 0];
+    const u = f * PIN_LEN * fallRate(o.ft);
+    return [Math.cos(o.a) * u, Math.sin(o.a) * u];
+  }
+
+  give(o, f, nx, ny) {
+    if (o === this.ball || o.state !== 'falling') return 0;
+    const c = nx * Math.cos(o.a) + ny * Math.sin(o.a);
+    return 3 * f * f * c * c / M_PIN;
   }
 
   mass(o) {
@@ -291,6 +309,8 @@ function slow(o, by) {
 
 // How far over a falling pin is, 0 to 1: slow to start, quick at the end.
 export function fallen(t) { const f = Math.min(1, t / FALL_T); return Math.sin(f * f * Math.PI / 2); }
+// How fast that goes, per second.
+function fallRate(t) { const f = Math.min(1, t / FALL_T); return f >= 1 ? 0 : Math.cos(f * f * Math.PI / 2) * Math.PI * f / FALL_T; }
 
 // The closest points of two segments, as fractions along each (Ericson, Real-Time Collision Detection 5.1.9).
 function closest(a, b) {
