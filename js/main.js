@@ -937,7 +937,8 @@ function say(big, small, kind, tip, at = 'pins') {
 
 // The first player is called You until they type a name, and "You’s turn" won't do.
 const isYou = name => name.trim().toLowerCase() === 'you';
-const turnLine = name => (isYou(name) ? 'Your turn' : `${name}’s turn`);
+// The computer's turn is called by a short name: "Computer (Regular)’s turn" ran onto two lines on a phone.
+const turnLine = name => (isYou(name) ? 'Your turn' : LEVEL_KEYS.some(k => cpuName(k) === name) ? 'Computer’s turn' : `${name}’s turn`);
 const winLine = name => (isYou(name) ? 'You win!' : `${name} wins!`);
 
 function hush() { clearTimeout(callTimer); callUntil = 0; $('call').className = 'call'; $('call').innerHTML = ''; }

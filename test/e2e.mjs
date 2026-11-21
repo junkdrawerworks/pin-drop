@@ -2225,6 +2225,7 @@ for (const motion of ['reduce', 'no-preference']) {
       return now;
     }), 20000, 'the computer\'s turn never came');
     assert.equal(await p.isVisible('#handoff'), false, 'a card for the computer\'s turn');
+    assert.equal(await p.textContent('#call'), 'Computer’s turn', 'the computer\'s turn called by its long name');
     assert.equal(await p.isVisible('#hint'), false, 'the hint on how to throw, on the computer\'s turn');
     assert.equal(await p.$eval('#who i', e => e.style.background), 'rgb(238, 241, 247)', 'the computer\'s ball is not silver');
     // A straight swipe up on its turn throws nothing of its own: it hurries the computer on, which throws its hook.
