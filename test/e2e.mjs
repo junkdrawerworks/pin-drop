@@ -361,6 +361,28 @@ const state = p => p.evaluate(() => ({ phase: pinDrop.phase, x: pinDrop.ball.x }
   } finally { await c2.close(); }
 }
 
+// The camera follows a ball into the gutter and back to the middle without jumping: the head pin never moves more
+// than 3 px on screen in a sixtieth of a second (it jumped 34 px in one frame as the ball dropped into the gutter).
+{
+  const { c, p } = await lane({ viewport: { width: 390, height: 844 }, hasTouch: true });
+  try {
+    for (const shot of [{ x: 14, speed: 290, angle: 0.01, hook: 0 }, { x: 10, speed: 290, angle: 0.03, hook: -45 }]) {
+      await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
+      const jump = await p.evaluate(shot => new Promise(done => {
+        pinDrop.throw(shot);
+        let last = null, most = 0;
+        (function frame(now) {
+          const x = pinDrop.view.p(0, 720)?.[0];
+          if (last && x !== undefined && last.x !== undefined) most = Math.max(most, Math.abs(x - last.x) / Math.max(1, (now - last.now) / (1000 / 60)));
+          last = { x, now };
+          if (pinDrop.phase === 'rolling' || pinDrop.phase === 'settle') requestAnimationFrame(frame); else done(most);
+        })(performance.now());
+      }), shot);
+      assert.ok(jump < 3, `the head pin jumped ${jump.toFixed(1)} px in a frame for ${JSON.stringify(shot)}`);
+    }
+  } finally { await c.close(); }
+}
+
 // A ball's callout stays off the Pin Drop sign over the pins (it used to land on it on a tablet), and the call for
 // the next player's turn stays off the pins they're aiming at: on a phone, and a tablet either way up.
 {

@@ -25,6 +25,7 @@ let guide = null, sweep = null;
 let before = 10, sawGutter = false, wasSplit = false, felt = false, slow = false;
 let told = new Set();     // the players (by turn) already told a ball was slow, this game
 let paused = false;
+let followX = 0;          // how far across the lane the camera follows the ball, eased so it never jumps
 let timeScale = 1, fixedSeed = null;
 
 function idle(x) { return { x, y: 6, state: 'lane', roll: 0, vx: 0, vy: 0 }; }
@@ -56,28 +57,34 @@ function update(dt) {
       if (e.kind === 'ball' && !felt) { felt = true; buzz(25); }
     }
     sim.events.length = 0;
-    // Follow the ball down the lane.
+    // Follow the ball down the lane, and into the gutter; once it's in the pit, stay where it went in.
     camT = Math.max(camT, ease((ball.y - 140) / (LANE.head - 110 - 140)));
-    view.setCamera(camT, ball.state === 'lane' ? ball.x : 0);
+    view.setCamera(camT, follow(ball.state === 'pit' ? followX : ball.x, dt));
     const moving = ball.state === 'lane' || (ball.state === 'gutter' && ball.y < LANE.deck);
     sound.roll(moving ? clamp(Math.hypot(ball.vx, ball.vy) / 380) * (1 - camT * 0.4) : 0);
     if (sim.settled) { sound.roll(0); scoreBall(); }
   } else if (phase === 'settle') {
-    view.setCamera(1, 0);
+    view.setCamera(1, follow(0, dt));
     if (phaseT > SETTLE) startSweep();
   } else if (phase === 'over') {
-    view.setCamera(1, 0);
+    view.setCamera(1, follow(0, dt));
     if (phaseT > 1.9 && $('end').hidden) showEnd();
   } else if (phase === 'sweep') {
     runSweep();
-    view.setCamera(1, 0);
+    view.setCamera(1, follow(0, dt));
   } else if (phase === 'return') {
     camT = 1 - ease(phaseT / RETURN);
-    view.setCamera(camT, 0);
+    view.setCamera(camT, follow(0, dt));
     if (phaseT >= RETURN) aim();
   } else {
     view.setCamera(0, 0);
   }
+}
+
+// Eases the camera's follow towards x, a quarter of a second behind.
+function follow(x, dt) {
+  followX += (x - followX) * (1 - Math.exp(-dt / 0.25));
+  return followX;
 }
 
 // ---- A game --------------------------------------------------------------------------------------------
@@ -107,7 +114,7 @@ function resumeGame() {
 
 // Ready for the next ball: the rack it faces, the ball where this player last stood.
 function aim() {
-  phase = 'aim'; phaseT = 0; camT = 0;
+  phase = 'aim'; phaseT = 0; camT = 0; followX = 0;
   view.setCamera(0);
   ball = idle(current().x || 0);
   sim = null; guide = null; sweep = null;
@@ -602,7 +609,7 @@ $('menuQuit').addEventListener('click', () => {
 $('again').addEventListener('click', () => startGame(game.players.map(q => q.name)));
 $('toTitle').addEventListener('click', titleScreen);
 
-addEventListener('resize', () => { view.resize(); view.setCamera(camT, 0); });
+addEventListener('resize', () => { view.resize(); view.setCamera(camT, followX); });
 
 // For the tests and the screenshot tool.
 window.pinDrop = {
