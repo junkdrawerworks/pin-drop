@@ -197,3 +197,47 @@ test('hook: a thumb\'s natural arc rolls straight, a deliberate curve hooks hard
   assert.equal(hook(0.3), -65);
   assert.equal(hook(-0.15), -hook(0.15), 'bowing the other way hooks right as much');
 });
+
+test('a swipe is timed by its events\' own clock, unless that clock can\'t be trusted', async () => {
+  const { stroke, addPoints, throwPoints, throwOf } = await import('../js/swipe.js');
+  const mph = s => throwOf(throwPoints(s)).speed * 0.0568;
+  // A finger going straight up 300 px at a steady 1.2 px/ms, sampled every 8 ms, each sample stamped with when it was
+  // taken (by `clock`, from the page's clock at the time). The page hands the samples over in bursts: at frames
+  // (`frame` ms apart) that each come up to `late` ms late, with everything sampled since the last one; or, with
+  // `stall`, all at once that long after the swipe began.
+  const fling = ({ frame = 16.7, late = 0, stall = 0, seed = 1, clock = t => t, downClock = clock } = {}) => {
+    const r = rng(seed), at = i => i * 8, T0 = 1000;
+    const s = stroke({ clientX: 0, clientY: 0, timeStamp: downClock(T0) }, T0 + stall);
+    let i = 1;
+    for (let f = 1; i <= 31; f++) {
+      const now = Math.max(T0 + stall, T0 + f * frame + r() * late), burst = [];
+      while (i <= 31 && at(i) <= now - T0) { burst.push({ clientX: 0, clientY: -i * 300 / 31, timeStamp: clock(T0 + at(i)) }); i++; }
+      if (burst.length) addPoints(s, burst, now);
+    }
+    return s;
+  };
+  const steady = mph(fling());
+  assert.ok(Math.abs(steady - 13.4) < 0.3, `a steady 1.2 px/ms fling read as ${steady.toFixed(1)} mph`);
+  // A busy page gets the same samples late and bunched up, or all at once after a stall: the same speed, within
+  // 0.3 mph, every time.
+  for (let seed = 1; seed <= 20; seed++) {
+    const busy = mph(fling({ frame: 33, late: 25, seed }));
+    assert.ok(Math.abs(busy - steady) < 0.3, `seed ${seed}: the same fling on a busy page read as ${busy.toFixed(2)} mph, not ${steady.toFixed(2)}`);
+  }
+  const stalled = mph(fling({ stall: 300 }));
+  assert.ok(Math.abs(stalled - steady) < 0.3, `the same fling after a stall read as ${stalled.toFixed(2)} mph`);
+  // Some touch screens stamp the finger's samples on another clock from the page's (every fling on one tablet came out
+  // at the slowest speed, 9.7 mph). Then, and with no stamps, or stamps out of order, the swipe is timed by the page's
+  // clock as the samples arrive, which reads a steady fling about right.
+  for (const [what, opts] of [
+    ['on another clock', { downClock: t => t, clock: t => 7e6 + t }],
+    ['all on another clock', { clock: t => 9e8 + t }],
+    ['ahead of the page', { clock: t => t + 50 }],
+    ['with no stamps', { clock: () => 0 }],
+    ['out of order', { clock: t => 1000 + ((t - 1000) % 24) }],
+  ]) {
+    const v = mph(fling(opts));
+    assert.ok(Math.abs(v - steady) < 1, `a fling stamped ${what} read as ${v.toFixed(1)} mph`);
+    assert.ok(v > 11, `a fling stamped ${what} read as only ${v.toFixed(1)} mph`);
+  }
+});

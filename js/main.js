@@ -4,7 +4,7 @@ import { Renderer, BALL_COLOURS } from './render.js';
 import { frames, next, total, isSplit } from './scoring.js';
 import * as sound from './sound.js';
 import { load, save } from './store.js';
-import { readStroke, throwPoints, liftAs, throwOf } from './swipe.js';
+import { stroke, addPoints, readStroke, throwPoints, liftAs, throwOf } from './swipe.js';
 
 const $ = id => document.getElementById(id);
 const canvas = $('lane');
@@ -309,17 +309,12 @@ canvas.addEventListener('pointerdown', e => {
   if (phase !== 'aim' || paused) return;
   if (e.pointerType === 'mouse' && e.button !== 0) return;   // only the main button throws
   try { canvas.setPointerCapture(e.pointerId); } catch { /* fine without */ }
-  touch = { id: e.pointerId, pts: [{ x: e.clientX, y: e.clientY, t: performance.now() }], mode: null, from: 0, x0: ball.x };
+  touch = { ...stroke(e, performance.now()), id: e.pointerId, x0: ball.x };
 });
-// Each point of the swipe, timed by the page's own clock. Touch screens hand over several finger positions at once
-// (coalesced events), and some report their times on a different clock from the page's, which made every fling
-// on a tablet come out at the slowest speed. So the positions are spread evenly over the time since the last one.
-function addPoints(t, e) {
-  const now = performance.now();
+// Each finger position an event brings, with the times it happened (see addPoints in swipe.js).
+function track(t, e) {
   const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
-  const list = evs.length ? evs : [e];
-  const last = t.pts[t.pts.length - 1];
-  list.forEach((c, i) => t.pts.push({ x: c.clientX, y: c.clientY, t: last.t + (now - last.t) * (i + 1) / list.length }));
+  addPoints(t, evs.length ? evs : [e], performance.now());
 }
 // Slides the ball across the approach, dx px on screen from where it stood when the stroke began.
 function slide(t, dx) {
@@ -331,7 +326,7 @@ canvas.addEventListener('pointermove', e => {
   seen(e);
   gliding(e);
   if (!touch || e.pointerId !== touch.id) return;
-  addPoints(touch, e);
+  track(touch, e);
   const was = touch.mode;
   readStroke(touch);
   if (touch.mode === 'throw' && was !== 'throw') hint();   // out of the way of the throw
@@ -351,7 +346,7 @@ const lift = e => {
   hint();
   if (e.type !== 'pointerup') { if (t.mode === 'move') keep(); return; }
   const end = t.pts[t.pts.length - 1];
-  if (Math.hypot(e.clientX - end.x, e.clientY - end.y) > 2) { addPoints(t, e); readStroke(t); }
+  if (Math.hypot(e.clientX - end.x, e.clientY - end.y) > 2) { track(t, e); readStroke(t); }
   const as = liftAs(t), p = throwPoints(t);
   if (as === 'throw') {
     slide(t, 0);

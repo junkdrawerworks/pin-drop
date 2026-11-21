@@ -108,6 +108,24 @@ const slowMph = await fling(12, 60), quickMph = await fling(60, 8);
 assert.ok(quickMph > slowMph + 3, `a quick fling threw at ${quickMph} mph, a slow push at ${slowMph} mph`);
 assert.ok(quickMph > 14, `a quick fling only threw at ${quickMph} mph`);
 console.log(`  touch: slow push ${slowMph} mph, quick fling ${quickMph} mph`);
+// The same fling five times throws the same ball, to within 1 mph. Each touch is stamped with when the finger was
+// there, as a touch screen does, and the page gets them whenever it gets them. (Timed by when they arrived, a busy
+// page read the same steady fling at anything from 12 to 22 mph.)
+const steadyFling = async () => {
+  await until(() => page.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
+  const t0 = Date.now() / 1000, sent = [];
+  const touch = (type, i, touchPoints) => sent.push(cdp0.send('Input.dispatchTouchEvent', { type, touchPoints, timestamp: t0 + i * 0.008 }));
+  touch('touchStart', 0, [{ x: 195, y: 700 }]);
+  for (let i = 1; i <= 30; i++) { await new Promise(r => setTimeout(r, 8)); touch('touchMove', i, [{ x: 195, y: 700 - i * 10 }]); }
+  touch('touchEnd', 30.5, []);
+  await Promise.all(sent);
+  await until(() => page.evaluate(() => pinDrop.phase === 'rolling'), 3000, 'the fling did not throw');
+  return parseFloat(await page.textContent('#readout'));
+};
+const same = [];
+for (let k = 0; k < 5; k++) same.push(await steadyFling());
+assert.ok(Math.max(...same) - Math.min(...same) <= 1, `the same fling threw at ${same.join(', ')} mph`);
+console.log(`  the same fling five times: ${same.join(', ')} mph`);
 
 // Play the rest of the game fast: each ball aimed at the pocket with a hook, or at whatever's left.
 await page.evaluate(() => { pinDrop.speed = 10; });

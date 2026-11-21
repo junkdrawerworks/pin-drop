@@ -34,8 +34,38 @@ export function readStroke(s) {
   return s.mode;
 }
 
-// The points a throw is read from.
-export const throwPoints = s => s.pts.slice(s.from || 0);
+// A stroke on the lane, begun by a pointerdown event at `now` on the page's clock (performance.now()).
+export function stroke(e, now) {
+  return { pts: [{ x: e.clientX, y: e.clientY, t: now, ev: onClock(e.timeStamp, now) ? 0 : NaN }], down: e.timeStamp, mode: null, from: 0 };
+}
+
+// Adds the finger positions an event hands over (a touch screen's come several at once: its coalesced events),
+// keeping two times for each. `ev` is the event's own timeStamp, from the stroke's first: when the finger was really
+// there. `t` is the page's clock as they arrive, spread evenly over the time since the last ones, which runs late
+// and in bursts whenever the page is busy, and a burst reads as a quick flick. See timed() for which is used.
+export function addPoints(s, list, now) {
+  const last = s.pts[s.pts.length - 1];
+  list.forEach((c, i) => s.pts.push({
+    x: c.clientX, y: c.clientY,
+    t: last.t + (now - last.t) * (i + 1) / list.length,
+    ev: onClock(c.timeStamp, now) ? c.timeStamp - s.down : NaN,
+  }));
+}
+
+// An event's timeStamp is on the page's clock, as it should be: from the last second, and not yet to come. Some touch
+// screens stamp the finger's positions on another clock (on a tablet that made every fling come out at the slowest
+// speed), or not at all.
+const onClock = (ts, now) => ts > 0 && ts <= now + 1 && now - ts < 1000;
+
+// A stroke's points, timed by the events' own stamps if every one of them is on the page's clock and they come in
+// order; otherwise by the page's clock as they arrived.
+export function timed(pts) {
+  if (pts.length < 2 || !pts.every((p, i) => (i ? p.ev > pts[i - 1].ev : p.ev === 0))) return pts;
+  return pts.map(p => ({ ...p, t: p.ev }));
+}
+
+// The points a throw is read from, timed.
+export const throwPoints = s => timed(s.pts).slice(s.from || 0);
 
 // What a stroke does when the finger lifts: 'throw' for a swipe at least 40 px up and within 45° of straight up;
 // 'move' for a drag, or a swipe further over than that (a ball never starts out more than 0.07 rad off straight, and a
