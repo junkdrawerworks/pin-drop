@@ -598,6 +598,8 @@ const nineAndMiss = Array.from({ length: 18 }, (_, i) => (i % 2 ? 0 : 9));   // 
     assert.match(curved.said, /hook right/);
     assert.equal(curved.side, 1, 'the curved swipe did not go in the right-hand gutter, so this checks nothing');
     assert.equal(curved.call, 'Gutter ballYour swipe curved, so it hooked right: swipe straighter or stand further left');
+    // The tip is on a dark pill, to read where it lands over the lane's light wood.
+    assert.equal(await p.$eval('#call .tip', e => getComputedStyle(e).backgroundColor), 'rgba(13, 18, 34, 0.75)', 'the tip sits on bare wood');
     const again = await ball(() => p.evaluate(() => pinDrop.throw({ x: 10, speed: 290, angle: 0, hook: 45 })), 'Ana');
     assert.equal(again.side, 1);
     assert.doesNotMatch(again.call, /curved/, 'the word about a hook into the gutter came twice in a game');

@@ -92,7 +92,11 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .call small { display: block; font-family: Figtree, sans-serif; font-weight: 700; font-size: 18px; color: var(--cream); text-shadow: 0 1px 8px #000; margin-top: 10px; letter-spacing: 0.02em; }
 .call.small { font-size: clamp(36px, 10vw, 64px); color: var(--cream); text-shadow: 0 3px 0 #39406a, 0 0 22px rgba(0, 0, 0, 0.7); }
 .call.teal { color: var(--teal); text-shadow: 0 3px 0 #1d6b6b, 0 0 26px rgba(63, 208, 201, 0.5); }
-.call small.tip { font-size: 15px; font-weight: 600; color: var(--gold); margin-top: 6px; }
+/* A tip can land over the lane's light wood (a tablet on its side), so it sits on the hint's dark pill. */
+.call small.tip {
+  font-size: 15px; font-weight: 600; color: var(--gold); width: fit-content; max-width: calc(100% - 24px); margin: 8px auto 0; text-wrap: balance;
+  padding: 5px 14px; border-radius: 16px; background: rgba(13, 18, 34, 0.75); border: 1px solid var(--line);
+}
 .call.go { animation: pop 1.7s ease-out forwards; }
 .call.go.long { animation-duration: 2.8s; }
 @keyframes pop {
