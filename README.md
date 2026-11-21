@@ -48,8 +48,8 @@ thrown straight at the head pin.
   card comes up over the lane ("Ben's turn · Tap to bowl"), and nothing can be thrown until they tap it. The Scorecard
   shows under each player's total the most they can still reach ("max 212"). On Bowl again, the second player leads
   off the next game, and from the second game the end shows tonight's tally ("Tonight: Ben 2 · Ana 1") until you
-  change players. Pin Drop keeps your best game and your last few scores, and a game you leave half-way carries on
-  where you were. **Bumpers**, switched on next to a player's name, keep their ball out of the gutters: it comes off a
+  change players. Pin Drop keeps your best game and your games, and a game you leave half-way carries on where you
+  were. **Bumpers**, switched on next to a player's name, keep their ball out of the gutters: it comes off a
   rail along each side of the lane. A game with bumpers is marked in the recent games and doesn't count toward a best.
   Tapping a player's ball on the title gives them a **head start** of 10 to 50 pins, the way a league's handicap evens
   up a game: it's added to their total at the end, in a box of its own on the card, and a game with one doesn't count
@@ -59,8 +59,37 @@ thrown straight at the head pin.
   ball into the pocket and throwing straight at pins left from across the lane, and misses by its level's amount. You
   watch its turn like anyone's, and a tap hurries it along. Its games are in the recent games but never count as a
   best.
+- **Your games, kept.** The end card sums up each player's game under their card ("3 strikes · 2 spares · 4 open")
+  and has Share, which sends "Pin Drop: Ben 131, Ana 121" and the game's link through the phone's share sheet (or
+  copies it). On the title, each recent game opens its scorecard, frame by frame, and the best game opens
+  **Averages**: for each player, games played, the average of their last 10, their high game, and the share of strike
+  and spare chances they made (bumpers games and the computer's left out, a head start not added). Forget these
+  scores, under it, clears every game and best after a second tap. The last 500 games are kept.
+- **Practise spares**, under Bowl, sets up ten common leaves (the 10 pin, the 7 pin, the 3–6–10, the 2–4–5–8, the
+  6–10, the 4–7, the 3–10, the 5 pin, the 2–8 and the 3–5–6–9), one ball at each, and ends with how many you made.
+  It doesn't count toward anything.
 - **Sound** is made on the spot (the thud of the ball landing, its rumble, the clatter of the pins, the pinsetter's
   whirr and clunk), with a switch in the menu that stops the buzz too, on a phone that buzzes.
+
+## On every device, if you like: Google Drive
+
+At pin-drop.junkdrawer.works, **Save to Google Drive** on the title keeps your games in your own Google Drive, in a
+folder called "Pin Drop" with one file, `Pin Drop.json`, and merges them game by game with every phone, tablet or
+computer where you turn it on, so two devices never lose a game. What goes there: every finished game (each player's
+name, score and balls, which balls left splits, their ball colour, and any bumpers, head start or computer level), the
+best game and each player's best (with when they were bowled), the players and switches last set up on the title and
+the computer's level, how many balls each player has thrown and which lessons they've been shown, and when Forget
+these scores was last tapped (which clears the scores before then on every device, including one that turns Drive on
+later). What stays on each device: the sound setting, a game in progress, and whether that device saves to Drive.
+Spare practice isn't kept anywhere.
+
+It asks Google for `drive.file` only, so it can see nothing in your Drive but the folder and file it made. The sign-in
+lasts an hour and is kept in your browser; after that the cloud in the title's corner asks for a tap. It reads your
+Google account's name and email address, to show which account it saves to and to skip the account chooser next time.
+**Stop saving on this device** stops it there without signing anything else out. To take the permission back
+everywhere, remove junkdrawer.works under **Third-party apps & services** in your Google Account. Without Drive, or
+anywhere but that address, everything stays in this browser. More at
+[junkdrawer.works/privacy.html](https://junkdrawer.works/privacy.html).
 
 ## Running it
 
@@ -90,7 +119,9 @@ GitHub Pages serves it from `main`, at its own address set by `CNAME`.
   throw's speed, aim and hook.
 - `js/sound.js`: every sound, made with Web Audio.
 - `js/computer.js`: the computer player: where it stands and how it throws at each level.
-- `js/store.js`: what's kept on this device, under `pin-drop.v1`.
+- `js/store.js`: what's kept on this device, under `pin-drop.v1`, how two copies of it merge, and each player's
+  averages.
+- `js/sync.js`: saving to Google Drive, at pin-drop.junkdrawer.works only.
 - `css/app.css`: the look.
 - `fonts/`: [Shrikhand](https://fonts.google.com/specimen/Shrikhand) and [Figtree](https://fonts.google.com/specimen/Figtree),
   both under the SIL Open Font License, served from here so nothing loads from elsewhere.
@@ -98,14 +129,19 @@ GitHub Pages serves it from `main`, at its own address set by `CNAME`.
 - `test/`: `scoring.test.mjs` (rules and physics), `swipe.test.mjs` (reading a stroke as a move or a throw, as the
   finger moves), `standing.test.mjs` (no pin left standing off the deck), `clean.test.mjs` (every ball ends clean,
   thrown from every corner of what a swipe can make: everything settled, nothing still wobbling, and the next rack
-  just what was left), `store.test.mjs` (what's kept, with two windows open), `computer.test.mjs` (the computer's levels'
-  averages, its pocket ball and its spares), `build.mjs` (the one-file copy, built
-  and played from file://) and `e2e.mjs` (a whole two-player game in Chromium, three players, strikes in a
-  four-player tenth frame and a spare in a one-player one, carrying on after a reload at any moment, every sound
-  finishing, two windows open at once, the first ball's marks and the lessons for a new player, bowling from the
-  keyboard, the note on a phone on its side, bumpers, a head start, the card as the turn passes, the most each player can still reach, Bowl again's change of who leads off and tonight's tally, the computer player's turns, carrying on and records, Sound off stopping the buzz, the thud and the pinsetter's clunks, a tap
-  hurrying the pinsetter, the pins left under the scorecard, strikes in a row building up to a perfect game and a new
-  best, Watch again, the ring for a split, the camera cutting with Reduce Motion, offline, installable). `aim.mjs` aims the tests' balls: the angle that
-  sends a ball through a spot at the head pin, and the pocket ball, 2.5 in right of the head pin's middle, that strikes
-  about two times in three.
+  just what was left), `store.test.mjs` (what's kept, with two windows open, Forget these scores and the averages),
+  `computer.test.mjs` (the computer's levels' averages, its pocket ball and its spares), `build.mjs` (the one-file
+  copy, built and played from file://), `records.mjs` (the end card's counts, a kept game's scorecard, the averages
+  and Forget these scores, Share, and spare practice), `drive.mjs` (Google Drive against `fake-google.mjs`, a stand-in
+  for Google from the junkdrawer kit: turning it on, a second device joining, both finishing games, Forget these
+  scores reaching the other device, a refused sign-in, stopping, and two devices making the file at once) and
+  `e2e.mjs` (a whole two-player game in Chromium, three players, strikes in a four-player tenth frame and a spare in a
+  one-player one, carrying on after a reload at any moment, every sound finishing, two windows open at once, the first
+  ball's marks and the lessons for a new player, bowling from the keyboard, the note on a phone on its side, bumpers,
+  a head start, the card as the turn passes, the most each player can still reach, Bowl again's change of who leads
+  off and tonight's tally, the computer player's turns, carrying on and records, Sound off stopping the buzz, the thud
+  and the pinsetter's clunks, a tap hurrying the pinsetter, the pins left under the scorecard, strikes in a row
+  building up to a perfect game and a new best, Watch again, the ring for a split, the camera cutting with Reduce
+  Motion, offline, installable). `aim.mjs` aims the tests' balls: the angle that sends a ball through a spot at the
+  head pin, and the pocket ball, 2.5 in right of the head pin's middle, that strikes about two times in three.
 - `tools/`: screenshots, icons and the one-file build.
