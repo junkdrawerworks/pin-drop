@@ -467,6 +467,7 @@ function titleScreen() {
     $('resume').textContent = `Carry on · frame ${f}`;
   }
   drawPlayers(store.names?.length ? store.names : ['You']);
+  disarmStart();
   record();
   show('title');
 }
@@ -534,7 +535,26 @@ $('addPlayer').addEventListener('click', () => {
   const inputs = $('players').querySelectorAll('input');
   inputs[inputs.length - 1]?.select();
 });
-$('start').addEventListener('click', () => { sound.wake(); startGame(readNames()); });
+// With a game still going, Bowl starts over only on a second tap, so one tap can't throw the saved game away.
+let startArmed = false, startTimer = 0;
+function disarmStart() {
+  startArmed = false; clearTimeout(startTimer);
+  $('start').textContent = 'Bowl';
+}
+$('start').addEventListener('click', () => {
+  sound.wake();
+  if (!$('resume').hidden && !startArmed) {
+    startArmed = true; $('start').textContent = 'Tap again to start over';
+    startTimer = setTimeout(disarmStart, 4000);
+    return;
+  }
+  disarmStart();
+  startGame(readNames());
+});
+// Anything else done on the title calls it off.
+for (const type of ['pointerdown', 'keydown', 'input']) {
+  $('title').addEventListener(type, e => { if (startArmed && !e.target.closest?.('#start')) disarmStart(); });
+}
 $('resume').addEventListener('click', () => { sound.wake(); resumeGame(); });
 $('menuBtn').addEventListener('click', () => { touch = null; guide = null; quitArmed = false; $('menuQuit').textContent = 'End this game'; show('menu'); });
 $('menuResume').addEventListener('click', () => show(null));

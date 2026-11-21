@@ -321,6 +321,30 @@ const state = p => p.evaluate(() => ({ phase: pinDrop.phase, x: pinDrop.ball.x }
   } finally { await c.close(); }
 }
 
+// A game left half-way: one tap on Bowl doesn't throw it away. It asks for a second tap, which starts over.
+{
+  const current = { players: [{ name: 'Ana', rolls: [7, 2, 10], x: 0 }, { name: 'Ben', rolls: [5, 4], x: 0 }], turn: 1, leftover: null };
+  const c = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const p = await c.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  await p.addInitScript(k => { if (!sessionStorage.getItem('set')) { sessionStorage.setItem('set', '1'); localStorage.setItem('pin-drop.v1', JSON.stringify(k)); } }, { names: ['Ana', 'Ben'], current });
+  try {
+    await p.goto(base);
+    const kept = () => p.evaluate(() => JSON.parse(localStorage.getItem('pin-drop.v1')).current);
+    assert.equal(await p.isVisible('#resume'), true);
+    await p.click('#start');
+    assert.equal(await p.evaluate(() => pinDrop.phase), 'title', 'one tap on Bowl started a new game over the saved one');
+    assert.deepEqual(await kept(), current, 'one tap on Bowl changed the saved game');
+    assert.equal(await p.textContent('#start'), 'Tap again to start over');
+    // Anything else on the title calls it off.
+    await p.click('#players li:first-child input');
+    assert.equal(await p.textContent('#start'), 'Bowl');
+    await p.click('#start'); await p.click('#start');
+    assert.equal(await p.evaluate(() => pinDrop.phase), 'aim', 'two taps on Bowl did not start a new game');
+    assert.deepEqual((await kept()).players.map(q => q.rolls), [[], []]);
+  } finally { await c.close(); }
+}
+
 assert.deepEqual(problems.filter(p => !p.startsWith('failed:')), [], 'problems while using it');
 await browser.close();
 server.close();
