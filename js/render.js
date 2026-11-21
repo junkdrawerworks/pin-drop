@@ -7,6 +7,24 @@ const NEXT_LANE = 41.5 + LANE.gutter * 2 + 9;   // centre to centre, with the ba
 // A pin's outline: height up the pin (inches) and its radius there.
 const PROFILE = [[0, 1.02], [0.75, 1.41], [2.25, 1.96], [3.4, 2.25], [4.5, 2.38], [5.9, 2.28], [7.25, 1.92], [8.6, 1.4],
   [9.4, 1.02], [10, 0.9], [10.9, 0.93], [11.75, 1.05], [12.5, 1.18], [13.4, 1.26], [14.2, 1.1], [14.7, 0.78], [15, 0]];
+// The stations a pin is drawn by, with the radius there from PROFILE: every half inch (every inch for the neighbours'
+// pins, which are small, and every three quarters for a pin drawn slice by slice, which costs more), and close
+// together over the two red stripes round the neck.
+const radiusAt = h => {
+  const k = Math.max(1, PROFILE.findIndex(([ph]) => ph >= h));
+  const [h0, r0] = PROFILE[k - 1], [h1, r1] = PROFILE[k];
+  return r0 + (r1 - r0) * (h - h0) / (h1 - h0 || 1);
+};
+const STRIPES = [[10, 10.3], [10.8, 11.1]];
+const stationsEvery = step => {
+  const hs = new Set();
+  for (let h = 0; h <= 15 + 1e-9; h += step) hs.add(+h.toFixed(2));
+  for (const [a, b] of STRIPES) for (let h = a; h <= b + 1e-9; h += 0.15) hs.add(+h.toFixed(2));
+  return [...hs].sort((a, b) => a - b).map(h => [h, Math.max(0.05, radiusAt(h))]);
+};
+const STATIONS = stationsEvery(0.5), STATIONS_FAR = stationsEvery(1), STATIONS_SLICED = stationsEvery(0.75);
+// The pin in pieces along its length, white and red, base to head.
+const PIECES = [[0, 10, false], [10, 10.3, true], [10.3, 10.8, false], [10.8, 11.1, true], [11.1, 15, false]];
 export const BALL_COLOURS = [
   ['#5aa8ff', '#1d4fa8', '#0b1d45'],
   ['#ff7a6b', '#c22d2d', '#4a0d14'],
@@ -120,7 +138,8 @@ export class Renderer {
     this.masking(s.t);
     for (const k of [-2, -1, 1, 2]) this.lane(k * NEXT_LANE, true);
     this.lane(0, false);
-    for (const k of [-2, -1, 1, 2]) for (const sp of SPOTS) this.uprightPin(k * NEXT_LANE + sp.x, sp.y, 0, 0, 0.55);
+    // The neighbours' pins, dimmer, the back row first so the front ones stand in front of them.
+    for (const k of [-2, -1, 1, 2]) for (let i = SPOTS.length - 1; i >= 0; i--) this.uprightPin(k * NEXT_LANE + SPOTS[i].x, SPOTS[i].y, 0, 0, true);
     if (s.guide) this.guide(s.guide);
 
     // Near things over far ones.
@@ -367,7 +386,7 @@ export class Renderer {
     const lift = p.lift || 0;
     if (p.state === 'up') {
       const tilt = p.wob ? Math.sin(p.wobA) * p.wob * 0.22 : 0;
-      this.uprightPin(p.x, p.y, lift, tilt, 1);
+      this.uprightPin(p.x, p.y, lift, tilt, false);
       return;
     }
     let bx, by, ax, ay, az, bz = 0;
@@ -382,63 +401,132 @@ export class Renderer {
       ax = ux * 0.99; ay = uy * 0.99; az = -0.08; bz = 1.4;
       if (p.state === 'gutter') bz = -0.6;
     }
-    this.pinAlong(bx, by, bz + lift, ax, ay, az, 1);
+    this.pinAlong(bx, by, bz + lift, ax, ay, az, false);
   }
 
-  uprightPin(x, y, lift, tilt, alpha) {
+  uprightPin(x, y, lift, tilt, dim) {
     // The shadow first.
     const g = this.g;
     if (lift < 1) {
       const sh = this.p(x + 1.4, y + 1.2);
       if (sh) {
-        g.fillStyle = `rgba(30,14,4,${0.28 * alpha})`;
+        g.fillStyle = `rgba(30,14,4,${dim ? 0.15 : 0.28})`;
         g.beginPath(); g.ellipse(sh[0], sh[1], 2.6 * sh[2], 2.6 * sh[2] * this.squash(y), 0, 0, Math.PI * 2); g.fill();
       }
     }
-    this.pinAlong(x, y, lift, Math.sin(tilt), 0, Math.cos(tilt), alpha);
+    this.pinAlong(x, y, lift, Math.sin(tilt), 0, Math.cos(tilt), dim);
   }
 
-  // Draws the pin's outline along its axis, from the base at (x, y, z) in the direction (ax, ay, az).
-  pinAlong(x, y, z, ax, ay, az, alpha) {
-    const pts = [];
-    for (const [h, r] of PROFILE) {
-      const q = this.p(x + ax * h, y + ay * h, z + az * h);
-      if (!q) return;
-      pts.push([q[0], q[1], r * q[2]]);
-    }
-    const g = this.g;
-    // The axis on screen and the way across it.
-    let dx = pts[pts.length - 1][0] - pts[0][0], dy = pts[pts.length - 1][1] - pts[0][1];
-    let len = Math.hypot(dx, dy);
+  // Draws a pin as the solid it is, from the base at (x, y, z) along the direction (ax, ay, az): at each station up
+  // the pin, the round slice of it there, so it has the right outline from any side, end-on included; and the strip
+  // through the slices' edges (as seen side-on, where the slices are thin), so the outline is unbroken. The pieces go
+  // from the end farther from the eye to the nearer one, so the nearer end and the red stripes show the way they would.
+  pinAlong(x, y, z, ax, ay, az, dim) {
+    const c = this.cam, g = this.g;
+    const al = Math.hypot(ax, ay, az) || 1;
+    ax /= al; ay /= al; az /= al;
+    // Two ways across the pin, square to its length.
+    const [hx, hy, hz] = Math.abs(az) < 0.9 ? [0, 0, 1] : [1, 0, 0];
+    let e1x = ay * hz - az * hy, e1y = az * hx - ax * hz, e1z = ax * hy - ay * hx;
+    const el = Math.hypot(e1x, e1y, e1z); e1x /= el; e1y /= el; e1z /= el;
+    const e2x = ay * e1z - az * e1y, e2y = az * e1x - ax * e1z, e2z = ax * e1y - ay * e1x;
+    const sides = dim ? 10 : 16;
+    const at = h => this.p(x + ax * h, y + ay * h, z + az * h);
+    const ends = [at(0), at(PIN_LEN)];
+    if (!ends[0] || !ends[1]) return;
+    // The strip: each station's centre pushed out either side, square to the pin's line on screen.
+    let dx = ends[1][0] - ends[0][0], dy = ends[1][1] - ends[0][1], len = Math.hypot(dx, dy);
     if (len < 0.5) { dx = 0; dy = -1; len = 1; }
     const nx = -dy / len, ny = dx / len;
-    const left = pts.map(([px, py, w]) => [px + nx * w, py + ny * w]);
-    const right = pts.map(([px, py, w]) => [px - nx * w, py - ny * w]);
-    g.save();
-    g.globalAlpha = alpha;
-    g.beginPath();
-    g.moveTo(left[0][0], left[0][1]);
-    for (const q of left) g.lineTo(q[0], q[1]);
-    for (let i = right.length - 1; i >= 0; i--) g.lineTo(right[i][0], right[i][1]);
-    g.closePath();
-    const mid = pts[4];
-    const grad = g.createLinearGradient(mid[0] + nx * mid[2], mid[1] + ny * mid[2], mid[0] - nx * mid[2], mid[1] - ny * mid[2]);
-    grad.addColorStop(0, '#ffffff'); grad.addColorStop(0.45, '#f4f1ea'); grad.addColorStop(1, '#a9a49c');
-    g.fillStyle = grad;
-    g.fill();
-    g.strokeStyle = 'rgba(60,40,30,0.35)'; g.lineWidth = 0.6; g.stroke();
-    // Two red stripes round the neck.
-    g.strokeStyle = '#d8323a';
-    for (const h of [10.15, 10.95]) {
-      const k = PROFILE.findIndex(([ph]) => ph > h);
-      const [h0, r0] = PROFILE[k - 1], [h1, r1] = PROFILE[k];
-      const f = (h - h0) / (h1 - h0);
-      const q = this.p(x + ax * h, y + ay * h, z + az * h);
-      const w = (r0 + (r1 - r0) * f) * q[2];
-      g.lineWidth = Math.max(0.8, 0.32 * q[2]);
-      g.beginPath(); g.moveTo(q[0] + nx * w * 0.98, q[1] + ny * w * 0.98); g.lineTo(q[0] - nx * w * 0.98, q[1] - ny * w * 0.98); g.stroke();
+    // Seen side-on, as an upright pin nearly always is, the strip alone is the outline: the slices are only worth
+    // their cost when the pin points towards or away from the eye.
+    const midQ = at(PIN_LEN / 2);
+    const slices = !!midQ && len < 0.9 * PIN_LEN * midQ[2];
+    const stations = dim ? STATIONS_FAR : slices ? STATIONS_SLICED : STATIONS;
+    const pts = [];
+    for (const [h, r] of stations) {
+      const q = at(h);
+      if (!q) return;
+      if (!slices) {
+        const w = r * q[2];
+        pts.push({ h, q, w, L: [q[0] + nx * w, q[1] + ny * w], R: [q[0] - nx * w, q[1] - ny * w], ring: null });
+        continue;
+      }
+      const ring = [];
+      for (let i = 0; i < sides; i++) {
+        const t = i / sides * Math.PI * 2, cs = Math.cos(t) * r, sn = Math.sin(t) * r;
+        const v = this.p(x + ax * h + e1x * cs + e2x * sn, y + ay * h + e1y * cs + e2y * sn, z + az * h + e1z * cs + e2z * sn);
+        if (!v) return;
+        ring.push(v);
+      }
+      // The strip's edges there: the points of the slice that reach farthest either side of the pin's line on screen.
+      let L = ring[0], R = ring[0], lo = Infinity, hi = -Infinity;
+      for (const v of ring) {
+        const d = (v[0] - q[0]) * nx + (v[1] - q[1]) * ny;
+        if (d > hi) { hi = d; L = v; }
+        if (d < lo) { lo = d; R = v; }
+      }
+      pts.push({ h, q, w: (hi - lo) / 2, L, R, ring });
     }
-    g.restore();
+    // Fills the pin from h0 to h1: the slices, then the strip. (Apart, as one path they can wind opposite ways and
+    // leave slivers unfilled.)
+    const piece = (h0, h1) => {
+      const sel = pts.filter(o => o.h >= h0 && o.h <= h1);
+      if (slices) {
+        g.beginPath();
+        for (const o of sel) {
+          g.moveTo(o.ring[0][0], o.ring[0][1]);
+          for (let i = 1; i < o.ring.length; i++) g.lineTo(o.ring[i][0], o.ring[i][1]);
+          g.closePath();
+        }
+        g.fill();
+      }
+      g.beginPath();
+      g.moveTo(sel[0].L[0], sel[0].L[1]);
+      for (const o of sel) g.lineTo(o.L[0], o.L[1]);
+      for (let i = sel.length - 1; i >= 0; i--) g.lineTo(sel[i].R[0], sel[i].R[1]);
+      g.closePath();
+      g.fill();
+    };
+    // White across the pin, shaded from the light side to the dark.
+    const mid = pts.find(o => o.h >= 4.5);
+    const grad = g.createLinearGradient(mid.q[0] + nx * mid.w, mid.q[1] + ny * mid.w, mid.q[0] - nx * mid.w, mid.q[1] - ny * mid.w);
+    if (dim) { grad.addColorStop(0, '#9a968f'); grad.addColorStop(1, '#6e6a64'); }
+    else { grad.addColorStop(0, '#ffffff'); grad.addColorStop(0.45, '#f4f1ea'); grad.addColorStop(1, '#a9a49c'); }
+    const red = dim ? '#7d3236' : '#d8323a';
+    // A soft dark edge round the whole of it (a shadow cast by the whole shape, the inside then painted over), then
+    // the pieces over it.
+    if (slices) {
+      g.save();
+      g.shadowColor = 'rgba(60,40,30,0.75)'; g.shadowBlur = 1.6 * this.dpr;
+      g.fillStyle = grad;
+      piece(0, PIN_LEN);
+      g.restore();
+    } else {
+      // Side-on, a thin line round the strip does it.
+      g.beginPath();
+      g.moveTo(pts[0].L[0], pts[0].L[1]);
+      for (const o of pts) g.lineTo(o.L[0], o.L[1]);
+      for (let i = pts.length - 1; i >= 0; i--) g.lineTo(pts[i].R[0], pts[i].R[1]);
+      g.closePath();
+      g.strokeStyle = dim ? 'rgba(20,14,12,0.45)' : 'rgba(60,40,30,0.35)'; g.lineWidth = dim ? 0.6 : 1.2; g.stroke();
+    }
+    const eye = h => (x + ax * h - c.x) ** 2 + (y + ay * h - c.y) ** 2 + (z + az * h - c.h) ** 2;
+    const order = PIECES.slice();
+    if (eye(0) < eye(PIN_LEN)) order.reverse();   // the base is nearer: the head end first
+    for (const [h0, h1, stripe] of order) {
+      g.fillStyle = stripe ? red : grad;
+      piece(h0, h1);
+    }
+    // The flat base, when it's the end nearer the eye.
+    if (slices && eye(0) < eye(PIN_LEN)) {
+      const ring = pts[0].ring;
+      g.beginPath(); g.moveTo(ring[0][0], ring[0][1]);
+      for (const v of ring) g.lineTo(v[0], v[1]);
+      g.closePath();
+      g.fillStyle = dim ? '#85817b' : '#e4dfd6'; g.fill();
+      g.strokeStyle = 'rgba(60,40,30,0.4)'; g.lineWidth = 0.8; g.stroke();
+    }
   }
 
   sweepBar(sw) {
@@ -456,8 +544,11 @@ export class Renderer {
   }
 }
 
+// How far down the lane a pin is, for drawing near things over far ones: a pin falling or lying goes by its nearer
+// end, so one falling towards the camera is drawn over what stands between its base and its head.
 function depthOf(p) {
-  if (p.state === 'falling' || p.state === 'down' || p.state === 'gutter') return p.y;
+  if (p.state === 'falling') return Math.min(p.y, p.y + Math.sin(p.a) * Math.sin(fallen(p.ft) * Math.PI / 2) * PIN_LEN);
+  if (p.state === 'down' || p.state === 'gutter') return p.y - Math.abs(Math.sin(p.a)) * PIN_LEN / 2;
   return p.y;
 }
 

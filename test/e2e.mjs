@@ -361,6 +361,34 @@ const state = p => p.evaluate(() => ({ phase: pinDrop.phase, x: pinDrop.ball.x }
   } finally { await c2.close(); }
 }
 
+// A pin lying with its end towards the camera, as every pin in the gutter nearly does, is drawn as the round end of
+// it, not a sliver: it covers about as much of the screen as its widest slice does.
+{
+  const { c, p } = await lane({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 1 });
+  try {
+    const cover = await p.evaluate(async () => {
+      const { Renderer } = await import('./js/render.js');
+      const cv = document.createElement('canvas');
+      cv.style.cssText = 'position:fixed;left:0;top:0;width:390px;height:844px;visibility:hidden';
+      document.body.append(cv);
+      const v = new Renderer(cv); v.setCamera(1, 0);
+      const g = v.g, out = {};
+      for (const [name, a] of [['side-on', 0], ['end-on', Math.PI / 2], ['end-on, the other way', -Math.PI / 2]]) {
+        g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = '#000'; g.fillRect(0, 0, cv.width, cv.height);
+        v.pin({ state: 'down', x: 0, y: 735, a }, {});
+        const d = g.getImageData(0, 0, cv.width, cv.height).data;
+        let n = 0;
+        for (let i = 0; i < d.length; i += 4) if (d[i] > 120) n++;
+        const s = v.p(0, 735)[2];
+        out[name] = n / (Math.PI * (2.38 * s) ** 2);
+      }
+      cv.remove();
+      return out;
+    });
+    for (const [name, k] of Object.entries(cover)) assert.ok(k > 0.8, `a pin lying ${name} covers ${k.toFixed(2)} of its widest slice`);
+  } finally { await c.close(); }
+}
+
 // The camera follows a ball into the gutter and back to the middle without jumping: the head pin never moves more
 // than 3 px on screen in a sixtieth of a second (it jumped 34 px in one frame as the ball dropped into the gutter).
 {
