@@ -131,6 +131,19 @@ button { font: inherit; color: inherit; cursor: pointer; }
 @keyframes breathe { 50% { opacity: 0.8; } }
 .readout { bottom: calc(var(--safe-b) + 18px); padding: 0 16px; color: var(--gold); transition: opacity 0.4s; }
 
+/* On a phone held on its side: a note asking for it upright, over the lane. */
+.upright {
+  position: fixed; inset: 0; z-index: 2; display: grid; place-items: center; padding: 16px;
+  background: rgba(8, 11, 22, 0.85); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px);
+}
+.upright .panel { max-width: 360px; text-align: center; padding: 18px 20px 16px; }
+.upright svg { width: 52px; height: 52px; fill: none; stroke: var(--gold); stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; }
+.upright .phone { transform-box: fill-box; transform-origin: center; animation: turn 2.4s ease-in-out infinite; }
+.upright p { margin: 8px 0 0; color: var(--muted); }
+.upright p:focus { outline: none; }
+.upright b { color: var(--cream); }
+@keyframes turn { 0%, 20% { transform: rotate(-90deg); } 55%, 100% { transform: rotate(0); } }
+
 /* Sheets over the lane: the title, the menu, the scorecard, the end of a game. */
 .sheet {
   position: fixed; inset: 0; overflow-y: auto; -webkit-overflow-scrolling: touch;
@@ -218,7 +231,7 @@ h1[tabindex]:focus, h2[tabindex]:focus { outline: none; }
   .hud { left: 50%; right: auto; transform: translateX(-50%); width: 560px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .hint { animation: none; }
+  .hint, .upright .phone { animation: none; }
   /* A callout fades in and out where it stands, tilted as ever, instead of popping up and drifting off. */
   .call.go { animation-name: fade; transform: rotate(-3deg); }
   .big:active { transform: none; }

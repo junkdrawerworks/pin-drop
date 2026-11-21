@@ -709,7 +709,24 @@ function show(id) {
   // the roll starts it again. Back on the lane, the sound carries on if it was put to sleep while the page was hidden.
   if (id) sound.roll(0);
   else sound.wake(false);
+  upright();
 }
+
+// A phone held on its side: the pins are a thin strip under the scorecard and every firm flick throws at the top
+// speed, so a note over the lane asks for it upright (not over a sheet, and never on a tablet, which is tall enough
+// either way). "Bowl sideways anyway" puts it away until the page is loaded again.
+const sideways = matchMedia('(orientation: landscape) and (max-height: 500px) and (pointer: coarse)');
+let sidewaysOk = false;
+function upright() {
+  const on = sideways.matches && !sidewaysOk && !!game && shown === null;
+  if ($('upright').hidden === !on) return;
+  $('upright').hidden = !on;
+  for (const s of behind) $(s).inert = on;
+  if (on) { dropStrokes(); $('uprightSay').focus({ preventScroll: true }); }
+  else if (document.activeElement?.closest?.('#upright')) document.activeElement.blur();
+}
+sideways.addEventListener('change', upright);
+$('sideways').addEventListener('click', () => { sidewaysOk = true; upright(); });
 
 // Out of sight (another app, another tab), nothing plays; back again, it carries on unless a sheet is up.
 document.addEventListener('visibilitychange', () => {

@@ -1126,6 +1126,36 @@ for (const tap of ['#menuBtn', '#card']) {
   } finally { await c.close(); }
 }
 
+// A phone on its side gets a note over the lane asking for it upright, with the lane out of reach behind it; not on
+// the title, and never on a tablet on its side or a laptop. Turned upright it goes; "Bowl sideways anyway" puts it
+// away, and it stays away after the menu.
+{
+  const phone = { viewport: { width: 844, height: 390 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true };
+  const c = await browser.newContext({ serviceWorkers: 'block', ...phone });
+  const p = await c.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  try {
+    await p.goto(base);
+    assert.equal(await p.isVisible('#upright'), false, 'the note covers the title');
+    await p.click('#start');
+    assert.equal(await p.isVisible('#upright'), true, 'no note on a phone on its side');
+    assert.equal(await p.evaluate(() => document.getElementById('lane').inert && document.activeElement.id), 'uprightSay', 'the lane can be reached behind the note');
+    await p.setViewportSize({ width: 390, height: 844 });
+    await until(async () => !(await p.isVisible('#upright')), 2000, 'the note stayed up with the phone upright');
+    assert.equal(await p.evaluate(() => document.getElementById('lane').inert), false);
+    await p.setViewportSize({ width: 844, height: 390 });
+    await until(() => p.isVisible('#upright'), 2000, 'no note after turning the phone on its side again');
+    await p.click('#sideways');
+    assert.equal(await p.isVisible('#upright'), false, 'Bowl sideways anyway left the note up');
+    await p.click('#menuBtn'); await p.click('#menuResume');
+    assert.equal(await p.isVisible('#upright'), false, 'the note came back after the menu');
+  } finally { await c.close(); }
+  for (const options of [{ viewport: { width: 1180, height: 820 }, hasTouch: true }, { viewport: { width: 1280, height: 450 }, hasTouch: false }]) {
+    const { c, p } = await lane(options);
+    try { assert.equal(await p.isVisible('#upright'), false, `a note at ${options.viewport.width}x${options.viewport.height}`); } finally { await c.close(); }
+  }
+}
+
 // The first player keeps the name You: it's "Your turn" (never "You’s turn") as the turn comes round, and "You win!".
 {
   const { c, p } = await lane({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true }, {}, ['You', 'Player 2']);

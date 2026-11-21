@@ -24,7 +24,8 @@ thrown straight at the head pin.
   and the arrow to roll over is lit gold: from there a straight ball comes into the pocket at an angle. A fingertip on
   the lane shows a new player the swipe on their very first ball, how to drag the ball over to line up the first pins
   they leave, and how to curve the end of a swipe to hook, each until they touch the lane (and drawn still with Reduce
-  Motion on).
+  Motion on). A phone held on its side asks to be turned upright, where the pins show properly; a tablet plays either
+  way.
 - **Hook it for strikes.** Bend your swipe and the ball keeps that side spin through the oil on the front 40 feet, then
   grips the dry back end and curves. Coming into the pocket at an angle (just right of the head pin, for a ball that
   hooks left) is how most strikes happen. Straight balls work too, and leave more splits. The throw is forgiving about
