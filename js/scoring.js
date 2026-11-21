@@ -74,6 +74,39 @@ export function total(rolls) {
   return 0;
 }
 
+// What's called out for a ball: [the big words, the line under them, the kind of callout ('' for a strike, 'teal' for
+// a spare, 'small' for the rest)]. `before` is the player's balls before this one; `left`, the pins it left standing.
+// "Open frame" only for a frame with no strike or spare in it (USBC Playing Rules, Rule 2g: no mark after two balls),
+// and on the last ball of a player's game nothing about pins left, since no ball follows. In the tenth a strike or
+// spare says how many balls it has earned to count it.
+export function callFor(before, knocked, left, { wasSplit = false, sawGutter = false } = {}) {
+  const st = next(before), rolls = [...before, knocked], st2 = next(rolls);
+  const tenth = st.frame === 9, last = st2.done;
+  const more = !tenth || last ? '' : st2.ball === 1 ? 'two more balls' : 'one more ball';
+  const miss = sawGutter ? 'Gutter ball' : 'Missed';
+  const count = knocked === 0 ? miss : String(knocked);
+  if (st.fresh && left.length === 0) {
+    // Strikes in a row: count back through this player's balls.
+    let run = 0;
+    for (let k = rolls.length; k > 0; k--) {
+      if (rolls[k - 1] === 10 && next(rolls.slice(0, k - 1)).fresh) run++; else break;
+    }
+    if (run === 12) return ['Perfect!', 'A perfect game', ''];
+    return [run === 1 ? 'Strike!' : run === 2 ? 'Double!' : run === 3 ? 'Turkey!' : `${run} in a row!`, more, ''];
+  }
+  if (left.length === 0) return [wasSplit ? 'Picked up!' : 'Spare!', [wasSplit ? 'the split' : '', more].filter(Boolean).join(' · '), 'teal'];
+  if (st.fresh) {
+    if (last || knocked === 0) return [count, '', 'small'];
+    if (isSplit(left)) return ['Split', `the ${left.join('–')}`, 'small'];
+    return [count, left.length <= 3 ? `the ${left.join('–')} left` : 'pins', 'small'];
+  }
+  // A second ball (or the tenth's third, after a strike) that leaves pins: the frame's over, open only without a mark.
+  const ended = last || st2.frame !== st.frame;
+  const fb = frames(rolls)[st.frame].balls;
+  const open = ended && fb[0] !== 10 && fb[0] + fb[1] < 10;
+  return [count, open ? 'open frame' : '', 'small'];
+}
+
 // The highest the game could still reach.
 export function best(rolls) {
   const r = rolls.slice();

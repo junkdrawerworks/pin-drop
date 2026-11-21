@@ -1,7 +1,7 @@
 // Pin Drop: the game around the lane. Turns and frames, the swipe, the pinsetter, the scorecards and the sheets.
 import { Sim, rack, LANE, BALL_R } from './physics.js';
 import { Renderer, BALL_COLOURS } from './render.js';
-import { frames, next, total, isSplit } from './scoring.js';
+import { frames, next, total, isSplit, callFor } from './scoring.js';
 import * as sound from './sound.js';
 import { load, save } from './store.js';
 import { stroke, addPoints, readStroke, throwPoints, liftAs, throwOf } from './swipe.js';
@@ -152,7 +152,7 @@ function scoreBall() {
   p.rolls.push(knocked);
   store.throws = (store.throws || 0) + 1;
   store.thrown[p.name] = (store.thrown[p.name] || 0) + 1;
-  callout(st, p, knocked, standing.map(q => q.id).sort((a, b) => a - b));
+  callout(p, knocked, standing.map(q => q.id).sort((a, b) => a - b));
   const st2 = next(p.rolls);
   if (!st2.done && st2.frame === st.frame) {
     game.leftover = st2.fresh ? null : standing;
@@ -173,7 +173,7 @@ function scoreBall() {
   keep();
 }
 
-function callout(st, p, knocked, left) {
+function callout(p, knocked, left) {
   readout('');
   const cleared = left.length === 0;
   // A ball at about the slowest speed there is: say how to throw harder, once a game for each player. With a mouse or
@@ -191,27 +191,10 @@ function callout(st, p, knocked, left) {
     told.add(game.turn);
     tip = faster;
   }
-  if (st.fresh) {
-    if (cleared) {
-      // Strikes in a row: count back through this player's balls.
-      let run = 0;
-      for (let k = p.rolls.length; k > 0; k--) {
-        if (p.rolls[k - 1] === 10 && next(p.rolls.slice(0, k - 1)).fresh) run++; else break;
-      }
-      const name = run === 1 ? 'Strike!' : run === 2 ? 'Double!' : run === 3 ? 'Turkey!' : `${run} in a row!`;
-      const perfect = run === 12 ? 'A perfect game' : '';
-      say(perfect ? 'Perfect!' : name, perfect, '');
-      sound.chime(true); buzz([30, 50, 60]);
-    } else if (knocked === 0) say(sawGutter ? 'Gutter ball' : 'Missed', '', 'small', tip);
-    else if (isSplit(left)) say('Split', `the ${left.join('–')}`, 'small', tip);
-    else say(String(knocked), left.length <= 3 ? `the ${left.join('–')} left` : 'pins', 'small', tip);
-  } else if (cleared) {
-    say(wasSplit ? 'Picked up!' : 'Spare!', wasSplit ? 'the split' : '', 'teal');
-    sound.chime(false); buzz(30);
-  } else {
-    const st2 = next(p.rolls);
-    say(knocked === 0 ? (sawGutter ? 'Gutter ball' : 'Missed') : String(knocked), st2.frame !== st.frame || st2.done ? 'open frame' : '', 'small', tip);
-  }
+  const [big, small, kind] = callFor(p.rolls.slice(0, -1), knocked, left, { wasSplit, sawGutter });
+  say(big, small, kind, kind === 'small' ? tip : '');
+  if (kind === '') { sound.chime(true); buzz([30, 50, 60]); }
+  else if (kind === 'teal') { sound.chime(false); buzz(30); }
 }
 
 // ---- The pinsetter -------------------------------------------------------------------------------------

@@ -454,6 +454,33 @@ const freshRack = SPOTS.map((s, i) => `${i + 1}@${s.x.toFixed(6)},${s.y.toFixed(
   } finally { await c.close(); }
 }
 
+// A page with what's kept on this device set to `kept`, on the title with Carry on to tap.
+async function kept(options, k) {
+  const c = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, ...options });
+  const p = await c.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  p.on('console', m => { if (m.type() === 'error') problems.push(m.text()); });
+  await p.addInitScript(k => { if (!sessionStorage.getItem('set')) { sessionStorage.setItem('set', '1'); localStorage.setItem('pin-drop.v1', JSON.stringify(k)); } }, k);
+  await p.goto(base);
+  return { c, p };
+}
+const nineAndMiss = Array.from({ length: 18 }, (_, i) => (i % 2 ? 0 : 9));   // nine frames of 9 and a miss: 81
+
+// The tenth frame began with a strike, then a 7: a gutter ball on the last ball isn't an "open frame" (it has a strike
+// in it), and says nothing about the pins it left, since no ball follows.
+{
+  const { c, p } = await kept({}, { names: ['Ana'], current: { players: [{ name: 'Ana', rolls: [...nineAndMiss, 10, 7], x: 0 }], turn: 0, leftover: [{ id: 4 }, { id: 7 }, { id: 8 }].map(q => ({ ...q, ...SPOTS[q.id - 1] })) } });
+  try {
+    await p.click('#resume');
+    assert.equal(await p.evaluate(() => pinDrop.pins.length), 3, 'the 4-7-8 did not come back');
+    await watchCalls(p);
+    await p.evaluate(() => { pinDrop.speed = 4; pinDrop.throw({ x: 14, speed: 300, angle: 0.02, hook: 0 }); });
+    await until(() => p.evaluate(() => pinDrop.phase === 'over'), 20000, 'the last ball never finished');
+    assert.deepEqual(await p.evaluate(() => pinDrop.game.players[0].rolls.slice(18)), [10, 7, 0], 'the last ball was not a gutter ball');
+    assert.equal((await p.evaluate(() => window.calls)).filter(Boolean).at(-1), 'Gutter ball', 'the gutter ball after X 7 in the tenth');
+  } finally { await c.close(); }
+}
+
 // A ball that hooks into the gutter says why, once a game for each player: Ana's swipe bows left, so it hooks right,
 // and from the right of the lane it goes in the right-hand gutter. Her next one says nothing more. Ben's straight
 // ball into the gutter isn't a hook; his hook to the left into the left gutter gets the word turned round. The word

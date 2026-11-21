@@ -1,7 +1,7 @@
 // The scoring rules and the physics, without a browser:  node --test test/
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { frames, next, total, best, isSplit } from '../js/scoring.js';
+import { frames, next, total, best, isSplit, callFor } from '../js/scoring.js';
 import { play, rack, Sim, rng } from '../js/physics.js';
 import { through } from './aim.mjs';
 
@@ -69,6 +69,56 @@ test('splits', () => {
   for (const left of [[2, 8], [3, 9], [2, 4, 5], [1, 7], [1, 7, 10], [10], [6, 10], [2, 4, 7], [3, 6, 9, 10]]) {
     assert.equal(isSplit(left), false, `the ${left.join('-')} is not a split`);
   }
+});
+
+// Each ball of a game called out in turn: the callout for each, as [big, small], given the pins each left standing.
+const calls = (rolls, leaves = [], opts = []) => rolls.map((n, i) => callFor(rolls.slice(0, i), n, leaves[i] ?? (n === 10 ? [] : [10]), opts[i]).slice(0, 2));
+const nines = Array.from({ length: 18 }, (_, i) => (i % 2 ? 0 : 9));   // nine frames of 9 and a miss
+
+test('callouts in frames 1 to 9 say what they always have', () => {
+  assert.deepEqual(callFor([], 10, []), ['Strike!', '', '']);
+  assert.deepEqual(callFor([10], 10, []), ['Double!', '', '']);
+  assert.deepEqual(callFor([10, 10], 10, []), ['Turkey!', '', '']);
+  assert.deepEqual(callFor([10, 10, 10], 10, []), ['4 in a row!', '', '']);
+  assert.deepEqual(callFor([], 0, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], { sawGutter: true }), ['Gutter ball', '', 'small']);
+  assert.deepEqual(callFor([], 0, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]), ['Missed', '', 'small']);
+  assert.deepEqual(callFor([], 8, [7, 10]), ['Split', 'the 7–10', 'small']);
+  assert.deepEqual(callFor([], 9, [10]), ['9', 'the 10 left', 'small']);
+  assert.deepEqual(callFor([], 6, [2, 4, 7, 8]), ['6', 'pins', 'small']);
+  assert.deepEqual(callFor([9], 0, [10], { sawGutter: true }), ['Gutter ball', 'open frame', 'small']);
+  assert.deepEqual(callFor([7], 2, [10]), ['2', 'open frame', 'small']);
+  assert.deepEqual(callFor([9], 1, []), ['Spare!', '', 'teal']);
+  assert.deepEqual(callFor([8], 2, [], { wasSplit: true }), ['Picked up!', 'the split', 'teal']);
+  // The strike run counts strikes only: a spare's second ball of 10 doesn't start one.
+  assert.deepEqual(callFor([0, 10], 10, []), ['Strike!', '', '']);
+});
+
+test('callouts in the tenth: open frame only without a mark, nothing about pins left on the last ball', () => {
+  // X 7 2: a strike, so not an open frame (the tenth's third ball used to say "open frame").
+  assert.deepEqual(calls([...nines, 10, 7, 2], [, , , , , , , , , , , , , , , , , , [], [4, 7, 8], [10]]).slice(18),
+    [['Strike!', 'two more balls'], ['7', 'the 4–7–8 left'], ['2', '']]);
+  assert.deepEqual(callFor([...nines, 10, 7], 0, [4, 7, 8], { sawGutter: true }), ['Gutter ball', '', 'small']);
+  assert.deepEqual(callFor([...nines, 10, 7], 0, [4, 7, 8]), ['Missed', '', 'small']);
+  // X X 9: no "the 7 left" when no ball follows.
+  assert.deepEqual(calls([...nines, 10, 10, 9], [, , , , , , , , , , , , , , , , , , [], [], [7]]).slice(18),
+    [['Strike!', 'two more balls'], ['Double!', 'one more ball'], ['9', '']]);
+  // 9 / 7.
+  assert.deepEqual(calls([...nines, 9, 1, 7], [, , , , , , , , , , , , , , , , , , [7], [], [2, 4, 5]]).slice(18),
+    [['9', 'the 7 left'], ['Spare!', 'one more ball'], ['7', '']]);
+  // A split picked up in the tenth still says what it earned.
+  assert.deepEqual(callFor([...nines, 8], 2, [], { wasSplit: true }), ['Picked up!', 'the split · one more ball', 'teal']);
+  // Eleven strikes, then 9: the 300 just missed, and no "the 10 left".
+  const eleven = Array(11).fill(10);
+  assert.deepEqual(callFor(eleven.slice(0, 9), 10, []), ['10 in a row!', 'two more balls', '']);
+  assert.deepEqual(callFor(eleven.slice(0, 10), 10, []), ['11 in a row!', 'one more ball', '']);
+  assert.deepEqual(callFor(eleven, 9, [10]), ['9', '', 'small']);
+  // The 300.
+  assert.deepEqual(callFor(eleven, 10, []), ['Perfect!', 'A perfect game', '']);
+  // A 9 and a miss in the tenth is an open frame, like any other.
+  assert.deepEqual(calls([...nines, 9, 0], [, , , , , , , , , , , , , , , , , , [10], [10]]).slice(18), [['9', 'the 10 left'], ['Missed', 'open frame']]);
+  // A split in the tenth with a ball to follow is called; on the last ball, only the count.
+  assert.deepEqual(callFor([...nines], 8, [7, 10]), ['Split', 'the 7–10', 'small']);
+  assert.deepEqual(callFor([...nines, 10, 10], 8, [7, 10]), ['8', '', 'small']);
 });
 
 test('the same throw plays out the same way every time', () => {
