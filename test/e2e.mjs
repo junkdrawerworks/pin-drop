@@ -454,6 +454,49 @@ const freshRack = SPOTS.map((s, i) => `${i + 1}@${s.x.toFixed(6)},${s.y.toFixed(
   } finally { await c.close(); }
 }
 
+// A ball that hooks into the gutter says why, once a game for each player: Ana's swipe bows left, so it hooks right,
+// and from the right of the lane it goes in the right-hand gutter. Her next one says nothing more. Ben's straight
+// ball into the gutter isn't a hook; his hook to the left into the left gutter gets the word turned round. The word
+// comes ahead of the one about a slow ball.
+{
+  const { c, p, cdp } = await lane({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true }, {}, ['Ana', 'Ben']);
+  try {
+    await watchCalls(p);
+    const ball = async (throwIt, who) => {
+      await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
+      assert.equal(await p.evaluate(() => pinDrop.game.players[pinDrop.game.turn].name), who);
+      await p.evaluate(() => { window.calls = []; pinDrop.seed = 1; pinDrop.speed = 1; });
+      await throwIt();
+      await until(() => p.evaluate(() => pinDrop.phase === 'rolling'), 3000, 'nothing was thrown');
+      const said = await p.textContent('#readout');
+      await p.evaluate(() => { pinDrop.speed = 4; });
+      await until(() => p.evaluate(() => pinDrop.phase === 'settle'), 20000, 'the ball never finished');
+      return { said, side: await p.evaluate(() => pinDrop.ball.side), call: (await p.evaluate(() => window.calls)).at(-1) };
+    };
+    // Ana moves the ball to the right, then swipes up with a bow to the left.
+    await touchStroke(cdp, [[90, 0, 6]], 195, 660);
+    const curved = await ball(async () => {
+      const path = [];
+      for (let i = 0; i <= 14; i++) { const t = i / 14; path.push([285 - 36 * Math.sin(t * Math.PI), 660 - 320 * t]); }
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: path[0][0], y: path[0][1] }] });
+      for (const [x, y] of path.slice(1)) { await wait(12); await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y }] }); }
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    }, 'Ana');
+    assert.match(curved.said, /hook right/);
+    assert.equal(curved.side, 1, 'the curved swipe did not go in the right-hand gutter, so this checks nothing');
+    assert.equal(curved.call, 'Gutter ballYour swipe curved, so it hooked right: swipe straighter or stand further left');
+    const again = await ball(() => p.evaluate(() => pinDrop.throw({ x: 10, speed: 290, angle: 0, hook: 45 })), 'Ana');
+    assert.equal(again.side, 1);
+    assert.doesNotMatch(again.call, /curved/, 'the word about a hook into the gutter came twice in a game');
+    const straight = await ball(() => p.evaluate(() => pinDrop.throw({ x: 14, speed: 290, angle: 0.02, hook: 0 })), 'Ben');
+    assert.equal(straight.side, 1);
+    assert.doesNotMatch(straight.call, /curved/, 'a straight ball into the gutter was called a hook');
+    const slowLeft = await ball(() => p.evaluate(() => pinDrop.throw({ x: -10, speed: 175, angle: 0, hook: -45 })), 'Ben');
+    assert.equal(slowLeft.side, -1);
+    assert.equal(slowLeft.call, 'Gutter ballopen frameYour swipe curved, so it hooked left: swipe straighter or stand further right');
+  } finally { await c.close(); }
+}
+
 // Reloading the page at any moment of a ball, and tapping Carry on, picks up the game as it was saved: a ball still
 // rolling is thrown again, and once it has stopped it counts, with the pins it left (or a fresh rack) and the turn
 // passed on if the frame is over. Twice through: as the ball rolls, as the pins settle, during the sweep and as the

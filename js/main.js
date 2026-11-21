@@ -24,6 +24,8 @@ let pins = rack(), ball = idle(0), sim = null;
 let guide = null, sweep = null;
 let before = 10, sawGutter = false, wasSplit = false, felt = false, slow = false;
 let told = new Set();     // the players (by turn) already told a ball was slow, this game
+let toldHook = new Set(); // and told why a ball hooked into the gutter
+let lastShot = null;      // the ball being bowled, as it was thrown
 let paused = false;
 let followX = 0;          // how far across the lane the camera follows the ball, eased so it never jumps
 let timeScale = 1, fixedSeed = null;
@@ -92,7 +94,7 @@ function follow(x, dt) {
 function startGame(names) {
   hush();
   game = { players: names.map(name => ({ name, rolls: [], x: 0 })), turn: 0, leftover: null };
-  told = new Set();
+  told = new Set(); toldHook = new Set();
   store.names = names;
   keep();
   show(null);
@@ -104,7 +106,7 @@ function startGame(names) {
 
 function resumeGame() {
   game = store.current;
-  told = new Set();
+  told = new Set(); toldHook = new Set();
   show(null);
   $('hud').hidden = false;
   pins = rack(game.leftover || undefined);
@@ -129,6 +131,7 @@ function throwBall(shot) {
   before = pins.filter(p => p.state === 'up').length;
   wasSplit = !next(current().rolls).fresh && isSplit(pins.filter(p => p.state === 'up').map(p => p.id));
   sim = new Sim(pins, shot, fixedSeed ?? ((Math.random() * 2 ** 31) | 0));
+  lastShot = shot;
   phase = 'rolling'; phaseT = 0; camT = 0;
   slow = shot.speed <= 185;   // the slowest a swipe throws is 170
   nudgeText = '';
@@ -176,8 +179,18 @@ function callout(st, p, knocked, left) {
   // A ball at about the slowest speed there is: say how to throw harder, once a game for each player. With a mouse or
   // trackpad, a flick with a finger while another holds the click is quicker than dragging with the one pressing.
   const faster = clicking() ? 'Flick faster: on a trackpad, hold with one finger and flick with another' : 'Flick faster for a harder throw';
-  const tip = slow && !cleared && !told.has(game.turn) ? faster : '';
-  if (tip) told.add(game.turn);
+  // A ball that hooked into the gutter on the side it was hooking to: the swipe curved, maybe without meaning to. That
+  // comes first, once a game for each player too. (The readout said which way it hooked, but it's gone by now.)
+  const way = Math.sign(lastShot?.hook || 0);
+  let tip = '';
+  if (sawGutter && Math.abs(lastShot.hook) >= 3 && sim.ball.side === way && !toldHook.has(game.turn)) {
+    toldHook.add(game.turn);
+    tip = way > 0 ? 'Your swipe curved, so it hooked right: swipe straighter or stand further left'
+      : 'Your swipe curved, so it hooked left: swipe straighter or stand further right';
+  } else if (slow && !cleared && !told.has(game.turn)) {
+    told.add(game.turn);
+    tip = faster;
+  }
   if (st.fresh) {
     if (cleared) {
       // Strikes in a row: count back through this player's balls.
