@@ -198,4 +198,12 @@ h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.08em; color: 
 }
 @media (prefers-reduced-motion: reduce) {
   .hint { animation: none; }
+  /* A callout fades in and out where it stands, tilted as ever, instead of popping up and drifting off. */
+  .call.go { animation-name: fade; transform: rotate(-3deg); }
+  .big:active { transform: none; }
+}
+@keyframes fade {
+  0% { opacity: 0; }
+  10%, 85% { opacity: 1; }
+  100% { opacity: 0; }
 }

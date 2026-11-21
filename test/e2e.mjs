@@ -734,6 +734,23 @@ for (const names of [['Ana', 'Ben'], ['Alexandrinaaaa', 'Bartholomewwww', 'Chris
   } finally { await c.close(); }
 }
 
+// With Reduce Motion on, a callout fades in and out where it stands: no popping up, growing or drifting.
+{
+  const { c, p } = await lane({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, reducedMotion: 'reduce' });
+  try {
+    await p.evaluate(() => { pinDrop.speed = 4; pinDrop.throw({ x: 14, speed: 290, angle: 0.02, hook: 0 }); });
+    await until(() => p.evaluate(() => pinDrop.phase === 'settle'), 20000, 'the ball never finished');
+    const looks = await p.evaluate(() => {
+      const el = document.getElementById('call'), cs = getComputedStyle(el);
+      const keys = el.getAnimations()[0]?.effect.getKeyframes() || [];
+      return { name: cs.animationName, transform: cs.transform, moves: keys.some(k => k.transform && k.transform !== 'none') };
+    });
+    assert.equal(looks.name, 'fade', 'the callout still pops with Reduce Motion on');
+    assert.equal(looks.moves, false, 'the callout moves with Reduce Motion on');
+    assert.match(looks.transform, /^matrix\(0\.998/, `the callout isn't tilted as usual (${looks.transform})`);
+  } finally { await c.close(); }
+}
+
 // A game left half-way: one tap on Bowl doesn't throw it away. It asks for a second tap, which starts over.
 {
   const current = { players: [{ name: 'Ana', rolls: [7, 2, 10], x: 0 }, { name: 'Ben', rolls: [5, 4], x: 0 }], turn: 1, leftover: null };
