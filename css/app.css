@@ -24,6 +24,8 @@ body {
 }
 button { font: inherit; color: inherit; cursor: pointer; }
 [hidden] { display: none !important; }
+/* Words for a screen reader only: there to be read out, not seen. */
+.sr { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; border: 0; overflow: hidden; clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap; }
 
 #lane { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
 .aiming #lane { cursor: grab; }

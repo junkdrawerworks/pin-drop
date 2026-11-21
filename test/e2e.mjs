@@ -150,7 +150,7 @@ const { scores, rolls } = await page.evaluate(() => ({
   scores: [...document.querySelectorAll('#endCards .f.sum')].map(e => +e.textContent),
   rolls: pinDrop.game.players.map(p => p.rolls),
 }));
-const { total, next, frames } = await import('../js/scoring.js');
+const { total, next, frames, cardText } = await import('../js/scoring.js');
 assert.deepEqual(scores, rolls.map(total), 'the end cards show the right totals');
 assert.ok(rolls.every(r => next(r).done), 'both games are complete');
 assert.ok(rolls.some(r => frames(r).some(f => f.marks.includes('X'))), `no strikes in ${JSON.stringify(rolls)}, so strikes went untested`);
@@ -531,6 +531,34 @@ const nineAndMiss = Array.from({ length: 18 }, (_, i) => (i % 2 ? 0 : 9));   // 
     assert.equal(await p.textContent('#frames .f .tot'), '', "the strike's frame has a total before its bonus balls");
     await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
     assert.equal(await p.textContent('#others'), 'Ana 10+', "Ana's score on Ben's scorecard");
+  } finally { await c.close(); }
+}
+
+// For a screen reader: the scorecard button's name says what it shows (the name, the frame, the total) and then what it
+// does; each ball and each turn is said in one plain sentence by a polite live region; a callout leaves the page once
+// it has faded; and the scorecards are read in words, frame by frame, not as a string of marks.
+{
+  const { c, p } = await kept({}, { names: ['Ana', 'Ben'], current: { players: [{ name: 'Ana', rolls: [8, 1, 8, 2], x: 0 }, { name: 'Ben', rolls: [9, 0, 7, 2], x: 0 }], turn: 0, leftover: null } });
+  try {
+    await p.click('#resume');
+    assert.equal(await p.getAttribute('#card', 'aria-label'), null, 'the scorecard button has a name that hides what it shows');
+    assert.match(await p.locator('#hud').ariaSnapshot(), /button "Ana Frame 3 · ball 1 total at least 19\. Show the scorecard"/);
+    assert.deepEqual(await p.evaluate(() => [document.getElementById('call').getAttribute('aria-live'), document.getElementById('said').getAttribute('aria-live')]), [null, 'polite']);
+    assert.equal(await p.textContent('#said'), 'Ana, frame 3.');
+    await p.evaluate(() => { pinDrop.speed = 4; pinDrop.seed = 1; pinDrop.throw({ x: 14, speed: 300, angle: 0.02, hook: 0 }); });
+    await until(() => p.evaluate(() => pinDrop.phase === 'settle'), 20000, 'the ball never finished');
+    assert.equal(await p.textContent('#said'), 'Ana: Gutter ball.');
+    await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
+    await p.evaluate(() => pinDrop.throw({ x: 14, speed: 300, angle: 0.02, hook: 0 }));
+    await until(() => p.evaluate(() => pinDrop.game.turn === 1 && pinDrop.phase === 'aim'), 20000, "Ben's turn never came");
+    const said = await p.textContent('#said');
+    assert.equal(said, 'Ben’s turn, frame 3.');
+    await until(() => p.evaluate(() => document.getElementById('call').innerHTML === ''), 4000, 'the callout stayed on the page once it had faded');
+    await p.click('#card');
+    const rows = await p.$$eval('#boardCards .row', els => els.map(e => [e.querySelector('.frames').getAttribute('aria-hidden'), e.querySelector('.sr').textContent]));
+    const rolls = await p.evaluate(() => pinDrop.game.players.map(q => q.rolls));
+    assert.deepEqual(rows, rolls.map(r => ['true', cardText(r)]));
+    assert.match(rows[0][1], /^Frame 1: 8 and 1, 9\. Frame 2: 8, spare, 19\. Frame 3: miss and miss, 19\. Frames 4 to 10 to come\. Total 19\.$/);
   } finally { await c.close(); }
 }
 

@@ -119,6 +119,28 @@ export function callFor(before, knocked, left, { wasSplit = false, sawGutter = f
   return [count, open ? 'open frame' : '', 'small'];
 }
 
+// A scorecard in words, for a screen reader: "Frame 1: 8 and 1, 9. Frame 2: 8, spare, 27. Frames 3 to 10 to come.
+// Total 27." X, / and - are read as strike, spare and miss, and a total still waiting on bonus balls as "at least".
+export function cardText(rolls) {
+  const fs = frames(rolls);
+  const word = m => (m === 'X' ? 'strike' : m === '/' ? 'spare' : m === '-' ? 'miss' : m);
+  const counts = m => m !== 'X' && m !== '/';
+  const out = fs.map((f, i) => {
+    const ms = f.marks.filter(m => m !== '');
+    let said = ms.map(word).join(', ');
+    // The last two balls read "8 and 1" when both are counts.
+    if (ms.length >= 2 && counts(ms.at(-1)) && counts(ms.at(-2))) said = [...ms.slice(0, -2).map(word), `${word(ms.at(-2))} and ${word(ms.at(-1))}`].join(', ');
+    return `Frame ${i + 1}: ${said}${f.total !== null ? `, ${f.total}` : ''}.`;
+  });
+  // A frame being bowled counts as begun; the rest are to come.
+  const from = fs.length + 1;
+  if (from === 10) out.push('Frame 10 to come.');
+  else if (from < 10) out.push(`Frames ${from} to 10 to come.`);
+  const t = total(rolls), p = pending(rolls);
+  out.push(p > t ? `Total at least ${p}.` : `Total ${t}.`);
+  return out.join(' ');
+}
+
 // The highest the game could still reach.
 export function best(rolls) {
   const r = rolls.slice();

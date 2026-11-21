@@ -1,7 +1,7 @@
 // Pin Drop: the game around the lane. Turns and frames, the swipe, the pinsetter, the scorecards and the sheets.
 import { Sim, rack, LANE, BALL_R } from './physics.js';
 import { Renderer, BALL_COLOURS } from './render.js';
-import { frames, next, total, pending, isSplit, callFor } from './scoring.js';
+import { frames, next, total, pending, isSplit, callFor, cardText } from './scoring.js';
 import * as sound from './sound.js';
 import { load, save } from './store.js';
 import { stroke, addPoints, readStroke, throwPoints, liftAs, throwOf } from './swipe.js';
@@ -103,6 +103,7 @@ function startGame(names, spots = []) {
   pins = rack();
   aim();
   if (names.length > 1) say(turnLine(names[0]), '', 'small', '', 'aim');
+  tell(names.length > 1 ? `${turnLine(names[0])}, frame 1.` : 'Frame 1.');
 }
 
 function resumeGame() {
@@ -113,6 +114,7 @@ function resumeGame() {
   pins = rack(game.leftover || undefined);
   aim();
   say(`${current().name}`, `Frame ${next(current().rolls).frame + 1}`, 'small', '', 'aim');
+  tell(`${current().name}, frame ${next(current().rolls).frame + 1}.`);
 }
 
 // Ready for the next ball: the rack it faces, the ball where this player last stood.
@@ -194,8 +196,25 @@ function callout(p, knocked, left) {
   }
   const [big, small, kind] = callFor(p.rolls.slice(0, -1), knocked, left, { wasSplit, sawGutter });
   say(big, small, kind, kind === 'small' ? tip : '');
+  tell(ballWords(p, big, small, kind === 'small' ? tip : ''));
   if (kind === '') { sound.chime(true); buzz([30, 50, 60]); }
   else if (kind === 'teal') { sound.chime(false); buzz(30); }
+}
+
+// The ball in one plain sentence, for a screen reader: "Ana: 8, open frame. 15 after frame 2." The pins left are
+// read as "the 4, 7 and 10 left", not with dashes, and a frame that's over says its total, or its number while a strike
+// or spare waits.
+function ballWords(p, big, small, tip) {
+  const st = next(p.rolls.slice(0, -1)), st2 = next(p.rolls);
+  const said = small.replace(/\d+(?:–\d+)+/g, m => { const ns = m.split('–'); return `${ns.slice(0, -1).join(', ')} and ${ns.at(-1)}`; });
+  let words = `${p.name}: ${big}`;
+  if (said) words += big.endsWith('!') ? ` ${said[0].toUpperCase()}${said.slice(1)}.` : `, ${said}.`;
+  else if (!big.endsWith('!')) words += '.';
+  if (st2.done || st2.frame !== st.frame) {
+    const t = frames(p.rolls)[st.frame].total;
+    words += t !== null ? ` ${t} after frame ${st.frame + 1}.` : ` Frame ${st.frame + 1}.`;
+  }
+  return tip ? `${words} ${tip}.` : words;
 }
 
 // ---- The pinsetter -------------------------------------------------------------------------------------
@@ -238,7 +257,10 @@ function runSweep() {
     ball = idle(current().x || 0);
     hud();
     keep();
-    if (changing && game.players.length > 1) say(turnLine(current().name), '', 'small', '', 'aim');
+    if (changing && game.players.length > 1) {
+      say(turnLine(current().name), '', 'small', '', 'aim');
+      tell(`${turnLine(current().name)}, frame ${next(current().rolls).frame + 1}.`);
+    }
   }
 }
 
@@ -389,9 +411,11 @@ function shotFrom(pts, final) {
 
 // ---- What's on screen ----------------------------------------------------------------------------------
 
-function cardHTML(rolls, now, big) {
+// A scorecard: the boxes to look at, and the same in words for a screen reader (left out on the scorecard along the
+// top, which says it its own way).
+function cardHTML(rolls, now, big, words = true) {
   const fs = frames(rolls);
-  let h = `<span class="frames${big ? ' roomy' : ''}">`;
+  let h = `<span class="frames${big ? ' roomy' : ''}" aria-hidden="true">`;
   for (let i = 0; i < 10; i++) {
     const f = fs[i], boxes = i < 9 ? 2 : 3;
     let spans = '';
@@ -401,7 +425,7 @@ function cardHTML(rolls, now, big) {
     }
     h += `<span class="f${i === now ? ' now' : ''}"><span class="balls">${spans}</span><span class="tot">${f && f.total !== null ? f.total : ''}</span></span>`;
   }
-  return h + `<span class="f sum${pending(rolls) > total(rolls) ? ' waiting' : ''}"><span>${sumHTML(rolls)}</span></span></span>`;
+  return h + `<span class="f sum${pending(rolls) > total(rolls) ? ' waiting' : ''}"><span>${sumHTML(rolls)}</span></span></span>${words ? `<span class="sr">${cardText(rolls)}</span>` : ''}`;
 }
 
 // A player's total, and while a strike or spare waits for its bonus balls, the pins so far with a plus ("10+"): a
@@ -424,7 +448,10 @@ function hud() {
   const upName = passing && up >= 0 ? game.players[up].name : '';
   $('where').textContent = passing ? (up < 0 ? 'Done' : `Up next: ${isYou(upName) ? 'you' : upName}`)
     : st.done ? 'Done' : `Frame ${st.frame + 1} · ${bonus ? 'bonus ball' : `ball ${st.ball + 1}`}`;
-  $('frames').outerHTML = cardHTML(p.rolls, st.done ? -1 : st.frame).replace('<span class="frames', '<span id="frames" class="frames');
+  $('frames').outerHTML = cardHTML(p.rolls, st.done ? -1 : st.frame, false, false).replace('<span class="frames', '<span id="frames" class="frames');
+  // The button's name carries what it shows (the name, the frame and the total), then what it does.
+  const t = total(p.rolls), pend = pending(p.rolls);
+  $('cardSay').textContent = `total ${pend > t ? `at least ${pend}` : t}. Show the scorecard`;
   const others = game.players.map((q, i) => ({ q, i })).filter(o => o.i !== game.turn);
   $('others').hidden = others.length === 0;
   $('others').innerHTML = others.map(({ q, i }) =>
@@ -456,7 +483,8 @@ function say(big, small, kind, tip, at = 'pins') {
   if (at !== 'aim' && top < below) top = s.deckFront + 12 + grow;
   el.style.top = `${Math.round(Math.max(below, Math.min(top, view.H - h - grow - 8)))}px`;
   clearTimeout(callTimer);
-  callTimer = setTimeout(() => { el.className = 'call'; }, tip ? 2900 : 1800);
+  // Gone once it has faded, so a screen reader reading the page doesn't come across it later.
+  callTimer = setTimeout(() => { el.className = 'call'; el.innerHTML = ''; }, tip ? 2900 : 1800);
 }
 
 // The first player is called You until they type a name, and "You’s turn" won't do.
@@ -464,7 +492,11 @@ const isYou = name => name.trim().toLowerCase() === 'you';
 const turnLine = name => (isYou(name) ? 'Your turn' : `${name}’s turn`);
 const winLine = name => (isYou(name) ? 'You win!' : `${name} wins!`);
 
-function hush() { clearTimeout(callTimer); $('call').className = 'call'; }
+function hush() { clearTimeout(callTimer); $('call').className = 'call'; $('call').innerHTML = ''; }
+
+// One sentence for a screen reader to say (the callouts come and go too fast, and say less): what each ball did and
+// whose turn it is, read out by the polite live region #said.
+function tell(text) { $('said').textContent = text; }
 
 function readout(text) {
   $('readout').innerHTML = text ? `<span class="pill">${esc(text)}</span>` : '';

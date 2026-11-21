@@ -1,7 +1,7 @@
 // The scoring rules and the physics, without a browser:  node --test test/
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { frames, next, total, pending, best, isSplit, callFor } from '../js/scoring.js';
+import { frames, next, total, pending, best, isSplit, callFor, cardText } from '../js/scoring.js';
 import { play, rack, Sim, rng } from '../js/physics.js';
 import { through } from './aim.mjs';
 
@@ -89,6 +89,22 @@ test('the total while a strike or spare waits for its bonus balls: the pins so f
   for (let k = 0; k <= game.length; k++) assert.ok(pending(game.slice(0, k)) <= total(game), `after ${k} balls`);
   assert.equal(pending(game), total(game));
   assert.equal(pending(Array(12).fill(10)), 300);
+});
+
+test('a scorecard in words, for a screen reader', () => {
+  assert.equal(cardText([]), 'Frames 1 to 10 to come. Total 0.');
+  assert.equal(cardText([8, 1, 8, 2]), 'Frame 1: 8 and 1, 9. Frame 2: 8, spare. Frames 3 to 10 to come. Total at least 19.');
+  assert.equal(cardText([8, 1, 8, 2, 10]), 'Frame 1: 8 and 1, 9. Frame 2: 8, spare, 29. Frame 3: strike. Frames 4 to 10 to come. Total at least 39.');
+  assert.equal(cardText([0, 7, 7]), 'Frame 1: miss and 7, 7. Frame 2: 7. Frames 3 to 10 to come. Total 7.');
+  // A whole game, with a tenth frame of a strike and its two fill balls.
+  assert.equal(cardText([...Array(18).fill(0), 10, 7, 2]), 'Frame 1: miss and miss, 0. Frame 2: miss and miss, 0. Frame 3: miss and miss, 0. '
+    + 'Frame 4: miss and miss, 0. Frame 5: miss and miss, 0. Frame 6: miss and miss, 0. Frame 7: miss and miss, 0. '
+    + 'Frame 8: miss and miss, 0. Frame 9: miss and miss, 0. Frame 10: strike, 7 and 2, 19. Total 19.');
+  assert.match(cardText(Array(12).fill(10)), /Frame 10: strike, strike, strike, 300\. Total 300\.$/);
+  assert.match(cardText([...Array(18).fill(0), 9, 1, 0]), /Frame 10: 9, spare, miss, 10\. Total 10\.$/);
+  assert.match(cardText([...Array(18).fill(0), 10]), /Frame 10: strike\. Total at least 10\.$/);
+  // Never an X, a slash or a dash.
+  assert.doesNotMatch(cardText([10, 9, 1, 0, 0, 10, 10]), /[X/-]/);
 });
 
 // Each ball of a game called out in turn: the callout for each, as [big, small], given the pins each left standing.

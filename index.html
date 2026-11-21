@@ -23,9 +23,10 @@
 
   <header class="hud" id="hud" hidden>
     <div class="col">
-      <button type="button" class="card" id="card" aria-label="Show the scorecard">
+      <button type="button" class="card" id="card">
         <span class="who"><b id="who">You</b><span id="where">Frame 1</span></span>
-        <span class="frames" id="frames"></span>
+        <span class="frames" id="frames" aria-hidden="true"></span>
+        <span class="sr" id="cardSay">Show the scorecard</span>
       </button>
       <div class="others" id="others" hidden></div>
     </div>
@@ -34,7 +35,8 @@
     </button>
   </header>
 
-  <div class="call" id="call" aria-live="polite"></div>
+  <div class="call" id="call"></div>
+  <p class="sr" id="said" aria-live="polite"></p>
   <p class="hint" id="hint" hidden></p>
   <p class="readout" id="readout"></p>
 
