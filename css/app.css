@@ -363,6 +363,26 @@ button.best:focus-visible { outline: 2px solid var(--teal); outline-offset: -2px
 .note { margin: 12px 0 0; font-size: 13px; color: var(--muted); }
 .link.danger { display: block; margin: 8px auto 0; color: var(--coral); font-size: 14px; padding: 0 12px; }
 
+/* Google Drive, under the record on the title, and the cloud in the title's corner while it's on: a green dot when
+   synced; not by colour alone, a hollow ring while syncing and a red badge with "!" when it needs a tap. */
+.drive { margin-top: 14px; border-top: 1px solid var(--line); padding-top: 10px; font-size: 13px; color: var(--muted); }
+.drive p { margin: 0 0 4px; }
+.drive b { color: var(--cream); font-weight: 600; overflow-wrap: anywhere; }
+.drive a { color: var(--teal); }
+.drive .err { color: var(--coral); }
+.drive .row { display: flex; gap: 10px; }
+.drive .row .plain { flex: 1; min-width: 0; }
+.drive .plain { font-size: 14px; padding: 10px; color: var(--cream); }
+.drive .plain.quiet { color: var(--muted); }
+#title .panel { position: relative; }
+.cloud { position: absolute; z-index: 1; top: 10px; right: 10px; width: 44px; height: 44px; padding: 10px; border: 0; border-radius: 12px; background: none; color: var(--muted); }
+.cloud svg { width: 24px; height: 24px; display: block; }
+.cloud .dot { position: absolute; right: 8px; top: 10px; width: 9px; height: 9px; border-radius: 50%; background: #4cc77a; box-shadow: 0 0 0 2px var(--panel); }
+.cloud[data-s="busy"] .dot { background: none; border: 2px solid var(--gold); }
+.cloud[data-s="tap"] .dot, .cloud[data-s="error"] .dot { right: 5px; top: 6px; display: grid; place-items: center; width: 15px; height: 15px; background: var(--coral); }
+.cloud[data-s="tap"] .dot::after, .cloud[data-s="error"] .dot::after { content: '!'; color: var(--night); font: 800 11px/1 Figtree, system-ui, sans-serif; }
+.cloud:focus-visible { outline: 2px solid var(--teal); outline-offset: -2px; }
+
 .cards { display: grid; gap: 14px; margin-top: 12px; }
 .cards .row .name { display: flex; justify-content: space-between; font-weight: 700; margin-bottom: 4px; }
 .cards .row .name i { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 6px; }

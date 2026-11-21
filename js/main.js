@@ -6,6 +6,7 @@ import { frames, next, total, pending, isSplit, callFor, cardText, boxes, best a
 import * as sound from './sound.js';
 import { load, save as write, parse, merge, forget, numbers, int, keeping, KEY, GAMES } from './store.js';
 import { stroke, addPoints, readStroke, throwPoints, liftAs, throwOf, MOUSE } from './swipe.js';
+import { drive } from './sync.js';
 
 const $ = id => document.getElementById(id);
 const canvas = $('lane');
@@ -168,8 +169,10 @@ function startGame(lineup, fromTitle = false) {
     store.names = lineup.filter(q => !q.cpu).map(q => q.name);
     store.cpu = lineup.find(q => q.cpu)?.cpu ?? null;
     store.opts = Object.fromEntries(lineup.filter(q => q.bumpers || q.head).map(q => [q.name, extras(q)]));
+    store.lineupAt = Date.now();
   }
   keep();
+  if (fromTitle) drive.changed();
   $('hud').hidden = false;
   show(null);
   pins = rack();
@@ -1303,10 +1306,14 @@ function averages() {
 }
 $('numbersDone').addEventListener('click', closePast);
 $('forget').addEventListener('click', () => {
-  if (!forgetArmed) { forgetArmed = true; $('forget').textContent = 'Tap again to forget them'; forgetTimer = setTimeout(disarmForget, 4000); return; }
+  if (!forgetArmed) {
+    forgetArmed = true; $('forget').textContent = drive.isOn() ? 'Tap again to forget them on every device' : 'Tap again to forget them';
+    forgetTimer = setTimeout(disarmForget, 4000); return;
+  }
   disarmForget();
   forget(store);
   put();
+  drive.changed();
   record();
   pastFrom = null;
   show('title');
@@ -1352,6 +1359,7 @@ function finish() {
   store.games = [{ at, scores }, ...(store.games || [])].slice(0, GAMES);
   store.current = null;
   put();
+  drive.changed();
 }
 
 // "Ana and Cal": names in a line ("You and Ana" when one is still called You, who comes first).
@@ -1551,6 +1559,21 @@ addEventListener('storage', e => {
   merge(store, theirs);
   if (phase === 'title' || phase === 'over') store.current = theirs.current;
   if (phase === 'title') { resumeButton(); record(); }
+});
+
+// Google Drive, at pin-drop.junkdrawer.works only (see sync.js): the block under the record on the title, and the cloud
+// in the title's corner once it's on. Not offered in a browser that won't keep anything, which couldn't keep it on.
+drive.chip($('cloud'));
+if (keeping()) drive.card($('drive')); else $('drive').hidden = true;
+// A sync brought games, bests or players from another device: take them in, as from another window.
+drive.onUpdate(() => {
+  let raw = null;
+  try { raw = localStorage.getItem(KEY); } catch { return; }
+  merge(store, parse(raw));
+  if (phase === 'title') {
+    resumeButton(); record();
+    if (!$('players').contains(document.activeElement)) drawPlayers(lineup());
+  }
 });
 
 addEventListener('resize', () => { view.resize(); view.setCamera(camT, followX); redraw(); if (phase === 'aim') hint(); });

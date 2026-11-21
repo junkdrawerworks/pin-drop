@@ -11,6 +11,7 @@ export const KEY = 'pin-drop.v1';
 // `opts` holds each player's switches on the title by name ({ bumpers, head }), for the next time they play here, and
 // `cpu` the computer player's level ('rookie', 'regular' or 'pro'), or null for none. The computer's games never count
 // toward a best, and are kept with `cpu` (its level) on its score.
+// `lineupAt` is when the players were last set up on the title (see merge).
 // `games` are the last GAMES games, newest first, each { at (when it ended, ms), scores: [{ name, score, rolls, splits,
 // c (ball colour), bumpers, head, cpu }] }. `bestAt` and `bestsAt` (by name) are when each best was bowled, so that
 // Forget these scores, which sets `forgot` to when it was tapped, takes away every game and best from before then, in
@@ -50,8 +51,9 @@ export function load() {
 // tab brought back) may have finished a game since this one loaded, and writing this one's stale copy over it would
 // lose that game and maybe the best. The games are both lists together, newest first; the best and each player's best
 // are the higher of the two (a tie keeps this window's), and each player's ball count and lessons shown the higher.
-// Forget these scores on either side wins over everything bowled before it was tapped. The names and their switches,
-// the sound and the game in progress stay this window's.
+// Forget these scores on either side wins over everything bowled before it was tapped. The players set up on the title
+// (the names, their switches and the computer) are whichever side's were set up last (`lineupAt`), and the sound and the
+// game in progress stay this window's.
 export function merge(mine, theirs) {
   const forgot = Math.max(int(mine.forgot), int(theirs.forgot));
   // Kept from before Forget these scores was tapped (a best kept before bests had times counts as from then).
@@ -83,6 +85,9 @@ export function merge(mine, theirs) {
     mine[k] = out;
   }
   mine.throws = Math.max(int(mine.throws), int(theirs.throws));
+  if (int(theirs.lineupAt) > int(mine.lineupAt) && Array.isArray(theirs.names) && theirs.names.length) {
+    Object.assign(mine, { names: theirs.names.slice(), opts: byName(theirs.opts), cpu: theirs.cpu ?? null, lineupAt: int(theirs.lineupAt) });
+  }
   return mine;
 }
 

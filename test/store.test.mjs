@@ -148,3 +148,15 @@ test('each player\'s numbers: games, the average of the last 10, the high game, 
   assert.deepEqual([cy.games, cy.avg, cy.high, cy.strikes, cy.spares], [12, 100, 100, null, null]);
   assert.deepEqual(numbers([]), []);
 });
+
+test('the players set up on the title are whichever side set them up last', () => {
+  const mine = parse(JSON.stringify({ names: ['Ana'], opts: { Ana: { bumpers: true } }, cpu: null, lineupAt: 100 }));
+  merge(mine, parse(JSON.stringify({ names: ['Ben', 'Cy'], opts: { Cy: { head: 20 } }, cpu: 'pro', lineupAt: 200 })));
+  assert.deepEqual([mine.names, { ...mine.opts }, mine.cpu, mine.lineupAt], [['Ben', 'Cy'], { Cy: { head: 20 } }, 'pro', 200]);
+  merge(mine, parse(JSON.stringify({ names: ['Old'], lineupAt: 150 })));
+  assert.deepEqual(mine.names, ['Ben', 'Cy']);
+  // Kept before it had a time: this side's stay.
+  const a = parse(JSON.stringify({ names: ['Ana'] }));
+  merge(a, parse(JSON.stringify({ names: ['Ben'] })));
+  assert.deepEqual(a.names, ['Ana']);
+});
