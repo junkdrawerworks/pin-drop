@@ -45,15 +45,15 @@ thrown straight at the head pin.
   badge and a chime. While a second ball is aimed, the pins left show under the scorecard as ten dots, the way an
   alley's screen shows them.
 - **Up to four players** pass the phone round, each with their own ball colour. As the turn passes, the next player's
-  card comes up over the lane ("Ben's turn · Tap to bowl"), and nothing can be thrown until they tap it. The
-  Scorecard shows under each player's total the most they can still reach ("max 212"). On Bowl again, the second
-  player leads off the next game, and from the second game the end shows tonight's tally ("Tonight: Ben 2 · Ana 1")
-  until you change players. Pin Drop keeps your best game and your
-  last few scores, and a game you leave half-way carries on where you were. **Bumpers**, switched on next to a player's
-  name, keep their ball out of the gutters: it comes off a rail along each side of the lane. A game with bumpers is
-  marked in the recent games and doesn't count toward a best. Tapping a player's ball on the title gives them a **head
-  start** of 10 to 50 pins, the way a league's handicap evens up a game: it's added to their total at the end, in a box
-  of its own on the card, and a game with one doesn't count toward a best either.
+  card comes up over the lane ("Ben's turn · Tap to bowl"), and nothing can be thrown until they tap it. The Scorecard
+  shows under each player's total the most they can still reach ("max 212"). On Bowl again, the second player leads
+  off the next game, and from the second game the end shows tonight's tally ("Tonight: Ben 2 · Ana 1") until you
+  change players. Pin Drop keeps your best game and your last few scores, and a game you leave half-way carries on
+  where you were. **Bumpers**, switched on next to a player's name, keep their ball out of the gutters: it comes off a
+  rail along each side of the lane. A game with bumpers is marked in the recent games and doesn't count toward a best.
+  Tapping a player's ball on the title gives them a **head start** of 10 to 50 pins, the way a league's handicap evens
+  up a game: it's added to their total at the end, in a box of its own on the card, and a game with one doesn't count
+  toward a best either.
 - **A computer to play against** when you're on your own: "+ Add a computer player" on the title, at Rookie, Regular
   or Pro (they average about 100, 150 and 200). It bowls its own turns through the same physics, hooking its first
   ball into the pocket and throwing straight at pins left from across the lane, and misses by its level's amount. You
