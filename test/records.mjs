@@ -113,6 +113,56 @@ const nineAndMiss = Array.from({ length: 18 }, (_, i) => (i % 2 ? 0 : 9));   // 
   } finally { await c.close(); }
 }
 
+// ---- Each player's numbers over time ------------------------------------------------------------------------------
+
+// The best game on the title opens each player's averages: games played, the average of the last 10, the high game,
+// and strikes and spares made. Forget these scores takes a second tap, then every game and best goes, here and from a
+// second window that still had them; the names stay.
+{
+  const nine = nineAndMiss.concat([9, 0]);   // 90
+  const games = [
+    { at: 3000, scores: [{ name: 'Ana', score: 300, rolls: Array(12).fill(10), splits: [], c: 0 }, { name: 'Ben', score: 90, rolls: nine, splits: [], c: 1 }] },
+    { at: 2000, scores: [{ name: 'Ana', score: 90, rolls: nine, splits: [], c: 0 }, { name: 'Computer (Pro)', cpu: 'pro', score: 200, rolls: [], splits: [], c: 1 }] },
+    { at: 1000, scores: [{ name: 'Ben', score: 150, rolls: Array(21).fill(5), splits: [], c: 0, bumpers: true }] },
+  ];
+  const { c, p } = await kept({ names: ['Ana', 'Ben'], best: 300, bestBy: 'Ana', bestAt: 3000, bests: { Ana: 300, Ben: 90 }, bestsAt: { Ana: 3000, Ben: 3000 }, games });
+  const p2 = await c.newPage();   // a second window, open on the title all along
+  await p2.goto(base);
+  try {
+    assert.equal(await p.getAttribute('#bestBtn', 'aria-label'), 'Best game · Ana 300. Show each player’s averages');
+    await p.click('#bestBtn');
+    assert.equal(await p.isVisible('#numbers'), true, 'the averages did not open');
+    assert.equal(await p.evaluate(() => document.activeElement.id), 'numbersTitle');
+    const rows = await p.$$eval('#numbersRows tbody tr', els => els.map(tr => [...tr.children].map(td => td.textContent)));
+    // Ana: 2 games, (300 + 90) / 2; 12 of 22 strike chances and none of 10 spare chances. Ben's bumpers game and the
+    // computer's aren't counted.
+    assert.deepEqual(rows, [['Ana', '2', '195', '300', '55%', '0%'], ['Ben', '1', '90', '90', '0%', '0%']]);
+    assert.deepEqual(await p.$$eval('#numbersRows thead th', els => els.map(e => e.textContent)), ['Player', 'Games', 'Average', 'High', 'Strikes', 'Spares']);
+    const wide = await p.evaluate(() => document.querySelector('#numbersRows table').getBoundingClientRect().width <= document.querySelector('#numbersRows').clientWidth);
+    assert.ok(wide, 'the averages are wider than the phone');
+    // Back to the best game.
+    await p.click('#numbersDone');
+    assert.equal(await p.evaluate(() => document.activeElement.id), 'bestBtn');
+    // Forget these scores: one tap only asks.
+    await p.click('#bestBtn');
+    await p.click('#forget');
+    assert.equal(await p.textContent('#forget'), 'Tap again to forget them');
+    assert.equal((await saved(p)).games.length, 3, 'one tap forgot the scores');
+    await p.click('#forget');
+    assert.equal(await p.isVisible('#title'), true);
+    assert.equal(await p.locator('#record li, #bestBtn').count(), 0, 'the title still shows games or a best');
+    const s = await saved(p);
+    assert.deepEqual([s.games, s.best, s.bests, s.names], [[], 0, {}, ['Ana', 'Ben']]);
+    // The other window took that in, and its next save doesn't bring them back.
+    await until(() => p2.evaluate(() => !document.querySelector('#record li')), 3000, 'the second window still lists the forgotten games');
+    await p2.click('#start');
+    await p2.evaluate(() => { pinDrop.speed = 10; pinDrop.throw({ x: 0, speed: 300, angle: 0, hook: 0 }); });
+    await until(() => p2.evaluate(() => pinDrop.phase === 'aim' && pinDrop.game.players[0].rolls.length === 1), 15000, 'the ball never finished');
+    const s2 = await saved(p2);
+    assert.deepEqual([s2.games, s2.best], [[], 0], 'the second window brought the forgotten scores back');
+  } finally { await c.close(); }
+}
+
 assert.deepEqual(problems, [], 'problems while using it');
 await browser.close();
 server.close();

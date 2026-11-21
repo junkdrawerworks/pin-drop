@@ -4,7 +4,7 @@ import { plan, cpuName, LEVELS, LEVEL_KEYS } from './computer.js';
 import { Renderer, BALL_COLOURS, CPU_COLOURS } from './render.js';
 import { frames, next, total, pending, isSplit, callFor, cardText, boxes, best as most, statsLine } from './scoring.js';
 import * as sound from './sound.js';
-import { load, save as write, parse, merge, int, keeping, KEY } from './store.js';
+import { load, save as write, parse, merge, forget, numbers, int, keeping, KEY, GAMES } from './store.js';
 import { stroke, addPoints, readStroke, throwPoints, liftAs, throwOf, MOUSE } from './swipe.js';
 
 const $ = id => document.getElementById(id);
@@ -961,8 +961,8 @@ function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<':
 
 // ---- Sheets --------------------------------------------------------------------------------------------
 
-const sheets = ['title', 'menu', 'howSheet', 'board', 'end', 'past'];
-const dialogs = ['menu', 'howSheet', 'board', 'end', 'past'];
+const sheets = ['title', 'menu', 'howSheet', 'board', 'end', 'past', 'numbers'];
+const dialogs = ['menu', 'howSheet', 'board', 'end', 'past', 'numbers'];
 // Everything behind a sheet, out of reach of Tab and a screen reader while one is up.
 const behind = ['lane', 'handoff', 'hud', 'others', 'call', 'hint', 'readout', 'replay'];
 // One How to play: the title's folded-up copy is the sheet's list.
@@ -1135,7 +1135,10 @@ function record() {
   const games = store.games || [];
   let h = '';
   const by = store.bestBy && !isYou(store.bestBy) ? ` · ${esc(store.bestBy)}` : '';
-  if (store.best) h += `<div class="best"><span>Best game${by}</span><b>${int(store.best)}</b></div>`;
+  // The best game opens each player's numbers (or with no best yet, a line of its own does, once anyone's game counts).
+  const open = say => `<button type="button" class="best" id="bestBtn" aria-label="${say}. Show each player’s averages">`;
+  if (store.best) h += `${open(`Best game${by} ${int(store.best)}`)}<span>Best game${by}</span><b>${int(store.best)}</b></button>`;
+  else if (numbers(games).length) h += `${open('Averages')}<span>Averages</span><b></b></button>`;
   if (games.length) {
     const listed = games.slice(0, 5);
     h += '<ol>' + listed.map((g, k) => {
@@ -1188,11 +1191,41 @@ function past(at) {
 }
 function closePast() {
   show('title');
-  const back = pastFrom?.dataset?.at && $('record').querySelector(`[data-at="${pastFrom.dataset.at}"]`);
+  const back = pastFrom?.id === 'bestBtn' ? $('bestBtn') : pastFrom?.dataset?.at && $('record').querySelector(`[data-at="${pastFrom.dataset.at}"]`);
   back?.focus({ preventScroll: true });
   pastFrom = null;
 }
-$('record').addEventListener('click', e => { const b = e.target.closest('.game'); if (b) past(+b.dataset.at); });
+$('record').addEventListener('click', e => {
+  const b = e.target.closest('.game, #bestBtn');
+  if (b?.id === 'bestBtn') averages(); else if (b) past(+b.dataset.at);
+});
+
+// Each player's numbers over the games kept here, from the best game on the title: games played, the average of the
+// last 10, the high game, and the strikes and spares made out of the chances at them. Under them, Forget these scores
+// (a second tap to be sure, like End this game) takes every game and best away.
+const pct = v => (v === null ? '–' : `${Math.round(v * 100)}%`);
+let forgetArmed = false, forgetTimer = 0;
+function disarmForget() { forgetArmed = false; clearTimeout(forgetTimer); $('forget').textContent = 'Forget these scores'; }
+function averages() {
+  const rows = numbers(store.games);
+  $('numbersRows').innerHTML = `<table><thead><tr><th scope="col"><span class="sr">Player</span></th><th scope="col">Games</th><th scope="col">Average</th><th scope="col">High</th>`
+    + '<th scope="col">Strikes</th><th scope="col">Spares</th></tr></thead><tbody>'
+    + rows.map(r => `<tr><th scope="row">${esc(r.name)}</th><td>${r.games}</td><td class="avg">${r.avg}</td><td>${r.high}</td><td>${pct(r.strikes)}</td><td>${pct(r.spares)}</td></tr>`).join('')
+    + '</tbody></table>';
+  disarmForget();
+  pastFrom = document.activeElement;
+  show('numbers');
+}
+$('numbersDone').addEventListener('click', closePast);
+$('forget').addEventListener('click', () => {
+  if (!forgetArmed) { forgetArmed = true; $('forget').textContent = 'Tap again to forget them'; forgetTimer = setTimeout(disarmForget, 4000); return; }
+  disarmForget();
+  forget(store);
+  put();
+  record();
+  pastFrom = null;
+  show('title');
+});
 $('pastDone').addEventListener('click', closePast);
 
 // Whether a player's game counts toward the bests: not with bumpers or a head start, and never the computer's.
@@ -1227,9 +1260,11 @@ function finish() {
   game.hadBest = !!store.best;
   game.newBest = counted.length > 0 && top > (store.best || 0);
   game.before = scores.map(s => (Object.hasOwn(store.bests, s.name) ? store.bests[s.name] : null));
-  if (game.newBest) { store.best = top; store.bestBy = [...new Set(counted.filter(s => s.score === top).map(s => s.name))].join(' & '); }
-  for (const s of counted) if (!Object.hasOwn(store.bests, s.name) || s.score > store.bests[s.name]) store.bests[s.name] = s.score;
-  store.games = [{ at: Date.now(), scores }, ...(store.games || [])].slice(0, 20);
+  // When each best was bowled, so Forget these scores knows which came before it (see merge in store.js).
+  const at = Date.now();
+  if (game.newBest) { store.best = top; store.bestBy = [...new Set(counted.filter(s => s.score === top).map(s => s.name))].join(' & '); store.bestAt = at; }
+  for (const s of counted) if (!Object.hasOwn(store.bests, s.name) || s.score > store.bests[s.name]) { store.bests[s.name] = s.score; store.bestsAt[s.name] = at; }
+  store.games = [{ at, scores }, ...(store.games || [])].slice(0, GAMES);
   store.current = null;
   put();
 }
@@ -1384,7 +1419,7 @@ document.addEventListener('keydown', e => {
   if (e.key !== 'Escape' || e.defaultPrevented) return;
   if (shown === 'menu' || shown === 'board') show(null);
   else if (shown === 'howSheet') show(game ? null : 'title');
-  else if (shown === 'past') closePast();
+  else if (shown === 'past' || shown === 'numbers') closePast();
   else if (!shown && game && phase !== 'over') openMenu();
   else return;
   e.preventDefault();

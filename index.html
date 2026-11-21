@@ -133,6 +133,16 @@
     </div>
   </section>
 
+  <section class="sheet" id="numbers" role="dialog" aria-modal="true" aria-labelledby="numbersTitle" aria-describedby="numbersNote" hidden>
+    <div class="panel wide">
+      <h2 id="numbersTitle" tabindex="-1">Averages</h2>
+      <div class="numbers" id="numbersRows"></div>
+      <p class="note" id="numbersNote">Each average is of that player’s last 10 games here. Strikes and spares are the share of chances made. Games with bumpers, and the computer’s, aren’t counted, and a head start isn’t added.</p>
+      <button type="button" class="big" id="numbersDone">Back</button>
+      <button type="button" class="link danger" id="forget">Forget these scores</button>
+    </div>
+  </section>
+
   <section class="sheet" id="end" role="dialog" aria-modal="true" aria-labelledby="endTitle" aria-describedby="endBadge endLine endTally" hidden>
     <div class="panel wide">
       <h2 id="endTitle" tabindex="-1">Game over</h2>

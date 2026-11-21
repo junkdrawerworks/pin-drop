@@ -304,6 +304,15 @@ h1[tabindex]:focus, h2[tabindex]:focus { outline: none; }
 
 .record { margin-top: 14px; color: var(--muted); font-size: 14px; }
 .record .best { display: flex; justify-content: space-between; align-items: baseline; border-top: 1px solid var(--line); padding-top: 12px; }
+/* The best game is a button that opens each player's averages. */
+button.best {
+  width: 100%; min-height: 44px; margin: 0; padding: 12px 2px 4px; border: 0; border-top: 1px solid var(--line); border-radius: 0;
+  background: none; color: inherit; font-size: inherit; text-align: left; column-gap: 12px;
+}
+button.best b { margin-left: auto; }
+button.best::after { content: '\203A'; color: var(--muted); font-size: 18px; line-height: 0; align-self: center; }
+button.best:hover > span, button.best:focus-visible > span { color: var(--cream); }
+button.best:focus-visible { outline: 2px solid var(--teal); outline-offset: -2px; border-radius: 8px; }
 .record .best b { color: var(--gold); font-size: 22px; font-variant-numeric: tabular-nums; }
 .record ol { list-style: none; margin: 8px 0 0; padding: 0; }
 .record li { display: grid; grid-template-columns: auto 1fr; column-gap: 12px; align-items: baseline; padding: 3px 0; }
@@ -325,6 +334,16 @@ h1[tabindex]:focus, h2[tabindex]:focus { outline: none; }
 .record li b.won { color: var(--gold); }
 .record li small { font-size: 12px; }
 .record .blocked { margin: 12px 0 0; font-size: 13px; }
+
+/* Each player's averages: a row each, the numbers in columns. */
+.numbers { margin-top: 10px; overflow-x: auto; }
+.numbers table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+.numbers th, .numbers td { padding: 9px 4px; text-align: right; border-top: 1px solid var(--line); }
+.numbers thead th { border-top: 0; padding-top: 0; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.numbers tbody th { text-align: left; font-weight: 700; overflow-wrap: anywhere; padding-left: 0; }
+.numbers td.avg { color: var(--gold); font-weight: 800; }
+.note { margin: 12px 0 0; font-size: 13px; color: var(--muted); }
+.link.danger { display: block; margin: 8px auto 0; color: var(--coral); font-size: 14px; padding: 0 12px; }
 
 .cards { display: grid; gap: 14px; margin-top: 12px; }
 .cards .row .name { display: flex; justify-content: space-between; font-weight: 700; margin-bottom: 4px; }
