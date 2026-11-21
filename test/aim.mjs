@@ -17,6 +17,6 @@ export function through(x0, xh, hook, speed = 290) {
 }
 
 // The ball the tests bowl at a full rack: from 10 in right of the middle, hooking left into the pocket, 2.5 in right of
-// the middle of the head pin (the real pocket, board 17.5 counting from the right, is 2.66 in). It strikes about half
-// the time: 40 of seeds 1 to 80.
+// the middle of the head pin (the real pocket, board 17.5 counting from the right, is 2.66 in). It strikes about two
+// times in three: 52 of seeds 1 to 80.
 export const pocket = { x: 10, speed: 290, angle: through(10, 2.5, -40), hook: -40 };

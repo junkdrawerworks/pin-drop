@@ -145,7 +145,7 @@ for (let k = 0; k < 5; k++) same.push(await steadyFling());
 assert.ok(Math.max(...same) - Math.min(...same) <= 1, `the same fling threw at ${same.join(', ')} mph`);
 console.log(`  the same fling five times: ${same.join(', ')} mph`);
 
-// Play the rest of the game fast: each ball hooked into the pocket (which strikes about half the time), or aimed
+// Play the rest of the game fast: each ball hooked into the pocket (which strikes about two times in three), or aimed
 // at whatever's left.
 const { pocket, through } = await import('./aim.mjs');
 const { play, rack, SPOTS } = await import('../js/physics.js');

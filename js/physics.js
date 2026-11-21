@@ -26,9 +26,13 @@ export const PIN_LEN = 15;
 const LYING_R = 2.2;             // a lying pin, on average along its length (it tumbles, so a little fat)
 const M_BALL = 15, M_PIN = 3.5;
 const I_LYING = M_PIN * (PIN_LEN * PIN_LEN / 12 + LYING_R * LYING_R / 2);
+// A standing pin turns on its own axis when something rubs past it, as freely as a solid cylinder the belly's width
+// (half its mass times the belly's radius squared). No figure is published; a real pin, narrower above and below the
+// belly, would turn a little more easily than that.
+const I_UP = 0.5 * M_PIN * PIN_R * PIN_R;
 const G = 386;                   // in/s²
 const FALL_T = 0.14;             // how long a pin takes to go over
-const TOPPLE = 32;               // a push this hard (in/s) always tips a pin over
+const TOPPLE = 65;               // a push this hard (in/s) always tips a pin over
 const NUDGE = 7;                 // anything softer than this just rocks it
 
 // A small seeded random generator, so the same throw always plays out the same way.
@@ -119,6 +123,7 @@ export class Sim {
     if (p.state === 'gutter' || p.state === 'pit') return;
     if (p.state === 'up') {
       slow(p, 520 * dt);
+      p.w *= Math.exp(-dt * 6);
       p.wob *= Math.exp(-dt * 3.2);
       p.wobA += dt * 22;
       if (p.fallAt && this.t >= p.fallAt) { p.fallAt = 0; this.topple(p, p.fallDir); }
@@ -266,6 +271,10 @@ export class Sim {
   mass(o) {
     if (o === this.ball) return { inv: 1 / M_BALL, invI: 0, rot: false };
     if (o.state === 'down') return { inv: 1 / M_PIN, invI: 1 / I_LYING, rot: true };
+    // Free to spin, a standing pin takes little of the rub as the ball goes by, so the ball bounces off it fully: a
+    // pin held still against spinning dragged the ball along with it, and the ball came off the head pin at half the
+    // angle and never reached the 9 pin.
+    if (o.state === 'up') return { inv: 1 / M_PIN, invI: 1 / I_UP, rot: true };
     return { inv: 1 / M_PIN, invI: 0, rot: false };
   }
 

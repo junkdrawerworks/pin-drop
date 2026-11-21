@@ -74,5 +74,5 @@ GitHub Pages serves it from `main`, at its own address set by `CNAME`.
   four-player tenth frame and a spare in a one-player one, carrying on after a reload at any moment, every sound
   finishing, two windows open at once, offline, installable). `aim.mjs` aims the tests' balls: the angle that sends a
   ball through a spot at the head pin, and the pocket ball, 2.5 in right of the head pin's middle, that strikes about
-  half the time.
+  two times in three.
 - `tools/`: screenshots, icons and the one-file build.

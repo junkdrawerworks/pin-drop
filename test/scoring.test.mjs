@@ -181,17 +181,18 @@ test('a ball down the middle of the gutter knocks nothing over, and runs on into
   assert.equal(sim.ball.state, 'pit');
 });
 
-// A ball hooked into the pocket, 2.5 in right of the middle of the head pin, strikes about half the time (19 of these
-// 40 seeds); one thrown straight at the middle of the head pin hardly ever does (1 of 40).
+// A ball hooked into the pocket, 2.5 in right of the middle of the head pin, strikes about two times in three (40 of
+// these 60 seeds; Mark's band for it is about 40-65%); one thrown straight at the middle of the head pin seldom does
+// (5 of 60).
 test('hooking into the pocket strikes far more often than a straight ball at the head pin', () => {
   const rate = (x0, xh, hook) => {
     const angle = through(x0, xh, hook);
     let n = 0;
-    for (let seed = 1; seed <= 40; seed++) if (play(rack(), { x: x0, speed: 290, angle, hook }, seed).standing.length === 0) n++;
-    return n / 40;
+    for (let seed = 1; seed <= 60; seed++) if (play(rack(), { x: x0, speed: 290, angle, hook }, seed).standing.length === 0) n++;
+    return n / 60;
   };
   const pocket = rate(10, 2.5, -40), head = rate(0, 0, 0);
-  assert.ok(pocket >= 0.3, `pocket strikes ${pocket}`);
+  assert.ok(pocket >= 0.4 && pocket <= 0.7, `pocket strikes ${pocket}`);
   assert.ok(head <= 0.1, `head-on strikes ${head}`);
   assert.ok(pocket > head + 0.25);
 });
@@ -459,4 +460,17 @@ test('a pin falling onto its neighbour knocks it away', () => {
     assert.notEqual(B.state, 'up', `${b} still standing after ${a} fell on it`);
     assert.ok(push > 30, `${a} falling on ${b} pushed it ${push.toFixed(0)} in/s`);
   }
+});
+
+// The ball bounces off a pin as a 15 lb ball off a 3.5 lb pin should: 2 in right of the head pin's middle, it comes
+// away at most of the angle a frictionless knock gives (the ball's line through the deck decides which pins it takes
+// itself). A standing pin couldn't spin, so the rub between them dragged the ball along and it came away at under half.
+test('the ball bounces off a pin at nearly the full angle', () => {
+  const off = 2, s = new Sim(rack().filter(p => p.id === 1), { x: off, speed: 290, angle: 0, hook: 0 }, 1);
+  s.rand = () => 0.5;
+  s.ball.y = 690;
+  while (s.ball.y < 740) s.tick(1 / 600);
+  const sin = off / (4.25 + 2.38), cos = Math.sqrt(1 - sin * sin);
+  const free = (1 + 0.72) * 290 * cos * (3.5 / (3.5 + 15)) * sin;   // the ball's sideways speed with no rub at all
+  assert.ok(s.ball.vx > 0.75 * free, `the ball came away at ${s.ball.vx.toFixed(1)} in/s sideways, against ${free.toFixed(1)}`);
 });
