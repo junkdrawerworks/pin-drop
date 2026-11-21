@@ -4,7 +4,7 @@ import { Renderer, BALL_COLOURS } from './render.js';
 import { frames, next, total, pending, isSplit, callFor, cardText } from './scoring.js';
 import * as sound from './sound.js';
 import { load, save as write, parse, merge, int, keeping, KEY } from './store.js';
-import { stroke, addPoints, readStroke, throwPoints, liftAs, throwOf } from './swipe.js';
+import { stroke, addPoints, readStroke, throwPoints, liftAs, throwOf, MOUSE } from './swipe.js';
 
 const $ = id => document.getElementById(id);
 const canvas = $('lane');
@@ -438,7 +438,8 @@ canvas.addEventListener('pointerdown', e => {
   if (phase !== 'aim' || paused) return;
   try { canvas.setPointerCapture(e.pointerId); } catch { /* fine without */ }
   // `extra`: another finger was already down, so this one tapping or brushing the lane gets no word about it.
-  strokes.set(e.pointerId, { ...stroke(e, performance.now()), id: e.pointerId, x0: ball.x, extra: strokes.size > 0 });
+  // `gain`: a mouse or trackpad flick counts harder (see MOUSE in swipe.js).
+  strokes.set(e.pointerId, { ...stroke(e, performance.now()), id: e.pointerId, x0: ball.x, extra: strokes.size > 0, gain: e.pointerType === 'mouse' ? MOUSE : 1 });
   leading();
 });
 // Each finger position an event brings, with the times it happened (see addPoints in swipe.js).
@@ -474,7 +475,7 @@ canvas.addEventListener('pointermove', e => {
     if (was === 'move') slide(touch, touch.slid || 0);
     const p = throwPoints(touch), a = p[0], b = p[p.length - 1];
     // The guide shows only while letting go would throw, so pulling back down calls it off where you can see it.
-    guide = -(b.y - a.y) < 12 || Math.abs(b.x - a.x) > Math.abs(b.y - a.y) ? null : shotFrom(p, false);
+    guide = -(b.y - a.y) < 12 || Math.abs(b.x - a.x) > Math.abs(b.y - a.y) ? null : shotFrom(p, false, touch.gain);
   }
 });
 const lift = e => {
@@ -491,7 +492,7 @@ const lift = e => {
   const as = liftAs(t), p = throwPoints(t);
   if (as === 'throw') {
     if (led) slide(t, t.slid || 0);
-    const shot = shotFrom(p, true);
+    const shot = shotFrom(p, true, t.gain);
     if (shot) { dropStrokes(); throwBall(shot); return; }
   } else if (as === 'move') {
     if (led) slide(t, t.pts[t.pts.length - 1].x - t.pts[0].x);
@@ -509,11 +510,12 @@ canvas.addEventListener('pointercancel', lift);
 canvas.addEventListener('contextmenu', e => e.preventDefault());   // no menu popping up over the lane
 
 // A swipe, read as a throw (see throwOf), from where the ball stands; or nothing, for a swipe too short to throw
-// (and while swiping, the guide as it was until the swipe is long enough to show one).
-function shotFrom(pts, final) {
+// (and while swiping, the guide as it was until the swipe is long enough to show one). `gain` is MOUSE for a mouse
+// or trackpad.
+function shotFrom(pts, final, gain = 1) {
   const a = pts[0], b = pts[pts.length - 1];
   if (-(b.y - a.y) < (final ? 40 : 12)) return final ? null : guide;
-  return { x: ball.x, ...throwOf(pts) };
+  return { x: ball.x, ...throwOf(pts, gain) };
 }
 
 // ---- What's on screen ----------------------------------------------------------------------------------

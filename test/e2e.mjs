@@ -457,6 +457,24 @@ const state = p => p.evaluate(() => ({ phase: pinDrop.phase, x: pinDrop.ball.x }
     await p.evaluate(() => pinDrop.throw({ x: -10, speed: 175, angle: 0, hook: -45 }));
     await until(() => p.evaluate(() => pinDrop.phase === 'settle' || pinDrop.phase === 'over'), 20000, 'the slow hooked ball never finished');
     assert.match(await p.textContent('#call .tip'), /^Too much hook for a ball that slow: flick faster or curve less\. On a trackpad, hold with one finger and flick with another$/);
+    // A mouse or trackpad flick counts one and a half times as hard as the same flick on a touch screen: the ball's
+    // speed is what the swipe's own points throw with a gain of 1.5, not 1.
+    await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
+    await p.evaluate(() => {
+      window.flick = [];
+      const keep = e => { for (const q of (e.getCoalescedEvents?.() || []).length ? e.getCoalescedEvents() : [e]) flick.push({ x: q.clientX, y: q.clientY, t: q.timeStamp }); };
+      document.getElementById('lane').addEventListener('pointerdown', keep, true);
+      document.getElementById('lane').addEventListener('pointermove', e => { if (e.buttons) keep(e); }, true);
+    });
+    await mouse.move(640, 640); await mouse.down();
+    for (let i = 1; i <= 12; i++) { await mouse.move(640, 640 - i * 22); await wait(20); }
+    await mouse.up();
+    await wait(50);
+    const flicked = await p.evaluate(() => ({ phase: pinDrop.phase, speed: pinDrop.shot.speed, touch: pinDrop.shotFrom(flick, true, 1).speed, mouse: pinDrop.shotFrom(flick, true, 1.5).speed }));
+    assert.equal(flicked.phase, 'rolling', 'the mouse flick threw nothing');
+    assert.ok(flicked.mouse > flicked.touch + 15, `the test flick is too fast or slow to tell: ${JSON.stringify(flicked)}`);
+    assert.ok(Math.abs(flicked.speed - flicked.mouse) < 3, `a mouse flick threw at ${flicked.speed} in/s, not ${flicked.mouse.toFixed(0)} (on a touch screen it throws ${flicked.touch.toFixed(0)})`);
+    console.log(`  mouse flick: ${(flicked.speed * 0.0568).toFixed(1)} mph (the same flick on a touch screen ${(flicked.touch * 0.0568).toFixed(1)})`);
   } finally { await c.close(); }
 }
 

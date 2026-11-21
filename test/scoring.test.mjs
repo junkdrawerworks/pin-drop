@@ -297,6 +297,20 @@ test('how hard a swipe throws: the same as ever on a phone held upright, on any 
   assert.equal(mph(6).toFixed(1), '22.2');
 });
 
+test('a mouse or trackpad flick counts one and a half times as hard as the same flick on a touch screen', async () => {
+  const { throwOf, MOUSE } = await import('../js/swipe.js');
+  const mph = (v, gain) => {
+    const pts = [];
+    for (let t = 0; t <= 300 / v; t += 8) pts.push({ x: 0, y: -v * t, t });
+    return throwOf(pts, gain).speed * 0.0568;
+  };
+  assert.equal(MOUSE, 1.5);
+  // A quick 300 px press-and-flick (1.2 px/ms) and an easy drag (0.6 px/ms).
+  assert.equal(mph(1.2, MOUSE).toFixed(1), mph(1.8).toFixed(1));
+  assert.equal(mph(0.6, MOUSE).toFixed(1), mph(0.9).toFixed(1));
+  assert.ok(mph(1.2, MOUSE) > mph(1.2) + 2, `a quick trackpad flick threw ${mph(1.2, MOUSE).toFixed(1)} mph`);
+});
+
 test('hook: a thumb\'s natural arc rolls straight, a deliberate curve hooks hard', async () => {
   const { throwOf } = await import('../js/swipe.js');
   // A 300 px swipe up that bows out to the right by `bow` of its length at the middle (so it hooks left).

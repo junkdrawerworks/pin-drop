@@ -155,15 +155,21 @@ export function liftAs(s) {
   return -dy >= 40 ? 'throw' : dy < 0 ? 'short' : 'cancel';
 }
 
+// A flick with a mouse or trackpad counts one and a half times as hard as the same flick on a touch screen. The pointer
+// moves much slower than a thumb on glass: a quick 300 px press-and-flick on a trackpad threw about 13 mph, and an
+// easy drag about 10, near the slowest there is, when a good ball is about 16.5.
+export const MOUSE = 1.5;
+
 // A swipe, read as a throw: its direction is the aim, its speed at the end is how hard, and how much it bends is the
 // hook. Gives the ball's speed (in/s), its angle off straight (radians) and its hook (in/s; negative hooks left).
 // The speed is read in screen px per ms against a phone's height held upright (844 px), whatever the size of the
-// screen and whichever way up it is, so the same flick throws the same ball after turning a tablet round.
-export function throwOf(pts) {
+// screen and whichever way up it is, so the same flick throws the same ball after turning a tablet round. `gain`
+// scales it: MOUSE for a mouse or trackpad.
+export function throwOf(pts, gain = 1) {
   const a = pts[0], b = pts[pts.length - 1];
   const dx = b.x - a.x, dy = b.y - a.y;
   const len = Math.hypot(dx, dy);
-  const vn = swipeSpeed(pts) * 800 / 844;
+  const vn = swipeSpeed(pts) * gain * 800 / 844;
   const speed = clamp(175 + (vn - 0.5) * 95, 170, 390);
   const angle = clamp(Math.atan(dx / -dy * 0.08), -0.07, 0.07);
   // The bend: how far the swipe bows out from a straight line, as a share of its length. Bowing out to the right
