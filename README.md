@@ -54,6 +54,11 @@ thrown straight at the head pin.
   marked in the recent games and doesn't count toward a best. Tapping a player's ball on the title gives them a **head
   start** of 10 to 50 pins, the way a league's handicap evens up a game: it's added to their total at the end, in a box
   of its own on the card, and a game with one doesn't count toward a best either.
+- **A computer to play against** when you're on your own: "+ Add a computer player" on the title, at Rookie, Regular
+  or Pro (they average about 100, 150 and 200). It bowls its own turns through the same physics, hooking its first
+  ball into the pocket and throwing straight at pins left from across the lane, and misses by its level's amount. You
+  watch its turn like anyone's, and a tap hurries it along. Its games are in the recent games but never count as a
+  best.
 - **Sound** is made on the spot (the thud of the ball landing, its rumble, the clatter of the pins, the pinsetter's
   whirr and clunk), with a switch in the menu that stops the buzz too, on a phone that buzzes.
 
@@ -84,6 +89,7 @@ GitHub Pages serves it from `main`, at its own address set by `CNAME`.
 - `js/swipe.js`: reading a swipe: whether a stroke slides the ball or throws it (a backswing included), and the
   throw's speed, aim and hook.
 - `js/sound.js`: every sound, made with Web Audio.
+- `js/computer.js`: the computer player: where it stands and how it throws at each level.
 - `js/store.js`: what's kept on this device, under `pin-drop.v1`.
 - `css/app.css`: the look.
 - `fonts/`: [Shrikhand](https://fonts.google.com/specimen/Shrikhand) and [Figtree](https://fonts.google.com/specimen/Figtree),
@@ -92,11 +98,12 @@ GitHub Pages serves it from `main`, at its own address set by `CNAME`.
 - `test/`: `scoring.test.mjs` (rules and physics), `swipe.test.mjs` (reading a stroke as a move or a throw, as the
   finger moves), `standing.test.mjs` (no pin left standing off the deck), `clean.test.mjs` (every ball ends clean,
   thrown from every corner of what a swipe can make: everything settled, nothing still wobbling, and the next rack
-  just what was left), `store.test.mjs` (what's kept, with two windows open), `build.mjs` (the one-file copy, built
+  just what was left), `store.test.mjs` (what's kept, with two windows open), `computer.test.mjs` (the computer's levels'
+  averages, its pocket ball and its spares), `build.mjs` (the one-file copy, built
   and played from file://) and `e2e.mjs` (a whole two-player game in Chromium, three players, strikes in a
   four-player tenth frame and a spare in a one-player one, carrying on after a reload at any moment, every sound
   finishing, two windows open at once, the first ball's marks and the lessons for a new player, bowling from the
-  keyboard, the note on a phone on its side, bumpers, a head start, the card as the turn passes, the most each player can still reach, Bowl again's change of who leads off and tonight's tally, Sound off stopping the buzz, the thud and the pinsetter's clunks, a tap
+  keyboard, the note on a phone on its side, bumpers, a head start, the card as the turn passes, the most each player can still reach, Bowl again's change of who leads off and tonight's tally, the computer player's turns, carrying on and records, Sound off stopping the buzz, the thud and the pinsetter's clunks, a tap
   hurrying the pinsetter, the pins left under the scorecard, strikes in a row building up to a perfect game and a new
   best, Watch again, the ring for a split, the camera cutting with Reduce Motion, offline, installable). `aim.mjs` aims the tests' balls: the angle that
   sends a ball through a spot at the head pin, and the pocket ball, 2.5 in right of the head pin's middle, that strikes

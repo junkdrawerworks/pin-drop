@@ -2196,6 +2196,83 @@ for (const motion of ['reduce', 'no-preference']) {
   } finally { await c.close(); }
 }
 
+// A computer player, for playing alone: one at most, added on the title after the people (up to four in all), at the
+// level chosen. It bowls its own turns through the physics with nobody touching the lane: a swipe meanwhile throws
+// nothing, a tap hurries the whole of its turn on, its balls count like anyone's, and the turn comes back with no card.
+{
+  const { c, p } = await kept({}, { names: ['You'] });
+  const cdp = await c.newCDPSession(p);
+  try {
+    await p.click('#addCpu');
+    assert.equal(await p.isVisible('#addCpu'), false, 'a second computer can be added');
+    assert.equal(await p.$eval('#players .cpu select', e => e.value), 'regular');
+    await p.click('#addPlayer'); await p.click('#addPlayer');
+    assert.deepEqual(await p.$$eval('#players li', els => els.map(e => (e.classList.contains('cpu') ? 'cpu' : e.querySelector('input').value))), ['You', 'Player 2', 'Player 3', 'cpu']);
+    assert.equal(await p.isVisible('#addPlayer'), false, 'more than four players');
+    await p.click('#players li:nth-child(3) .remove'); await p.click('#players li:nth-child(2) .remove');
+    // The one person left can't be removed, so the computer never plays alone.
+    assert.equal(await p.locator('#players li:first-child .remove').count(), 0);
+    await p.selectOption('#players .cpu select', 'pro');
+    await p.click('#start');
+    assert.deepEqual(await p.evaluate(() => pinDrop.game.players.map(q => [q.name, q.cpu || null])), [['You', null], ['Computer (Pro)', 'pro']]);
+    // Your two balls, and the turn passes to the computer.
+    await p.evaluate(() => { pinDrop.speed = 10; pinDrop.throw({ x: 14, speed: 300, angle: 0.02, hook: 0 }); });
+    // As its turn comes, the game slows to a quarter of the speed, so its aim takes 6.8 s.
+    await until(() => p.evaluate(() => {
+      if (pinDrop.phase === 'aim' && pinDrop.game.turn === 0) pinDrop.throw({ x: 14, speed: 300, angle: 0.02, hook: 0 });
+      const now = pinDrop.phase === 'aim' && pinDrop.game.turn === 1;
+      if (now) pinDrop.speed = 0.25;
+      return now;
+    }), 20000, 'the computer\'s turn never came');
+    assert.equal(await p.isVisible('#handoff'), false, 'a card for the computer\'s turn');
+    assert.equal(await p.isVisible('#hint'), false, 'the hint on how to throw, on the computer\'s turn');
+    assert.equal(await p.$eval('#who i', e => e.style.background), 'rgb(238, 241, 247)', 'the computer\'s ball is not silver');
+    // A straight swipe up on its turn throws nothing of its own: it hurries the computer on, which throws its hook.
+    const t0 = Date.now();
+    await touchStroke(cdp, [[0, -280, 8]]);
+    await until(() => p.evaluate(() => pinDrop.phase === 'rolling'), 6000, 'the computer never threw');
+    assert.ok(Date.now() - t0 < 4000, `hurried, the computer took ${Date.now() - t0} ms to throw`);
+    assert.ok(await p.evaluate(() => pinDrop.shot.hook < -30 && pinDrop.shot.x > 5), `the ball thrown was not the computer's hook into the pocket: ${JSON.stringify(await p.evaluate(() => pinDrop.shot))}`);
+    await p.evaluate(() => { pinDrop.speed = 10; });
+    await until(() => p.evaluate(() => pinDrop.phase === 'aim' && pinDrop.game.turn === 0), 30000, 'the turn never came back from the computer');
+    const cpu = await p.evaluate(() => pinDrop.game.players[1].rolls);
+    assert.ok(cpu.length === 2 || cpu[0] === 10, `the computer's frame: ${cpu}`);
+    assert.equal(await p.isVisible('#handoff'), false, 'a card back to the one person playing');
+    // Its balls don't count as anyone's for the hint on how to throw.
+    assert.equal(await p.evaluate(() => JSON.parse(localStorage.getItem('pin-drop.v1')).thrown['Computer (Pro)']), undefined);
+    // Carry on with the computer's turn next: it bowls without anyone touching the lane.
+    await p.evaluate(() => { pinDrop.throw({ x: 14, speed: 300, angle: 0.02, hook: 0 }); });
+    await until(() => p.evaluate(() => { if (pinDrop.phase === 'aim' && pinDrop.game.turn === 0) pinDrop.throw({ x: 14, speed: 300, angle: 0.02, hook: 0 }); return pinDrop.game.turn === 1 && pinDrop.phase === 'aim'; }), 20000, 'the computer\'s second turn never came');
+    await p.reload();
+    assert.match(await p.textContent('#resume'), /Computer \(Pro\)’s turn, frame 2/);
+    assert.equal(await p.$eval('#players .cpu select', e => e.value), 'pro', 'the computer was not kept on the title');
+    await p.click('#resume');
+    await p.evaluate(() => { pinDrop.speed = 10; });
+    await until(() => p.evaluate(n => pinDrop.game.players[1].rolls.length > n, cpu.length), 20000, 'the computer did not bowl on after Carry on');
+  } finally { await c.close(); }
+}
+
+// The computer's game is on the end card and in the recent games, but never counts as a best, even when it beats
+// everyone: Ana's 90 is the new best here, not the computer's near-perfect game.
+{
+  const { c, p } = await kept({}, { names: ['Ana'], cpu: 'pro', best: 50, bestBy: 'Cal', bests: { Cal: 50 },
+    current: { players: [{ name: 'Ana', rolls: [...nineAndMiss, 9, 0], x: 0, c: 0 }, { name: 'Computer (Pro)', cpu: 'pro', rolls: Array(11).fill(10), x: 10, c: 1 }], turn: 1, leftover: null } });
+  try {
+    await p.click('#resume');
+    await p.evaluate(() => { pinDrop.speed = 10; });
+    await until(() => p.isVisible('#end'), 30000, 'no end of the game');
+    const cpuScore = +(await p.textContent('#endCards .row:nth-child(2) .f.sum'));
+    assert.ok(cpuScore > 250, `the computer's game came to ${cpuScore}`);
+    assert.equal(await p.textContent('#endTitle'), 'Computer (Pro) wins!');
+    assert.match(await p.textContent('#endCards'), /Computer \(Pro\)/);
+    await p.click('#toTitle');
+    const saved = await p.evaluate(() => JSON.parse(localStorage.getItem('pin-drop.v1')));
+    assert.deepEqual([saved.best, saved.bestBy, saved.bests], [90, 'Ana', { Cal: 50, Ana: 90 }], 'the computer\'s game counted as a best');
+    assert.deepEqual([saved.games[0].scores[1].name, saved.games[0].scores[1].cpu], ['Computer (Pro)', 'pro']);
+    assert.match(await p.textContent('#record li'), new RegExp(`Ana 90 · Computer \\(Pro\\) ${cpuScore}`));
+  } finally { await c.close(); }
+}
+
 assert.deepEqual(problems.filter(p => !p.startsWith('failed with the network down:')), [], 'problems while using it');
 await browser.close();
 server.close();

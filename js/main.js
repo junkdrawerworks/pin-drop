@@ -1,6 +1,7 @@
 // Pin Drop: the game around the lane. Turns and frames, the swipe, the pinsetter, the scorecards and the sheets.
-import { Sim, rack, LANE, BALL_R, BOARD, SPOTS } from './physics.js';
-import { Renderer, BALL_COLOURS } from './render.js';
+import { Sim, rack, rng, LANE, BALL_R, BOARD, SPOTS } from './physics.js';
+import { plan, cpuName, LEVELS, LEVEL_KEYS } from './computer.js';
+import { Renderer, BALL_COLOURS, CPU_COLOURS } from './render.js';
 import { frames, next, total, pending, isSplit, callFor, cardText, boxes, best as most } from './scoring.js';
 import * as sound from './sound.js';
 import { load, save as write, parse, merge, int, keeping, KEY } from './store.js';
@@ -17,7 +18,7 @@ const SETTLE = 1.2, SWEEP = 1.75, RETURN = 0.85;   // seconds
 const clamp = (v, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, v));
 const ease = t => { t = clamp(t); return t * t * (3 - 2 * t); };
 
-let game = null;          // { players: [{ name, rolls, x, c, splits, bumpers, head }], turn, leftover }
+let game = null;          // { players: [{ name, rolls, x, c, splits, bumpers, head, cpu (its level) }], turn, leftover }
 let phase = 'title';      // title, aim, rolling, settle, sweep, return, over
 let phaseT = 0, camT = 0;
 let pins = rack(), ball = idle(0), sim = null;
@@ -35,14 +36,17 @@ let timeScale = 1, fixedSeed = null;
 // A tap on the lane after a ball plays the rest of the wait (the pins settling, the sweep and the camera coming back)
 // HURRY times as fast, until the next ball is aimed.
 const HURRY = 4;
-let hurry = false;
-const hurrying = () => hurry && (phase === 'settle' || phase === 'sweep' || phase === 'return' || phase === 'replay');
+// On the computer's turn, the whole of it, its aim and its rolls included.
+let hurry = false, hurryTurn = -1;
+const waiting = () => phase === 'settle' || phase === 'sweep' || phase === 'return' || phase === 'replay' || (cpuUp() && (phase === 'aim' || phase === 'rolling'));
+const hurrying = () => hurry && waiting();
 
 function idle(x) { return { x, y: 6, state: 'lane', roll: 0, vx: 0, vy: 0 }; }
 const current = () => game.players[game.turn];
 // A player's ball colours, by their place in the game: their own colour (`c`, which stays with them when Bowl again
 // changes who leads off), or on the title, the colour of that row.
-const colourOf = i => BALL_COLOURS[(game?.players[i]?.c ?? i) % BALL_COLOURS.length];
+// The computer's ball is silver.
+const colourOf = i => { const q = game?.players[i]; return q?.cpu ? CPU_COLOURS : BALL_COLOURS[(q?.c ?? i) % BALL_COLOURS.length]; };
 
 // ---- The lane, every frame -------------------------------------------------------------------------------
 
@@ -65,7 +69,7 @@ function loop(now) {
   const shownLesson = teaching();
   // A lesson's fingertip moves for 1.6 s of every 2.4 (see lesson in render.js), and is drawn every frame meanwhile.
   const moving = shownLesson && !shownLesson.still && shownLesson.u >= 0 && shownLesson.u % 2.4 < 1.65;
-  const resting = shown !== null || (phase === 'aim' && !strokes.size && !guide && !moving);
+  const resting = shown !== null || (phase === 'aim' && !strokes.size && !guide && !moving && !cpuUp());
   if (stale || phase !== drawnPhase || !resting || (shown === null && now - drawnAt >= 80)) {
     view.draw({ t: now / 1000, pins, ball: phase === 'sweep' ? null : ball, guide, sweep, colour: colourOf(game ? game.turn : 0), marks: marks(), lesson: shownLesson,
       bumpers: !!game?.players[game.turn].bumpers });
@@ -128,6 +132,7 @@ function update(dt) {
   } else {
     view.setCamera(0, 0);
     if (windAt !== null) winding();
+    if (phase === 'aim' && cpuShot) cpuStep();
   }
 }
 
@@ -156,11 +161,11 @@ function follow(x, dt) {
 function startGame(lineup, fromTitle = false) {
   hush();
   $('handoff').hidden = true;
-  const names = lineup.map(q => q.name);
-  game = { players: lineup.map((q, i) => ({ name: q.name, rolls: [], x: q.x || 0, c: q.c ?? i, ...extras(q) })), turn: 0, leftover: null };
+  game = { players: lineup.map((q, i) => ({ name: q.cpu ? cpuName(q.cpu) : q.name, rolls: [], x: q.x || 0, c: q.c ?? i, ...extras(q) })), turn: 0, leftover: null };
   told = new Set(); toldHook = new Set();
   if (fromTitle) {
-    store.names = names;
+    store.names = lineup.filter(q => !q.cpu).map(q => q.name);
+    store.cpu = lineup.find(q => q.cpu)?.cpu ?? null;
     store.opts = Object.fromEntries(lineup.filter(q => q.bumpers || q.head).map(q => [q.name, extras(q)]));
   }
   keep();
@@ -168,12 +173,13 @@ function startGame(lineup, fromTitle = false) {
   show(null);
   pins = rack();
   aim();
-  if (names.length > 1) say(turnLine(names[0]), '', 'small', '', 'aim');
-  tell(names.length > 1 ? `${turnLine(names[0])}, frame 1.` : 'Frame 1.');
+  const first = game.players[0].name;
+  if (game.players.length > 1) say(turnLine(first), '', 'small', '', 'aim');
+  tell(game.players.length > 1 ? `${turnLine(first)}, frame 1.` : 'Frame 1.');
 }
 
-// A player's bumpers and head start, as kept on them: only what's switched on.
-const extras = q => ({ ...(q.bumpers ? { bumpers: true } : {}), ...(int(q.head) ? { head: int(q.head) } : {}) });
+// A player's bumpers and head start, as kept on them (only what's switched on), and the computer's level.
+const extras = q => ({ ...(q.bumpers ? { bumpers: true } : {}), ...(int(q.head) ? { head: int(q.head) } : {}), ...(LEVELS[q.cpu] ? { cpu: q.cpu } : {}) });
 
 function resumeGame() {
   $('handoff').hidden = true;
@@ -191,13 +197,16 @@ function resumeGame() {
 function aim() {
   // Hurried on, a ball's callout can still be up, over the pins (or the ball) being aimed at: it goes.
   if (hurry && callAt === 'pins' && performance.now() < callUntil) hush();
-  phase = 'aim'; phaseT = 0; camT = 0; followX = 0; hurry = false;
+  phase = 'aim'; phaseT = 0; camT = 0; followX = 0;
+  hurry = hurry && cpuUp() && hurryTurn === game.turn;   // a tap on the computer's turn hurries all of it
   $('replay').hidden = true;
   view.setCamera(0);
   ball = idle(current().x || 0);
   sim = null; guide = null; sweep = null;
   before = pins.filter(p => p.state === 'up').length;
-  lesson = lessonDue();
+  lesson = cpuUp() ? null : lessonDue();
+  cpuShot = null;
+  if (cpuUp()) cpuAim();
   hud();
   hint();
   if (blockedDue) { blockedDue = false; nudge(BLOCKED, 6000, true); }
@@ -238,8 +247,10 @@ function scoreBall() {
   // A ball at a full rack that left a split is ringed on the card (kept by its place in the list of balls; a game
   // kept before there were rings has none).
   if (st.fresh && isSplit(standing.map(q => q.id))) p.splits = [...(p.splits || []), p.rolls.length - 1];
-  store.throws = (store.throws || 0) + 1;
-  store.thrown[p.name] = (store.thrown[p.name] || 0) + 1;
+  if (!p.cpu) {
+    store.throws = (store.throws || 0) + 1;
+    store.thrown[p.name] = (store.thrown[p.name] || 0) + 1;
+  }
   callout(p, knocked, standing.map(q => q.id).sort((a, b) => a - b));
   if (knocked >= 9) $('replay').hidden = false;
   const st2 = next(p.rolls);
@@ -277,7 +288,9 @@ function callout(p, knocked, left) {
   // else; and nobody is told to stand further over who's already at the edge.
   const way = Math.sign(lastShot?.hook || 0);
   let tip = '';
-  if (sawGutter && Math.abs(lastShot.hook) >= 3 && sim.ball.side === way && !toldHook.has(game.turn)) {
+  if (p.cpu) {
+    // The computer needs no tips.
+  } else if (sawGutter && Math.abs(lastShot.hook) >= 3 && sim.ball.side === way && !toldHook.has(game.turn)) {
     toldHook.add(game.turn);
     const atEdge = Math.abs(lastShot.x + way * (LANE.half - BALL_R - 0.5)) < 2;
     const further = atEdge ? '' : ` or stand further ${way > 0 ? 'left' : 'right'}`;
@@ -388,7 +401,9 @@ function runSweep() {
     hud();
     keep();
     if (changing && game.players.length > 1) {
-      handOff();
+      // The card is for passing the phone: not for the computer, nor back to the one person playing it.
+      if (!current().cpu && game.players.filter(q => !q.cpu).length > 1) handOff();
+      else say(turnLine(current().name), '', 'small', '', 'aim');
       tell(`${turnLine(current().name)}, frame ${next(current().rolls).frame + 1}.`);
     }
   }
@@ -447,6 +462,28 @@ function watchAgain() {
 }
 $('replay').addEventListener('click', watchAgain);
 
+// ---- The computer's turn ------------------------------------------------------------------------------------
+// The computer bowls its own balls, through the same physics as a swipe (see plan in computer.js): it walks the ball
+// over to where it stands, shows its line with the guide for a moment, as a swipe does, and throws. The camera,
+// the callouts and the scorecard go as for anyone, and a tap hurries the rest of its turn on.
+let cpuShot = null, cpuFrom = 0;
+const cpuUp = () => !!game && !!current().cpu;
+function cpuAim() {
+  const p = current();
+  const standing = pins.filter(q => q.state === 'up').map(q => ({ id: q.id, x: q.x, y: q.y }));
+  // Its misses are random, or with a seed set for the tests, the same each time for each of its balls.
+  cpuShot = plan(standing, p.cpu, rng(fixedSeed !== null ? fixedSeed * 977 + p.rolls.length + 1 : (Math.random() * 2 ** 31) | 0));
+  cpuFrom = ball.x;
+}
+function cpuStep() {
+  // Behind the note asking for a phone on its side to be turned upright, it waits.
+  if (!$('upright').hidden) { phaseT = Math.min(phaseT, 0.3); return; }
+  ball.x = cpuFrom + (cpuShot.x - cpuFrom) * ease((phaseT - 0.3) / 0.6);
+  current().x = ball.x;
+  guide = phaseT >= 1 ? cpuShot : null;
+  if (phaseT >= 1.7) { const shot = cpuShot; cpuShot = null; throwBall(shot); }
+}
+
 // ---- Where to stand and aim, and the hint under the ball -----------------------------------------------------
 
 // Each player's first ball of a game, while it waits to be thrown: a ring on the lane where to stand and the arrow to
@@ -454,7 +491,7 @@ $('replay').addEventListener('click', watchAgain);
 // arrow from the right, a straight ball comes into the pocket at an angle and strikes about one time in four.
 const STAND = LANE.half - 7.5 * BOARD, TARGET = 10;
 function marks() {
-  if (phase !== 'aim' || !game) return null;
+  if (phase !== 'aim' || !game || cpuUp()) return null;
   const st = next(current().rolls);
   return st.frame === 0 && st.ball === 0 ? { stand: STAND, target: TARGET } : null;
 }
@@ -484,7 +521,7 @@ function hint() {
     : `<span class="pill"><span>${a}</span><span class="dot"> · </span><span>${b}</span></span>`;
   el.classList.toggle('nudge', !!nudgeText);
   // From the keyboard, the keys are said until the first ball they bowl, whoever's bowling.
-  el.hidden = !(nudgeText || words || hintDue() || (how === 'keys' && !keyed)) || phase !== 'aim' || touch?.mode === 'throw' || windAt !== null || handoffUp();
+  el.hidden = !(nudgeText || words || hintDue() || (how === 'keys' && !keyed)) || phase !== 'aim' || touch?.mode === 'throw' || windAt !== null || handoffUp() || cpuUp();
   if (!el.hidden) placeHint(el);
 }
 
@@ -622,10 +659,11 @@ canvas.addEventListener('pointerdown', e => {
   if (e.pointerType === 'mouse' && e.button !== 0 && e.button !== 2) return;
   // A tap while the pins settle, the pinsetter sweeps or the camera comes back (or a ball is played again) hurries the
   // rest of it on.
-  if (!paused && !hurry && (phase === 'settle' || phase === 'sweep' || phase === 'return' || phase === 'replay')) { hurry = true; sound.hurry(); }
+  if (!paused && !hurry && waiting()) { hurry = true; hurryTurn = game.turn; sound.hurry(); }
   // A flick at the end of the camera's way back, once the ball is coming onto the screen (0.65 s in, on a phone or a
   // tablet either way up): the camera jumps the rest of the way so the flick throws. One started earlier on its way
   // back is followed all the same, and counts once aiming begins (see lift).
+  if (cpuUp()) return;   // the computer's turn: nothing to throw
   if (phase === 'return' && !paused && phaseT >= 0.65) aim();
   if ((phase !== 'aim' && phase !== 'return') || paused) return;
   try { canvas.setPointerCapture(e.pointerId); } catch { /* fine without */ }
@@ -749,7 +787,7 @@ function unwind() {
 }
 
 document.addEventListener('keydown', e => {
-  if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || shown || paused || !game || phase !== 'aim' || !$('upright').hidden || handoffUp()) return;
+  if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || shown || paused || !game || phase !== 'aim' || !$('upright').hidden || handoffUp() || cpuUp()) return;
   const k = e.key, onButton = !!e.target.closest?.('button, a, input, summary');
   if (k === 'ArrowLeft' || k === 'ArrowRight') {
     if (windAt !== null) return;
@@ -988,7 +1026,7 @@ function titleScreen() {
   nudgeText = '';
   $('hud').hidden = true; $('others').hidden = true; $('hint').hidden = true;
   readout('');
-  pins = rack(); ball = idle(0); sweep = null; guide = null; lesson = null; replay = null;
+  pins = rack(); ball = idle(0); sweep = null; guide = null; lesson = null; replay = null; cpuShot = null;
   $('replay').hidden = true;
   view.setCamera(0);
   resumeButton();
@@ -1013,29 +1051,51 @@ function resumeButton() {
   } else if (startArmed) disarmStart();
 }
 
-// The players as they were last set up on the title: [{ name, bumpers, head }].
-const lineup = () => (store.names?.length ? store.names : ['You'])
-  .map(name => ({ name, ...(Object.hasOwn(store.opts, name) ? extras(store.opts[name] || {}) : {}) }));
+// The players as they were last set up on the title: [{ name, bumpers, head }], and the computer last ([{ cpu }]).
+const lineup = () => [...(store.names?.length ? store.names : ['You'])
+  .map(name => ({ name, ...(Object.hasOwn(store.opts, name) ? extras(store.opts[name] || {}) : {}) })),
+...(LEVELS[store.cpu] ? [{ cpu: store.cpu }] : [])];
 
 // The head starts a player's ball offers, in turn, as it's tapped.
 const HEADS = [0, 10, 20, 30, 50];
 const headSay = (name, head) => `Head start for ${name}: ${head ? `${head} pins` : 'none'}`;
+const orbStyle = ([light, mid, dark]) => `background:radial-gradient(circle at 35% 30%, ${light}, ${mid} 55%, ${dark})`;
 
 // The players on the title, each with their ball (tapped for a head start, shown on it as "+20"), a name, and a
-// Bumpers switch (pressed or not).
+// Bumpers switch (pressed or not); then the computer, if there is one, with its level. Up to four in all, at least one
+// of them a person, and one computer at most.
 function drawPlayers(list) {
   const ol = $('players');
-  ol.innerHTML = list.map((q, i) => `<li><button type="button" class="ball" data-head="${int(q.head)}" aria-label="${esc(headSay(q.name, int(q.head)))}">`
-    + `<span class="orb" style="background:radial-gradient(circle at 35% 30%, ${colourOf(i)[0]}, ${colourOf(i)[1]} 55%, ${colourOf(i)[2]})"></span>`
-    + `<span class="plus" aria-hidden="true">${int(q.head) ? `+${int(q.head)}` : ''}</span></button>`
-    + `<input type="text" maxlength="14" value="${esc(q.name)}" aria-label="Player ${i + 1}’s name" autocomplete="off" spellcheck="false">`
-    + `<button type="button" class="bump" aria-pressed="${!!q.bumpers}" aria-label="Bumpers for ${esc(q.name)}">Bumpers</button>`
-    + (list.length > 1 ? `<button type="button" class="remove" aria-label="Remove ${esc(q.name)}">×</button>` : '') + '</li>').join('');
+  const people = list.filter(q => !q.cpu);
+  let k = 0;
+  ol.innerHTML = list.map(q => {
+    if (q.cpu) {
+      return `<li class="cpu"><span class="ball"><span class="orb" style="${orbStyle(CPU_COLOURS)}"></span></span>`
+        + `<label class="robot"><span>Computer</span><select aria-label="The computer’s level">${LEVEL_KEYS.map(l => `<option value="${l}"${l === q.cpu ? ' selected' : ''}>${LEVELS[l].name}</option>`).join('')}</select></label>`
+        + '<button type="button" class="remove" aria-label="Remove the computer">×</button></li>';
+    }
+    const i = k++;
+    return `<li><button type="button" class="ball" data-head="${int(q.head)}" aria-label="${esc(headSay(q.name, int(q.head)))}">`
+      + `<span class="orb" style="${orbStyle(colourOf(i))}"></span>`
+      + `<span class="plus" aria-hidden="true">${int(q.head) ? `+${int(q.head)}` : ''}</span></button>`
+      + `<input type="text" maxlength="14" value="${esc(q.name)}" aria-label="Player ${i + 1}’s name" autocomplete="off" spellcheck="false">`
+      + `<button type="button" class="bump" aria-pressed="${!!q.bumpers}" aria-label="Bumpers for ${esc(q.name)}">Bumpers</button>`
+      + (people.length > 1 ? `<button type="button" class="remove" aria-label="Remove ${esc(q.name)}">×</button>` : '') + '</li>';
+  }).join('');
   // Each remove button is named for the player as their name is typed. Removing one from the keyboard puts the focus
   // on the name now in its place; with a finger or a mouse, on the remove button there (focusing a name would bring
   // up a phone's keyboard).
-  ol.querySelectorAll('li').forEach((li, i) => {
-    const input = li.querySelector('input'), b = li.querySelector('.remove'), bump = li.querySelector('.bump'), orb = li.querySelector('.ball');
+  let n = 0;
+  ol.querySelectorAll('li').forEach((li, j) => {
+    const b = li.querySelector('.remove');
+    b?.addEventListener('click', e => {
+      drawPlayers(readPlayers().filter((_, m) => m !== j));
+      const rows = ol.querySelectorAll('li'), row = rows[Math.min(j, rows.length - 1)];
+      (e.detail === 0 ? row.querySelector('input, select') : row.querySelector('.remove') || $('addPlayer')).focus();
+    });
+    if (li.classList.contains('cpu')) return;
+    const i = n++;
+    const input = li.querySelector('input'), bump = li.querySelector('.bump'), orb = li.querySelector('.ball');
     const named = () => input.value.trim() || `Player ${i + 1}`;
     bump.addEventListener('click', () => bump.setAttribute('aria-pressed', String(bump.getAttribute('aria-pressed') !== 'true')));
     orb.addEventListener('click', () => {
@@ -1048,20 +1108,23 @@ function drawPlayers(list) {
       b?.setAttribute('aria-label', `Remove ${named()}`); bump.setAttribute('aria-label', `Bumpers for ${named()}`);
       orb.setAttribute('aria-label', headSay(named(), +orb.dataset.head));
     });
-    if (!b) return;
-    b.addEventListener('click', e => {
-      drawPlayers(readPlayers().filter((_, j) => j !== i));
-      const rows = ol.querySelectorAll('li'), row = rows[Math.min(i, rows.length - 1)];
-      (e.detail === 0 ? row.querySelector('input') : row.querySelector('.remove') || $('addPlayer')).focus();
-    });
   });
   $('addPlayer').hidden = list.length >= MAX_PLAYERS;
+  $('addCpu').hidden = list.length >= MAX_PLAYERS || people.length < list.length;
 }
-const readPlayers = () => [...$('players').querySelectorAll('li')].map((li, i) => ({
-  name: li.querySelector('input').value.trim() || `Player ${i + 1}`,
-  bumpers: li.querySelector('.bump').getAttribute('aria-pressed') === 'true',
-  head: int(li.querySelector('.ball').dataset.head),
-}));
+// What's on the title: each person (named "Player 2" if left blank) and the computer.
+const readPlayers = () => {
+  let n = 0;
+  return [...$('players').querySelectorAll('li')].map(li => {
+    if (li.classList.contains('cpu')) return { cpu: li.querySelector('select').value };
+    const i = n++;
+    return {
+      name: li.querySelector('input').value.trim() || `Player ${i + 1}`,
+      bumpers: li.querySelector('.bump').getAttribute('aria-pressed') === 'true',
+      head: int(li.querySelector('.ball').dataset.head),
+    };
+  });
+};
 
 function record() {
   const games = store.games || [];
@@ -1089,8 +1152,8 @@ function record() {
   $('record').innerHTML = h;
 }
 
-// Whether a player's game counts toward the bests: not with bumpers or a head start.
-const counts = q => !q.bumpers && !int(q.head);
+// Whether a player's game counts toward the bests: not with bumpers or a head start, and never the computer's.
+const counts = q => !q.bumpers && !int(q.head) && !q.cpu;
 
 // The game's over: keep it, with every player's balls as well as their score (for working out averages and the
 // like later), and any new bests. A game bowled with bumpers or a head start is kept marked (its score with the head
@@ -1198,10 +1261,17 @@ function keep() {
 }
 
 $('addPlayer').addEventListener('click', () => {
-  const list = readPlayers();
-  if (list.length < MAX_PLAYERS) drawPlayers([...list, { name: `Player ${list.length + 1}` }]);
+  const list = readPlayers(), people = list.filter(q => !q.cpu);
+  if (list.length < MAX_PLAYERS) drawPlayers([...people, { name: `Player ${people.length + 1}` }, ...list.filter(q => q.cpu)]);
   const inputs = $('players').querySelectorAll('input');
   inputs[inputs.length - 1]?.select();
+});
+// One computer, after the people, at Regular unless it was something else last time.
+$('addCpu').addEventListener('click', () => {
+  const list = readPlayers();
+  if (list.length >= MAX_PLAYERS || list.some(q => q.cpu)) return;
+  drawPlayers([...list, { cpu: LEVELS[store.cpu] ? store.cpu : 'regular' }]);
+  $('players').querySelector('select').focus();
 });
 // With a game still going, Bowl starts over only on a second tap, so one tap can't throw the saved game away.
 let startArmed = false, startTimer = 0;
@@ -1262,7 +1332,7 @@ $('menuQuit').addEventListener('click', () => {
 // Bowl again: the same players, the second leading off this time (and the first going last), each with their own ball
 // colour and spot on the approach.
 $('again').addEventListener('click', () => {
-  const lineup = game.players.map((q, i) => ({ name: q.name, x: q.x, c: q.c ?? i, ...extras(q) }));
+  const lineup = game.players.map((q, i) => ({ name: q.name, x: q.x, c: q.c ?? i, ...extras(q) }));   // the computer too
   startGame([...lineup.slice(1), lineup[0]]);
 });
 $('toTitle').addEventListener('click', titleScreen);

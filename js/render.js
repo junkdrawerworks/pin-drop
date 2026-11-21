@@ -33,6 +33,8 @@ const stationsEvery = step => {
 const STATIONS = stationsEvery(0.5), STATIONS_FAR = stationsEvery(1), STATIONS_SLICED = stationsEvery(0.75);
 // The pin in pieces along its length, white and red, base to head.
 const PIECES = [[0, 10, false], [10, 10.3, true], [10.3, 10.8, false], [10.8, 11.1, true], [11.1, 15, false]];
+// The computer's ball: silver.
+export const CPU_COLOURS = ['#eef1f7', '#8a91a6', '#2b2f3c'];
 export const BALL_COLOURS = [
   ['#5aa8ff', '#1d4fa8', '#0b1d45'],
   ['#ff7a6b', '#c22d2d', '#4a0d14'],

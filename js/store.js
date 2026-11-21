@@ -4,10 +4,13 @@ export const KEY = 'pin-drop.v1';
 // `thrown` counts each player's balls by name, so the hint on how to throw shows for a new player's first few, and
 // `hookShown` and `slideShown` how many balls each has been shown how to hook and how to line up with pins left.
 // `best` is the best game here, by `bestBy` (the names of everyone on it, joined with " & "); `bests` is each player's
-// own best by name. A game bowled with bumpers counts toward neither, and is kept with `bumpers: true` on its score. Both by-name lists are kept with no prototype, so a name like "constructor" is just a name.
-// `opts` holds each player's switches on the title by name ({ bumpers }), for the next time they play here.
+// own best by name. A game bowled with bumpers or a head start counts toward neither, and is kept with `bumpers: true`
+// or `head` (its pins) on its score. Both by-name lists are kept with no prototype, so a name like "constructor" is just a name.
+// `opts` holds each player's switches on the title by name ({ bumpers, head }), for the next time they play here, and
+// `cpu` the computer player's level ('rookie', 'regular' or 'pro'), or null for none. The computer's games never count
+// toward a best, and are kept with `cpu` (its level) on its score.
 const blank = () => ({ names: ['You'], sound: true, best: 0, games: [], current: null, throws: 0, thrown: byName(), bests: byName(),
-  hookShown: byName(), slideShown: byName(), opts: byName() });
+  hookShown: byName(), slideShown: byName(), opts: byName(), cpu: null });
 const byName = (o = {}) => Object.assign(Object.create(null), o && typeof o === 'object' ? o : {});
 export const int = v => Math.max(0, Math.trunc(Number(v)) || 0);
 

@@ -257,7 +257,7 @@ h1[tabindex]:focus, h2[tabindex]:focus { outline: none; }
 .players { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .players li { display: flex; align-items: center; gap: 10px; }
 /* The ball is a button for a head start, shown on it in a gold tag ("+20"). */
-.players .ball { position: relative; display: grid; place-items: center; padding: 0; margin: 0 -6px 0 -10px; border: 0; background: none; }
+.players .ball { position: relative; display: grid; place-items: center; flex: none; width: 44px; height: 44px; padding: 0; margin: 0 -6px 0 -10px; border: 0; background: none; }
 .players .ball .orb { width: 24px; height: 24px; border-radius: 50%; box-shadow: inset -3px -4px 6px rgba(0, 0, 0, 0.45), inset 2px 2px 4px rgba(255, 255, 255, 0.3); }
 .players .ball .plus { position: absolute; right: -1px; bottom: 3px; padding: 0 4px; border-radius: 99px; background: var(--gold); color: #2a1a05; font-size: 11px; font-weight: 800; line-height: 15px; }
 .players .ball .plus:empty { display: none; }
@@ -271,6 +271,14 @@ h1[tabindex]:focus, h2[tabindex]:focus { outline: none; }
 /* Bumpers for a player: a switch, teal when on (the colour of the rails on the lane). */
 .players .bump { width: auto; padding: 0 9px; font-size: 13px; font-weight: 700; letter-spacing: 0.01em; }
 .players .bump[aria-pressed="true"] { background: var(--teal); border-color: var(--teal); color: #062a2a; }
+/* The computer: its name, and its level to choose. */
+.players .robot { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; color: var(--cream); }
+.players select {
+  flex: 1; min-width: 0; font: inherit; color: var(--cream); background: var(--panel-2);
+  border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; min-height: 44px;
+}
+.players select:focus { outline: 2px solid var(--teal); outline-offset: 1px; }
+.adds { display: flex; flex-wrap: wrap; column-gap: 20px; }
 
 .big {
   display: block; width: 100%; margin: 18px 0 0; padding: 14px; border: 0; border-radius: 14px;
