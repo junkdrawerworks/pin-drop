@@ -164,6 +164,65 @@ export class Renderer {
     const v = g.createRadialGradient(this.W / 2, this.H * 0.45, this.H * 0.25, this.W / 2, this.H * 0.45, this.H * 0.8);
     v.addColorStop(0, 'rgba(0,0,0,0)'); v.addColorStop(1, 'rgba(0,0,0,0.38)');
     g.fillStyle = v; g.fillRect(0, 0, this.W, this.H);
+    this.taught = null;
+    if (s.lesson && s.ball) this.lesson(s.lesson, s.ball);
+  }
+
+  // A fingertip showing what to do, from the ball (see lessons in main.js): 'swipe' slides up from it, 'hook' slides
+  // up with the end curling left and a small gold arrow, 'slide' drags the ball sideways (`side` says which way) with a
+  // ghost of it following. Each leaves a fading trail. `u` is the seconds since it began: it presses on the ball, moves
+  // from 0.35 s to 1.05 s, holds, fades by 1.6 s and goes again every 2.4 s. `still` draws it where it ends and keeps it
+  // there, for Reduce Motion.
+  lesson({ kind, u, still, side = 1 }, ball) {
+    const g = this.g, c = this.p(ball.x, ball.y, BALL_R);
+    if (!c) return;
+    const R = BALL_R * c[2], L = Math.min(this.H * 0.3, 280), tip = Math.max(12, Math.min(19, this.H * 0.018));
+    const at = s => (kind === 'slide' ? [c[0] + side * s * Math.min(this.W * 0.28, 5 * R), c[1]]
+      : [c[0] - (kind === 'hook' ? L * 0.2 * Math.max(0, (s - 0.5) / 0.5) ** 2 : 0), c[1] - L * s]);
+    const k = still ? 1.2 : u % 2.4;
+    const s = smooth((k - 0.35) / 0.7), alpha = still ? 1 : Math.min(unit(k / 0.3), 1 - unit((k - 1.2) / 0.4));
+    if (alpha <= 0) return;
+    const end = at(s);
+    this.taught = { kind, at: end, alpha };
+    g.save();
+    g.lineCap = 'round';
+    // The trail: a dark edge under it for the light wood, then white, fading out towards where it began.
+    const start = at(0);
+    if (s > 0.02) {
+      for (const [colour, width, a] of [['13,18,34', tip * 1.25, 0.22], ['255,255,255', tip * 0.85, 0.55]]) {
+        const fade = g.createLinearGradient(start[0], start[1], end[0], end[1]);
+        fade.addColorStop(0, `rgba(${colour},0)`); fade.addColorStop(1, `rgba(${colour},${alpha * a})`);
+        g.strokeStyle = fade; g.lineWidth = width;
+        g.beginPath(); g.moveTo(start[0], start[1]);
+        for (let j = 1; j <= 24; j++) { const q = at(s * j / 24); g.lineTo(q[0], q[1]); }
+        g.stroke();
+      }
+    }
+    // The ball coming along with a slide.
+    if (kind === 'slide') {
+      g.fillStyle = `rgba(255,255,255,${0.14 * alpha})`; g.strokeStyle = `rgba(255,255,255,${0.7 * alpha})`;
+      g.lineWidth = 2; g.setLineDash([5, 4]);
+      g.beginPath(); g.arc(end[0], end[1], R, 0, Math.PI * 2); g.fill(); g.stroke();
+      g.setLineDash([]);
+    }
+    // Which way a hook goes, once the curl is drawn.
+    if (kind === 'hook' && s > 0.97) {
+      const b = at(0.93), ang = Math.atan2(end[1] - b[1], end[0] - b[0]), h = tip * 1.1;
+      const head = [end[0] + Math.cos(ang) * tip * 1.6, end[1] + Math.sin(ang) * tip * 1.6];
+      g.fillStyle = `rgba(255,201,74,${alpha})`;
+      g.beginPath();
+      g.moveTo(head[0] + Math.cos(ang) * h, head[1] + Math.sin(ang) * h);
+      g.lineTo(head[0] + Math.cos(ang + 2.4) * h, head[1] + Math.sin(ang + 2.4) * h);
+      g.lineTo(head[0] + Math.cos(ang - 2.4) * h, head[1] + Math.sin(ang - 2.4) * h);
+      g.closePath(); g.fill();
+    }
+    // The fingertip, with a ring that spreads as it presses on the ball.
+    const press = still ? 1 : unit(k / 0.35);
+    g.strokeStyle = `rgba(255,255,255,${0.45 * alpha * (still ? 1 : 1 - press * 0.6)})`; g.lineWidth = 2;
+    g.beginPath(); g.arc(end[0], end[1], tip * (1.15 + 0.5 * press), 0, Math.PI * 2); g.stroke();
+    g.fillStyle = `rgba(255,255,255,${0.9 * alpha})`; g.strokeStyle = `rgba(13,18,34,${0.45 * alpha})`; g.lineWidth = 1.5;
+    g.beginPath(); g.arc(end[0], end[1], tip, 0, Math.PI * 2); g.fill(); g.stroke();
+    g.restore();
   }
 
   // The panel across the back above the pin decks, and the dark pits below it.
@@ -617,6 +676,9 @@ function depthOf(p) {
   if (p.state === 'down' || p.state === 'gutter') return p.y - Math.abs(Math.sin(p.a)) * PIN_LEN / 2;
   return p.y;
 }
+
+const unit = v => Math.max(0, Math.min(1, v));
+const smooth = v => { v = unit(v); return v * v * (3 - 2 * v); };
 
 function star(g, x, y, r) {
   g.beginPath();

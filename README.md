@@ -21,7 +21,10 @@ thrown straight at the head pin.
   further the faster you're swiping, so you see how hard it'll go before you let go. On a trackpad, press and hold with
   one finger and flick up with another; with a mouse, hold the button down as you flick up.
 - **A start for new players.** On each player's first ball of a game, a ring on the lane marks a good place to stand
-  and the arrow to roll over is lit gold: from there a straight ball comes into the pocket at an angle.
+  and the arrow to roll over is lit gold: from there a straight ball comes into the pocket at an angle. A fingertip on
+  the lane shows a new player the swipe on their very first ball, how to drag the ball over to line up the first pins
+  they leave, and how to curve the end of a swipe to hook, each until they touch the lane (and drawn still with Reduce
+  Motion on).
 - **Hook it for strikes.** Bend your swipe and the ball keeps that side spin through the oil on the front 40 feet, then
   grips the dry back end and curves. Coming into the pocket at an angle (just right of the head pin, for a ball that
   hooks left) is how most strikes happen. Straight balls work too, and leave more splits. The throw is forgiving about

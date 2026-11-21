@@ -549,7 +549,8 @@ for (const [width, height, insets] of [[390, 844, { top: 47, bottom: 34, left: 0
 
 // The lane is repainted only when something on it can change: once as a sheet opens and then not while it stays up
 // (repainting a phone-sized canvas every frame behind the title or the menu kept the main thread busy), once after the
-// screen turns round with a sheet up, about twelve times a second while a ball waits, and every frame while it rolls.
+// screen turns round with a sheet up, about twelve times a second while a ball waits, and every frame while it rolls
+// (or a lesson's fingertip moves).
 {
   const c = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   const p = await c.newPage();
@@ -575,6 +576,11 @@ for (const [width, height, insets] of [[390, 844, { top: 47, bottom: 34, left: 0
     await p.setViewportSize({ width: 390, height: 844 });
     await p.click('#start');
     await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 5000, 'never on the lane');
+    // A first ball here shows a fingertip swiping, drawn every frame while it moves; a tap on the lane stops it.
+    await wait(700);
+    const lesson = await count(500);
+    assert.ok(lesson.draws >= lesson.frames - 3, `drawn ${lesson.draws} times in ${lesson.frames} frames while the fingertip moved`);
+    await p.tap('#lane', { position: { x: 40, y: 400 } });
     await wait(200);
     const waiting = await count(1000);
     assert.ok(waiting.draws >= 5 && waiting.draws <= 16, `drawn ${waiting.draws} times in a second while the ball waits`);
@@ -1054,6 +1060,69 @@ for (const tap of ['#menuBtn', '#card']) {
       return pinDrop.phase === 'aim' && pinDrop.game.turn === 0;
     }), 30000, "Ana's second frame never came");
     assert.equal(await marked(), null, "the marks are up in Ana's second frame");
+  } finally { await c.close(); }
+}
+
+// A new player's very first ball: a fingertip slides up from the ball, again and again, until they touch the lane.
+// With Reduce Motion on, it's drawn still, at the end of its way.
+{
+  const taught = p => p.evaluate(() => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(() => r(pinDrop.view.taught)))));
+  const { c, p, cdp } = await lane({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  try {
+    assert.deepEqual(await p.evaluate(() => pinDrop.lesson), { kind: 'swipe', playing: true });
+    const ballY = await p.evaluate(() => pinDrop.view.p(pinDrop.ball.x, pinDrop.ball.y, 4.25)[1]);
+    const seen = [];
+    for (let i = 0; i < 12; i++) { const t = await taught(p); if (t) seen.push(t.at[1]); await wait(100); }
+    assert.ok(seen.length >= 4 && Math.max(...seen) - Math.min(...seen) > 100, `the fingertip didn't move up the lane: ${seen.map(Math.round)}`);
+    assert.ok(seen.every(y => y <= ballY + 1) && Math.min(...seen) < ballY - 150, `the fingertip wasn't going up from the ball (at ${Math.round(ballY)}): ${seen.map(Math.round)}`);
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 60, y: 500 }] });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await wait(100);
+    assert.equal((await p.evaluate(() => pinDrop.lesson)).playing, false, 'touching the lane did not stop the fingertip');
+    for (let i = 0; i < 5; i++) { assert.equal(await taught(p), null, 'the fingertip still shows after touching the lane'); await wait(150); }
+  } finally { await c.close(); }
+  const still = await lane({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, reducedMotion: 'reduce' });
+  try {
+    await wait(500);
+    const a = await taught(still.p); await wait(700); const b = await taught(still.p);
+    assert.ok(a && b && a.alpha === 1 && a.at[1] === b.at[1], `with Reduce Motion the fingertip moved: ${JSON.stringify([a, b])}`);
+  } finally { await still.c.close(); }
+}
+
+// After that: the first time a first ball leaves pins, the fingertip drags the ball sideways towards them, saying
+// "Drag the ball sideways to line up the pins left"; then on the next two full racks it curls the end of a swipe,
+// saying "Curve the end of your swipe to hook into the pocket" (the second time is skipped for a ball that hooks).
+// Each is kept for the player on this device, and doesn't come again.
+{
+  const leftover = [{ id: 4, x: -12, y: 740.78 }, { id: 7, x: -18, y: 751.18 }, { id: 8, x: -6, y: 751.18 }];
+  const { c, p } = await kept({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
+    { names: ['You'], thrown: { You: 1 }, current: { players: [{ name: 'You', rolls: [7], x: 0 }], turn: 0, leftover } });
+  const stored = () => p.evaluate(() => JSON.parse(localStorage.getItem('pin-drop.v1')));
+  const gutter = hook => p.evaluate(h => { pinDrop.throw({ x: -18, speed: 300, angle: -0.05, hook: h }); }, hook);
+  const ready = () => until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
+  try {
+    await p.click('#resume');
+    assert.deepEqual(await p.evaluate(() => pinDrop.lesson), { kind: 'slide', playing: true });
+    assert.equal(await p.textContent('#hint'), 'Drag the ball sideways to line up the pins left');
+    const across = () => p.evaluate(() => pinDrop.view.taught && pinDrop.view.taught.at[0] - pinDrop.view.p(pinDrop.ball.x, pinDrop.ball.y)[0]);
+    await until(async () => Math.abs(await across()) > 20, 3000, 'the fingertip never dragged the ball sideways');
+    assert.ok(await across() < 0, 'the slide went away from the pins, on the left');
+    await p.evaluate(() => { pinDrop.speed = 10; });
+    await gutter(0); await ready();
+    assert.equal((await stored()).slideShown.You, 1);
+    assert.deepEqual(await p.evaluate(() => pinDrop.lesson), { kind: 'hook', playing: true });
+    assert.equal(await p.textContent('#hint'), 'Curve the end of your swipe to hook into the pocket');
+    await gutter(0); await ready();
+    assert.equal((await stored()).hookShown.You, 1);
+    assert.equal((await p.evaluate(() => pinDrop.lesson))?.kind, 'hook', 'the hook was shown only once');
+    await gutter(-20); await ready();
+    assert.equal((await stored()).hookShown.You, 2);
+    assert.equal(await p.evaluate(() => pinDrop.lesson), null, 'a lesson after the hook was shown twice');
+    assert.equal(await p.isVisible('#hint'), false, 'the hint is up after four balls');
+    // A first ball that leaves pins again: nothing more said.
+    await p.evaluate(() => { pinDrop.seed = 7; pinDrop.throw({ x: 0, speed: 300, angle: 0.01, hook: 0 }); });
+    await ready();
+    assert.equal(await p.evaluate(() => pinDrop.lesson), null, 'the slide was shown again');
   } finally { await c.close(); }
 }
 

@@ -13,12 +13,12 @@ test('a window that loaded before another finished a game keeps that game and it
   box.set(KEY, JSON.stringify({ names: ['Ana'], best: 150, bestBy: 'Ana', bests: { Ana: 150 }, games: [game(1000, ['Ana', 150])] }));
   const b = parse(box.get(KEY));                 // window B opens, and sits on the title
   const a = parse(box.get(KEY));                 // window A plays a game to 240
-  a.best = 240; a.bestBy = 'Ben'; a.bests.Ben = 240; a.thrown.Ben = 21;
+  a.best = 240; a.bestBy = 'Ben'; a.bests.Ben = 240; a.thrown.Ben = 21; a.hookShown.Ben = 2; a.slideShown.Ben = 1;
   a.games = [game(2000, ['Ben', 240]), ...a.games];
   a.current = null;
   save(a);
   b.names = ['Cy']; b.current = { players: [{ name: 'Cy', rolls: [7], x: 0 }], turn: 0, leftover: null };
-  b.thrown.Cy = 1;
+  b.thrown.Cy = 1; b.hookShown.Ben = 1;
   save(b);                                       // B throws a ball
   const s = kept();
   assert.equal(s.best, 240);
@@ -26,6 +26,8 @@ test('a window that loaded before another finished a game keeps that game and it
   assert.deepEqual(s.games.map(g => g.at), [2000, 1000]);
   assert.deepEqual(s.bests, { Ana: 150, Ben: 240 });
   assert.deepEqual(s.thrown, { Ben: 21, Cy: 1 });
+  // The lessons A showed Ben aren't shown again in B.
+  assert.deepEqual([s.hookShown, s.slideShown], [{ Ben: 2 }, { Ben: 1 }]);
   // B's own: the names, and the game in progress.
   assert.deepEqual(s.names, ['Cy']);
   assert.deepEqual(s.current.players[0].rolls, [7]);

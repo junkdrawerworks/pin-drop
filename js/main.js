@@ -53,9 +53,12 @@ function loop(now) {
   // A hand over the lane while there's a ball to pick up, closed while it's held.
   document.body.classList.toggle('aiming', phase === 'aim' && !paused);
   document.body.classList.toggle('dragging', !!touch);
-  const resting = shown !== null || (phase === 'aim' && !strokes.size && !guide);
+  const shownLesson = teaching();
+  // A lesson's fingertip moves for 1.6 s of every 2.4 (see lesson in render.js), and is drawn every frame meanwhile.
+  const moving = shownLesson && !shownLesson.still && shownLesson.u >= 0 && shownLesson.u % 2.4 < 1.65;
+  const resting = shown !== null || (phase === 'aim' && !strokes.size && !guide && !moving);
   if (stale || phase !== drawnPhase || !resting || (shown === null && now - drawnAt >= 80)) {
-    view.draw({ t: now / 1000, pins, ball: phase === 'sweep' ? null : ball, guide, sweep, colour: colourOf(game ? game.turn : 0), marks: marks() });
+    view.draw({ t: now / 1000, pins, ball: phase === 'sweep' ? null : ball, guide, sweep, colour: colourOf(game ? game.turn : 0), marks: marks(), lesson: shownLesson });
     stale = false; drawnAt = now; drawnPhase = phase;
   }
   requestAnimationFrame(loop);
@@ -144,6 +147,7 @@ function aim() {
   ball = idle(current().x || 0);
   sim = null; guide = null; sweep = null;
   before = pins.filter(p => p.state === 'up').length;
+  lesson = lessonDue();
   hud();
   hint();
   if (blockedDue) { blockedDue = false; nudge(BLOCKED, 6000, true); }
@@ -151,6 +155,7 @@ function aim() {
 
 function throwBall(shot) {
   guide = null;
+  learnt(shot);
   felt = false; sawGutter = false; called = false; clearedAt = null;
   before = pins.filter(p => p.state === 'up').length;
   wasSplit = !next(current().rolls).fresh && isSplit(pins.filter(p => p.state === 'up').map(p => p.id));
@@ -343,13 +348,55 @@ let nudgeText = '', nudgeAt = -Infinity, nudgeTimer = 0;
 
 function hint() {
   const el = $('hint');
-  const [a, b] = HINTS[clicking() ? 'mouse' : 'touch'];
+  const how = clicking() ? 'mouse' : 'touch';
+  const [a, b] = HINTS[how];
+  // A lesson's words, for the ball it's shown on.
+  const words = lesson && LESSONS[lesson.kind]?.[how];
   // On a dark pill, to read over the light wood of the approach.
-  el.innerHTML = nudgeText ? `<span class="pill">${esc(nudgeText)}</span>`
+  el.innerHTML = nudgeText ? `<span class="pill">${esc(nudgeText)}</span>` : words ? `<span class="pill">${words}</span>`
     : `<span class="pill"><span>${a}</span><span class="dot"> · </span><span>${b}</span></span>`;
   el.classList.toggle('nudge', !!nudgeText);
-  el.hidden = !(nudgeText || hintDue()) || phase !== 'aim' || touch?.mode === 'throw';
+  el.hidden = !(nudgeText || words || hintDue()) || phase !== 'aim' || touch?.mode === 'throw';
   if (!el.hidden) placeHint(el);
+}
+
+// ---- Lessons ----------------------------------------------------------------------------------------------
+
+// A fingertip on the lane shows a new player what to do (see lesson in render.js), going round until they touch the
+// screen, and the last two have words in the hint's place for that ball:
+// - 'swipe', on a player's very first ball here: up from the ball (the hint says it in words).
+// - 'slide', the first time a first ball leaves pins: drag the ball sideways to line up with them.
+// - 'hook', on the first two full racks after their first ball (just the one, if they hook it), but not on a first
+//   ball of a game: curve the end.
+// Like the hint, each is for a player by name on this device (store.slideShown and store.hookShown).
+const LESSONS = {
+  hook: { touch: 'Curve the end of your swipe to hook into the pocket', mouse: 'Curve the end of your flick to hook into the pocket' },
+  slide: { touch: 'Drag the ball sideways to line up the pins left', mouse: 'Drag the ball sideways to line up the pins left' },
+};
+const reduced = matchMedia('(prefers-reduced-motion: reduce)');
+let lesson = null;   // { kind, at (when the fingertip starts, ms), playing, side (which way a slide goes) }
+function lessonDue() {
+  const name = current().name, at = performance.now() + 400;
+  if (!(store.thrown[name] || 0)) return { kind: 'swipe', at, playing: true };
+  // Not with the first ball's marks, which show a straight ball's line.
+  if (before === 10) return (store.hookShown[name] || 0) < 2 && !marks() ? { kind: 'hook', at, playing: true } : null;
+  if (before === 0 || store.slideShown[name]) return null;
+  // Towards the pins left, to line up with them.
+  const left = pins.filter(p => p.state === 'up'), mid = left.reduce((t, p) => t + p.x, 0) / left.length;
+  return { kind: 'slide', at, playing: true, side: mid < ball.x ? -1 : 1 };
+}
+// What's drawn this frame: nothing once they've touched the lane, or while a sheet is up.
+function teaching() {
+  if (!lesson?.playing || phase !== 'aim' || paused || strokes.size) return null;
+  return { kind: lesson.kind, u: (performance.now() - lesson.at) / 1000, still: reduced.matches, side: lesson.side };
+}
+// A ball thrown with a lesson up: that one's been shown.
+function learnt(shot) {
+  if (!lesson) return;
+  const name = current().name;
+  if (lesson.kind === 'hook') store.hookShown[name] = shot.hook ? 2 : (store.hookShown[name] || 0) + 1;
+  if (lesson.kind === 'slide') store.slideShown[name] = 1;
+  lesson = null;
 }
 
 // Just under the ball, where it says to swipe from, if there's room between the ball and the bottom of the screen
@@ -438,6 +485,7 @@ function dropStrokes() { strokes.clear(); touch = null; guide = null; }
 canvas.addEventListener('pointerdown', e => {
   sound.wake();
   seen(e);
+  if (lesson) lesson.playing = false;   // its words stay until the ball goes
   // The main button, or the right one: pressing a trackpad down with two fingers is a right click, and some people
   // hold the ball that way. (The menu that would pop up is kept shut, below.) Not the middle button.
   if (e.pointerType === 'mouse' && e.button !== 0 && e.button !== 2) return;
@@ -677,7 +725,7 @@ function titleScreen() {
   nudgeText = '';
   $('hud').hidden = true; $('others').hidden = true; $('hint').hidden = true;
   readout('');
-  pins = rack(); ball = idle(0); sweep = null; guide = null;
+  pins = rack(); ball = idle(0); sweep = null; guide = null; lesson = null;
   view.setCamera(0);
   resumeButton();
   blockedDue = false;   // the title says it
@@ -916,6 +964,7 @@ window.pinDrop = {
   get pins() { return pins; },
   get ball() { return ball; },
   get shot() { return lastShot; },
+  get lesson() { return lesson && { kind: lesson.kind, playing: lesson.playing }; },
   throw(shot) { if (phase === 'aim') throwBall({ x: ball.x, ...shot }); },
   set speed(v) { timeScale = v; },
   set seed(v) { fixedSeed = v; },

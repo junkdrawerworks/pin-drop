@@ -118,6 +118,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
   display: inline-block; padding: 6px 14px; border-radius: 99px;
   background: rgba(13, 18, 34, 0.75); border: 1px solid var(--line);
 }
+/* A lesson's line, wrapped evenly where it doesn't fit on one. */
+.hint .pill { text-wrap: balance; }
 @media (max-width: 519px) {
   /* Two lines on a phone, one for each half, in one pill. */
   .hint .pill { border-radius: 16px; }
