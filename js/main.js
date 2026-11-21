@@ -432,7 +432,8 @@ function hud() {
 
 function boardHTML(withBest) {
   const best = Math.max(...game.players.map(q => total(q.rolls)));
-  return game.players.map((q, i) => `<div class="row"><div class="name"><span><i style="background:${colourOf(i)[0]}"></i>${esc(q.name)}</span>${withBest && game.players.length > 1 && total(q.rolls) === best ? '<em>Winner</em>' : ''}</div>${cardHTML(q.rolls, -1, true)}</div>`).join('');
+  const tied = game.players.filter(q => total(q.rolls) === best).length > 1;
+  return game.players.map((q, i) => `<div class="row"><div class="name"><span><i style="background:${colourOf(i)[0]}"></i>${esc(q.name)}</span>${withBest && game.players.length > 1 && total(q.rolls) === best ? `<em>${tied ? 'Tied' : 'Winner'}</em>` : ''}</div>${cardHTML(q.rolls, -1, true)}</div>`).join('');
 }
 
 let callTimer = 0;
@@ -540,22 +541,48 @@ function record() {
 function finish() {
   const scores = game.players.map(q => ({ name: q.name, score: total(q.rolls) }));
   const top = Math.max(...scores.map(s => s.score));
+  // Whether there was a best here to beat, and each player's own best before this game (null for a first game).
+  game.hadBest = !!store.best;
   game.newBest = top > (store.best || 0);
-  if (game.newBest) { store.best = top; store.bestBy = scores.find(s => s.score === top).name; }
+  game.before = scores.map(s => (Object.hasOwn(store.bests, s.name) ? store.bests[s.name] : null));
+  if (game.newBest) { store.best = top; store.bestBy = [...new Set(scores.filter(s => s.score === top).map(s => s.name))].join(' & '); }
+  for (const s of scores) if (!Object.hasOwn(store.bests, s.name) || s.score > store.bests[s.name]) store.bests[s.name] = s.score;
   store.games = [{ at: Date.now(), scores }, ...(store.games || [])].slice(0, 20);
   store.current = null;
   save(store);
 }
 
-function showEnd() {
+// "Ana and Cal": names in a line ("You and Ana" when one is still called You, who comes first).
+const both = names => {
+  const sorted = [...names.filter(isYou), ...names.filter(n => !isYou(n))];
+  return sorted.length < 3 ? sorted.join(' and ') : `${sorted.slice(0, -1).join(', ')} and ${sorted.at(-1)}`;
+};
+
+// The end of the game: its title and the line under it. One player hears about their own best (by name, not
+// whoever's best is the best here); several hear who won and by how much, or who tied.
+function endWords() {
   const scores = game.players.map(q => ({ name: q.name, score: total(q.rolls) }));
   const top = Math.max(...scores.map(s => s.score));
   const winners = scores.filter(s => s.score === top);
-  $('endTitle').textContent = scores.length === 1 ? `${top}` : winners.length > 1 ? 'A tie!' : winLine(winners[0].name);
-  $('endTitle').classList.toggle('score', scores.length === 1);
-  const line = scores.length === 1
-    ? (top === 300 ? 'A perfect game.' : game.newBest ? 'Your best game yet.' : store.best ? `Your best is ${store.best}.` : '')
-    : (game.newBest ? `${top} is a new best on this phone.` : `with ${top}`);
+  if (scores.length === 1) {
+    const was = game.before?.[0] ?? null;
+    return [`${top}`, top === 300 ? 'A perfect game.' : was === null ? 'Your first game here.' : top > was ? 'Your best game yet.'
+      : top === was ? 'That equals your best.' : `Your best is ${was}.`];
+  }
+  const title = winners.length === 1 ? winLine(winners[0].name) : winners.length === 2 ? `${both(winners.map(w => w.name))} tie!`
+    : `A ${winners.length === 3 ? 'three' : 'four'}-way tie!`;
+  let line = winners.length === 1 ? `${top} to ${Math.max(...scores.filter(s => s !== winners[0]).map(s => s.score))}` : `${top} each`;
+  if (top === 300) {
+    const names = winners.map(w => w.name);
+    line = names.length === 1 ? `${names[0]} bowled a perfect game.` : `${both(names)} bowled perfect games.`;
+  } else if (game.newBest && game.hadBest) line += ' · a new best here';
+  return [title, line];
+}
+
+function showEnd() {
+  const [title, line] = endWords();
+  $('endTitle').textContent = title;
+  $('endTitle').classList.toggle('score', game.players.length === 1);
   $('endLine').textContent = line;
   $('endCards').innerHTML = boardHTML(true);
   show('end');

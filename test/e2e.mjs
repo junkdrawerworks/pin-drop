@@ -455,6 +455,9 @@ const freshRack = SPOTS.map((s, i) => `${i + 1}@${s.x.toFixed(6)},${s.y.toFixed(
     }), 60000, 'the game never ended');
     await until(() => p.isVisible('#end'), 5000, 'no end of the game');
     assert.equal(await p.textContent('#endTitle'), 'Ana wins!');
+    // By how much: no best to beat on a new phone, so nothing about a new best.
+    assert.equal(await p.textContent('#endLine'), '93 to 63');
+    assert.deepEqual(await p.$$eval('#endCards .row .name em', els => els.map(e => e.textContent)), ['Winner']);
     const rows = await p.$$eval('#endCards .row', els => els.map(e => ({ tenth: e.querySelectorAll('.f')[9].querySelector('.balls').textContent, sum: +e.querySelector('.f.sum').textContent })));
     assert.deepEqual(rows, [{ tenth: 'XXX', sum: 93 }, { tenth: '--', sum: 63 }, { tenth: '--', sum: 63 }, { tenth: '--', sum: 63 }]);
     console.log(`  four players: three strikes in the tenth with seed ${strikeSeed}, ${rows.map(r => r.sum).join(', ')}`);
@@ -474,9 +477,10 @@ async function kept(options, k) {
 const nineAndMiss = Array.from({ length: 18 }, (_, i) => (i % 2 ? 0 : 9));   // nine frames of 9 and a miss: 81
 
 // The tenth frame began with a strike, then a 7: a gutter ball on the last ball isn't an "open frame" (it has a strike
-// in it), and says nothing about the pins it left, since no ball follows.
+// in it), and says nothing about the pins it left, since no ball follows. Ana is bowling alone, on a phone where
+// Ben's 204 is the best: the end of her first game doesn't tell her "Your best is 204."
 {
-  const { c, p } = await kept({}, { names: ['Ana'], current: { players: [{ name: 'Ana', rolls: [...nineAndMiss, 10, 7], x: 0 }], turn: 0, leftover: [{ id: 4 }, { id: 7 }, { id: 8 }].map(q => ({ ...q, ...SPOTS[q.id - 1] })) } });
+  const { c, p } = await kept({}, { names: ['Ana'], best: 204, bestBy: 'Ben', bests: { Ben: 204 }, current: { players: [{ name: 'Ana', rolls: [...nineAndMiss, 10, 7], x: 0 }], turn: 0, leftover: [{ id: 4 }, { id: 7 }, { id: 8 }].map(q => ({ ...q, ...SPOTS[q.id - 1] })) } });
   try {
     await p.click('#resume');
     assert.equal(await p.evaluate(() => pinDrop.pins.length), 3, 'the 4-7-8 did not come back');
@@ -485,6 +489,29 @@ const nineAndMiss = Array.from({ length: 18 }, (_, i) => (i % 2 ? 0 : 9));   // 
     await until(() => p.evaluate(() => pinDrop.phase === 'over'), 20000, 'the last ball never finished');
     assert.deepEqual(await p.evaluate(() => pinDrop.game.players[0].rolls.slice(18)), [10, 7, 0], 'the last ball was not a gutter ball');
     assert.equal((await p.evaluate(() => window.calls)).filter(Boolean).at(-1), 'Gutter ball', 'the gutter ball after X 7 in the tenth');
+    await until(() => p.isVisible('#end'), 5000, 'no end of the game');
+    assert.deepEqual([await p.textContent('#endTitle'), await p.textContent('#endLine')], ['98', 'Your first game here.']);
+    await p.click('#toTitle');
+    assert.equal(await p.textContent('#record .best'), 'Best game · Ben204', "Ben's best was lost");
+    const saved = await p.evaluate(() => JSON.parse(localStorage.getItem('pin-drop.v1')));
+    assert.deepEqual(saved.bests, { Ben: 204, Ana: 98 });
+  } finally { await c.close(); }
+}
+
+// Two players tie: the end says who ("Ana and Cal tie!"), both are tagged Tied, and the best game on the title names
+// them both. There was a best here to beat (Dee's 80), so it says this is a new one.
+{
+  const ninety = Array.from({ length: 20 }, (_, i) => (i % 2 ? 0 : 9));
+  const { c, p } = await kept({}, { names: ['Ana', 'Cal'], best: 80, bestBy: 'Dee', bests: { Dee: 80 },
+    current: { players: [{ name: 'Ana', rolls: ninety, x: 0 }, { name: 'Cal', rolls: ninety.slice(0, 19), x: 0 }], turn: 1, leftover: null } });
+  try {
+    await p.click('#resume');
+    await p.evaluate(() => { pinDrop.speed = 4; pinDrop.throw({ x: 14, speed: 300, angle: 0.02, hook: 0 }); });
+    await until(() => p.isVisible('#end'), 20000, 'no end of the game');
+    assert.deepEqual([await p.textContent('#endTitle'), await p.textContent('#endLine')], ['Ana and Cal tie!', '90 each · a new best here']);
+    assert.deepEqual(await p.$$eval('#endCards .row .name em', els => els.map(e => e.textContent)), ['Tied', 'Tied']);
+    await p.click('#toTitle');
+    assert.equal(await p.textContent('#record .best'), 'Best game · Ana & Cal90');
   } finally { await c.close(); }
 }
 
