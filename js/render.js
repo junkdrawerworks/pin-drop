@@ -312,8 +312,8 @@ export class Renderer {
       g.lineWidth = Math.max(1, 1.2 * a[2]);
       g.beginPath(); g.moveTo(a[0], a[1]); g.lineTo(b[0], b[1]); g.stroke();
     }
-    // Which way it'll hook: a short bend off the end of the line.
-    if (Math.abs(hook) > 2) {
+    // Which way it'll hook, for any hook at all (as the readout says): a short bend off the end of the line.
+    if (hook) {
       const y0 = len + 10, x0 = x + Math.tan(angle) * y0, bend = Math.sign(hook) * Math.min(14, 3 + Math.abs(hook) * 0.18);
       const pts = [];
       for (let i = 0; i <= 10; i++) {

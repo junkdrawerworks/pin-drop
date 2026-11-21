@@ -134,7 +134,8 @@ function throwBall(shot) {
   nudgeText = '';
   hint();
   const mph = (shot.speed * 0.0568).toFixed(1);
-  const hook = Math.abs(shot.hook) < 3 ? 'straight' : shot.hook < 0 ? 'hook left' : 'hook right';
+  // Straight only when it is: the slightest hook still carries the ball inches over by the pins.
+  const hook = shot.hook === 0 ? 'straight' : shot.hook < 0 ? 'hook left' : 'hook right';
   readout(`${mph} mph · ${hook}`);
   sound.wake();
 }

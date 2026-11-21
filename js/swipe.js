@@ -1,6 +1,7 @@
 // Reading a swipe.
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const STRAIGHT = 0.05;   // a swipe bowed less than this share of its length throws a straight ball
 
 // How fast the finger was going, in px/ms: the fastest stretch (of at least 40 ms) in the swipe's last quarter
 // second, since a finger often slows a little just before it lifts. Never less than the swipe's average speed.
@@ -63,13 +64,14 @@ export function throwOf(pts) {
   const speed = clamp(175 + (vn - 0.5) * 95, 170, 390);
   const angle = clamp(Math.atan(dx / -dy * 0.08), -0.07, 0.07);
   // The bend: how far the swipe bows out from a straight line, as a share of its length. Bowing out to the right
-  // (so it finishes turning left) hooks left.
+  // (so it finishes turning left) hooks left. A thumb swinging from the wrist draws a slight arc of its own, so up to
+  // a 5% bow is straight; past that the hook grows to the most there is (65) at a 20% bow.
   let bow = 0;
   for (const p of pts) {
     const right = -((p.x - a.x) * dy - (p.y - a.y) * dx) / len;
     if (Math.abs(right) > Math.abs(bow)) bow = right;
   }
   const c = bow / len;
-  const hook = Math.abs(c) < 0.025 ? 0 : -Math.sign(c) * Math.min(65, (Math.abs(c) - 0.025) * 380);
+  const hook = Math.abs(c) < STRAIGHT ? 0 : -Math.sign(c) * Math.min(65, (Math.abs(c) - STRAIGHT) * 65 / (0.2 - STRAIGHT));
   return { speed, angle, hook };
 }

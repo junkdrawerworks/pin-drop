@@ -178,3 +178,22 @@ test('how hard a swipe throws: the same as ever on a phone held upright, on any 
   assert.equal(mph(3).toFixed(1), '22.2');
   assert.equal(mph(6).toFixed(1), '22.2');
 });
+
+test('hook: a thumb\'s natural arc rolls straight, a deliberate curve hooks hard', async () => {
+  const { throwOf } = await import('../js/swipe.js');
+  // A 300 px swipe up that bows out to the right by `bow` of its length at the middle (so it hooks left).
+  const hook = bow => {
+    const pts = [];
+    for (let i = 0; i <= 20; i++) { const u = i / 20; pts.push({ x: 4 * bow * 300 * u * (1 - u), y: -300 * u, t: i * 12 }); }
+    return throwOf(pts).hook;
+  };
+  // A thumb pivoting at the wrist bows a 300 px swipe by 10% or so, but often less: up to 5% is straight.
+  assert.equal(hook(0.03), 0);
+  assert.equal(hook(0.045), 0);
+  assert.ok(hook(0.08) < 0 && hook(0.08) > -20, `a slight curve hooks ${hook(0.08)}`);
+  // A clear curve hooks 40 or more, up to the most there is (65) from a 20% bow.
+  assert.ok(hook(0.15) <= -40 && hook(0.15) >= -50, `a 15% bow hooks ${hook(0.15)}`);
+  assert.equal(Math.round(hook(0.2)), -65);
+  assert.equal(hook(0.3), -65);
+  assert.equal(hook(-0.15), -hook(0.15), 'bowing the other way hooks right as much');
+});
