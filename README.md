@@ -8,7 +8,7 @@ the lane, and the pins really knock each other over, so a ball that hooks into t
 thrown straight at the head pin.
 
 <p align="center">
-  <img src="docs/phone-aim.png" width="250" alt="Aiming: the ball at the foul line on the right side of the lane, a dotted line showing where it will start and a gold arrow showing it will hook left, with the pins at the far end">
+  <img src="docs/phone-aim.png" width="250" alt="Aiming: the ball at the foul line on the right side of the lane, a dotted line showing its way to 40 feet down, lit part of the way for the swipe's speed, and a gold arrow from there showing it hooking left, with the pins at the far end">
   <img src="docs/phone-strike.png" width="250" alt="A strike: the ball on the pin deck among the fallen pins, with the last of them, the 7 pin on the left, tipping over">
   <img src="docs/phone-card.png" width="250" alt="The end of a two-player game: Ana wins with 189 to Ben's 187, with both scorecards frame by frame">
 </p>
