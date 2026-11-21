@@ -797,7 +797,7 @@ function upright() {
   const on = sideways.matches && !sidewaysOk && !!game && shown === null;
   if ($('upright').hidden === !on) return;
   $('upright').hidden = !on;
-  for (const s of behind) $(s).inert = on;
+  for (const s of behind) $(s).inert = on || shown !== null;   // a sheet that hid it keeps them out of reach
   if (on) { dropStrokes(); unwind(); $('uprightSay').focus({ preventScroll: true }); }
   else if (document.activeElement?.closest?.('#upright')) document.activeElement.blur();
 }

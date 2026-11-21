@@ -1145,6 +1145,13 @@ for (const tap of ['#menuBtn', '#card']) {
     assert.equal(await p.evaluate(() => document.getElementById('lane').inert), false);
     await p.setViewportSize({ width: 844, height: 390 });
     await until(() => p.isVisible('#upright'), 2000, 'no note after turning the phone on its side again');
+    // A sheet over the note (Escape opens the menu; a game can end behind it) keeps the lane out of reach.
+    await p.keyboard.press('Escape');
+    assert.equal(await p.isVisible('#menu'), true, 'Escape did not open the menu');
+    assert.equal(await p.isVisible('#upright'), false, 'the note stayed over the menu');
+    assert.deepEqual(await p.evaluate(() => ['lane', 'hud', 'hint'].map(id => document.getElementById(id).inert)), [true, true, true], 'the lane could be reached behind the menu');
+    await p.click('#menuResume');
+    await until(() => p.isVisible('#upright'), 2000, 'no note after the menu');
     await p.click('#sideways');
     assert.equal(await p.isVisible('#upright'), false, 'Bowl sideways anyway left the note up');
     await p.click('#menuBtn'); await p.click('#menuResume');
