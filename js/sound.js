@@ -1,6 +1,7 @@
-// Every sound is made on the spot with Web Audio: no files to download. The rumble of the ball is filtered
-// noise; a pin hit is a short knock of noise with two wooden tones on top.
-let ctx = null, master = null, noise = null, rumble = null;
+// Every sound is made on the spot with Web Audio: no files to download. The rumble of the ball is low filtered
+// noise that pulses with the ball's turning; a pin hit is a low hollow knock with a burst of woody noise, the way a
+// coated maple pin sounds, rather than a bright tone.
+let ctx = null, master = null, noise = null, white = null, rumble = null;
 let on = true;
 let lastHit = 0, hitsThisBeat = 0;
 
@@ -25,58 +26,92 @@ export function wake() {
     const d = noise.getChannelData(0);
     let last = 0;
     for (let i = 0; i < len; i++) { const w = Math.random() * 2 - 1; last = (last + 0.035 * w) / 1.035; d[i] = last * 3.2 + w * 0.08; }
+    // And plain white noise, for the crack of wood on wood.
+    white = ctx.createBuffer(1, len, ctx.sampleRate);
+    const wd = white.getChannelData(0);
+    for (let i = 0; i < len; i++) wd[i] = Math.random() * 2 - 1;
   }
   if (ctx.state === 'suspended') ctx.resume();
 }
 
-// The ball on the wood. level 0–1 follows its speed; call with 0 to stop.
+// The ball on the wood. level 0–1 follows its speed; call with 0 to stop. A steady low rumble (the slow swells of
+// raw low noise sound like thunder, so they're filtered out), pulsing a little at the rate the ball turns, with a
+// faint hiss of the ball on the lane.
 export function roll(level) {
   if (!ctx) return;
   if (!rumble && level > 0) {
     const src = ctx.createBufferSource(); src.buffer = noise; src.loop = true;
-    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 260; lp.Q.value = 0.7;
+    const hp = ctx.createBiquadFilter(); hp.type = 'highpass'; hp.frequency.value = 55; hp.Q.value = 0.7;
+    const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 170; lp.Q.value = 0.9;
+    const body = ctx.createBiquadFilter(); body.type = 'peaking'; body.frequency.value = 105; body.Q.value = 1.4; body.gain.value = 7;
+    const pulse = ctx.createGain(); pulse.gain.value = 1;
+    const lfo = ctx.createOscillator(); lfo.frequency.value = 6;
+    const depth = ctx.createGain(); depth.gain.value = 0.28;
+    lfo.connect(depth); depth.connect(pulse.gain);
     const g = ctx.createGain(); g.gain.value = 0;
-    src.connect(lp); lp.connect(g); g.connect(master);
-    src.start();
-    rumble = { src, lp, g };
+    src.connect(hp); hp.connect(lp); lp.connect(body); body.connect(pulse); pulse.connect(g); g.connect(master);
+    const hsrc = ctx.createBufferSource(); hsrc.buffer = white; hsrc.loop = true;
+    const hbp = ctx.createBiquadFilter(); hbp.type = 'bandpass'; hbp.frequency.value = 2200; hbp.Q.value = 0.7;
+    const hg = ctx.createGain(); hg.gain.value = 0;
+    hsrc.connect(hbp); hbp.connect(hg); hg.connect(master);
+    src.start(); hsrc.start(); lfo.start();
+    rumble = { src, hsrc, lfo, g, hg };
   }
   if (!rumble) return;
   const t = ctx.currentTime;
-  rumble.g.gain.setTargetAtTime(level * 0.55, t, 0.08);
-  rumble.lp.frequency.setTargetAtTime(180 + level * 220, t, 0.1);
+  rumble.g.gain.setTargetAtTime(level * 0.8, t, 0.08);
+  rumble.hg.gain.setTargetAtTime(level * 0.012, t, 0.08);
+  rumble.lfo.frequency.setTargetAtTime(2 + level * 12, t, 0.1);   // about one pulse a turn
   if (level <= 0) {
     const r = rumble; rumble = null;
-    setTimeout(() => { try { r.src.stop(); } catch { /* already stopped */ } }, 600);
+    setTimeout(() => { for (const n of [r.src, r.hsrc, r.lfo]) { try { n.stop(); } catch { /* already stopped */ } } }, 600);
   }
 }
 
-// A knock: ball on pin, pin on pin, pin on the kickback or the floor.
+// A burst of noise through a band-pass filter, dying away over `len` seconds.
+function burst(buf, freq, q, gain, len, t) {
+  const src = ctx.createBufferSource(); src.buffer = buf;
+  const bp = ctx.createBiquadFilter(); bp.type = 'bandpass'; bp.frequency.value = freq; bp.Q.value = q;
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(gain, t);
+  g.gain.exponentialRampToValueAtTime(0.0005, t + len);
+  src.connect(bp); bp.connect(g); g.connect(master);
+  src.start(t, Math.random() * 1.5, len + 0.05);
+}
+
+// A low knock whose pitch falls as it dies: the hollow body of a pin, or the weight of the ball.
+function knock(freq, gain, len, t) {
+  const o = ctx.createOscillator(); o.type = 'sine';
+  o.frequency.setValueAtTime(freq * 1.7, t);
+  o.frequency.exponentialRampToValueAtTime(freq, t + 0.02);
+  const g = ctx.createGain();
+  g.gain.setValueAtTime(gain, t);
+  g.gain.exponentialRampToValueAtTime(0.0005, t + len);
+  o.connect(g); g.connect(master);
+  o.start(t); o.stop(t + len + 0.05);
+}
+
+// A hit: ball on pin, pin on pin, pin on the kickback or the floor.
 export function hit(kind, power) {
   if (!ctx || !on || power < 0.03) return;
   const t = ctx.currentTime;
   if (t - lastHit < 0.012) { if (++hitsThisBeat > 3) return; } else hitsThisBeat = 0;
   lastHit = t;
-  const v = Math.min(1, power) * (kind === 'ball' ? 1 : kind === 'pin' ? 0.8 : 0.5);
-  // The crack.
-  const src = ctx.createBufferSource(); src.buffer = noise;
-  const bp = ctx.createBiquadFilter(); bp.type = 'bandpass';
-  bp.frequency.value = kind === 'thud' ? 500 : kind === 'wall' ? 900 : 1800 + Math.random() * 1400;
-  bp.Q.value = 1.1;
-  const g = ctx.createGain();
-  g.gain.setValueAtTime(v * 1.6, t);
-  g.gain.exponentialRampToValueAtTime(0.001, t + (kind === 'thud' ? 0.12 : 0.07));
-  src.connect(bp); bp.connect(g); g.connect(master);
-  src.start(t, Math.random() * 1.5, 0.2);
-  // The hollow wooden tone of a pin.
-  if (kind === 'ball' || kind === 'pin') {
-    for (const f of [820 + Math.random() * 260, 1500 + Math.random() * 400]) {
-      const o = ctx.createOscillator(); o.type = 'triangle'; o.frequency.value = f;
-      const og = ctx.createGain();
-      og.gain.setValueAtTime(v * 0.22, t);
-      og.gain.exponentialRampToValueAtTime(0.001, t + 0.09 + Math.random() * 0.06);
-      o.connect(og); og.connect(master);
-      o.start(t); o.stop(t + 0.2);
-    }
+  const v = Math.min(1, power);
+  const r = () => 0.85 + Math.random() * 0.35;
+  if (kind === 'ball') {
+    knock(105 * r(), v * 0.9, 0.16, t);              // the ball's weight
+    knock(260 * r(), v * 0.55, 0.08, t);             // the pin it hit
+    burst(white, 650 * r(), 2.5, v * 1.1, 0.06, t);  // the crack
+  } else if (kind === 'pin') {
+    knock(240 * r(), v * 0.6, 0.07, t);
+    burst(white, 750 * r(), 3.5, v * 0.9, 0.045, t);
+    burst(white, 1500 * r(), 5, v * 0.25, 0.03, t);
+  } else if (kind === 'wall') {
+    knock(140 * r(), v * 0.4, 0.1, t);
+    burst(noise, 420, 2, v * 0.8, 0.09, t);
+  } else {
+    burst(noise, 300, 1.2, v * 1.2, 0.12, t);        // a pin dropping onto the deck
   }
 }
 
