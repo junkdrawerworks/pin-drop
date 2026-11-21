@@ -152,6 +152,7 @@ function follow(x, dt) {
 // each one stood). Each player's switches on the title are kept by name for next time.
 function startGame(lineup, spots = []) {
   hush();
+  $('handoff').hidden = true;
   const names = lineup.map(q => q.name);
   game = { players: lineup.map((q, i) => ({ name: q.name, rolls: [], x: spots[i] || 0, ...extras(q) })), turn: 0, leftover: null };
   told = new Set(); toldHook = new Set();
@@ -170,6 +171,7 @@ function startGame(lineup, spots = []) {
 const extras = q => ({ ...(q.bumpers ? { bumpers: true } : {}), ...(int(q.head) ? { head: int(q.head) } : {}) });
 
 function resumeGame() {
+  $('handoff').hidden = true;
   game = store.current;
   told = new Set(); toldHook = new Set();
   $('hud').hidden = false;
@@ -381,11 +383,38 @@ function runSweep() {
     hud();
     keep();
     if (changing && game.players.length > 1) {
-      say(turnLine(current().name), '', 'small', '', 'aim');
+      handOff();
       tell(`${turnLine(current().name)}, frame ${next(current().rolls).frame + 1}.`);
     }
   }
 }
+
+// ---- Passing the phone ---------------------------------------------------------------------------------
+// As the turn passes to another player (never between two balls of one turn): a card over the lane, "Ben’s turn ·
+// Tap to bowl", in their ball's colours, and nothing can be thrown until it's tapped. Without it, whoever still held
+// the phone (often the last bowler, after a strike) could throw the next player's ball, and the turn's call sat over
+// the pins while they aimed.
+const handoffUp = () => !$('handoff').hidden;
+let handoffFrom = null;   // what had the focus before the card took it, to go back to
+function handOff() {
+  const el = $('handoff'), [light, mid, dark] = colourOf(game.turn);
+  $('handoffWho').textContent = turnLine(current().name);
+  el.style.setProperty('--who', light);
+  el.querySelector('.orb').style.background = `radial-gradient(circle at 35% 30%, ${light}, ${mid} 55%, ${dark})`;
+  el.hidden = false;
+  hush();   // the last ball's callout, if it's still fading, would sit over the card
+  dropStrokes(); unwind(); hint();
+  if (!shown) { handoffFrom = document.activeElement; el.focus({ preventScroll: true }); }
+}
+function takeTurn() {
+  if (!handoffUp()) return;
+  const had = document.activeElement === $('handoff');
+  $('handoff').hidden = true;
+  if (had && visible(handoffFrom) && handoffFrom !== document.body) handoffFrom.focus({ preventScroll: true });
+  handoffFrom = null;
+  redraw(); hint();
+}
+$('handoff').addEventListener('click', takeTurn);
 
 // ---- Watch again ---------------------------------------------------------------------------------------
 // After a strike, or any ball that knocks down 9 or more, a button stays up until the pinsetter comes: it plays the
@@ -450,7 +479,7 @@ function hint() {
     : `<span class="pill"><span>${a}</span><span class="dot"> · </span><span>${b}</span></span>`;
   el.classList.toggle('nudge', !!nudgeText);
   // From the keyboard, the keys are said until the first ball they bowl, whoever's bowling.
-  el.hidden = !(nudgeText || words || hintDue() || (how === 'keys' && !keyed)) || phase !== 'aim' || touch?.mode === 'throw' || windAt !== null;
+  el.hidden = !(nudgeText || words || hintDue() || (how === 'keys' && !keyed)) || phase !== 'aim' || touch?.mode === 'throw' || windAt !== null || handoffUp();
   if (!el.hidden) placeHint(el);
 }
 
@@ -484,7 +513,7 @@ function lessonDue() {
 // What's drawn this frame: nothing once they've touched the lane or pressed a key (the keys have only words), or while
 // a sheet is up.
 function teaching() {
-  if (!lesson?.playing || phase !== 'aim' || paused || strokes.size || pointer === 'keys') return null;
+  if (!lesson?.playing || phase !== 'aim' || paused || strokes.size || pointer === 'keys' || handoffUp()) return null;
   return { kind: lesson.kind, u: (performance.now() - lesson.at) / 1000, still: reduced.matches, side: lesson.side };
 }
 // A ball thrown with a lesson up: that one's been shown.
@@ -715,7 +744,7 @@ function unwind() {
 }
 
 document.addEventListener('keydown', e => {
-  if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || shown || paused || !game || phase !== 'aim' || !$('upright').hidden) return;
+  if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || shown || paused || !game || phase !== 'aim' || !$('upright').hidden || handoffUp()) return;
   const k = e.key, onButton = !!e.target.closest?.('button, a, input, summary');
   if (k === 'ArrowLeft' || k === 'ArrowRight') {
     if (windAt !== null) return;
@@ -882,7 +911,7 @@ function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<':
 const sheets = ['title', 'menu', 'howSheet', 'board', 'end'];
 const dialogs = ['menu', 'howSheet', 'board', 'end'];
 // Everything behind a sheet, out of reach of Tab and a screen reader while one is up.
-const behind = ['lane', 'hud', 'others', 'call', 'hint', 'readout', 'replay'];
+const behind = ['lane', 'handoff', 'hud', 'others', 'call', 'hint', 'readout', 'replay'];
 // One How to play: the title's folded-up copy is the sheet's list.
 document.querySelector('#title .how ul').innerHTML = document.querySelector('#howSheet .howlist').innerHTML;
 let shown = null;    // the sheet that's up
@@ -943,6 +972,7 @@ document.addEventListener('visibilitychange', () => {
 function titleScreen() {
   phase = 'title';
   hush();
+  $('handoff').hidden = true;
   game = null;
   nudgeText = '';
   $('hud').hidden = true; $('others').hidden = true; $('hint').hidden = true;
@@ -1234,7 +1264,8 @@ window.pinDrop = {
   get ball() { return ball; },
   get shot() { return lastShot; },
   get lesson() { return lesson && { kind: lesson.kind, playing: lesson.playing }; },
-  throw(shot) { if (phase === 'aim') throwBall({ x: ball.x, ...shot }); },
+  // As a player would after tapping their card, if the turn has just passed.
+  throw(shot) { if (phase === 'aim') { takeTurn(); throwBall({ x: ball.x, ...shot }); } },
   set speed(v) { timeScale = v; },
   set seed(v) { fixedSeed = v; },
   camera(t) { camT = t; view.setCamera(t, 0); redraw(); },

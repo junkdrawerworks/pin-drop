@@ -113,8 +113,11 @@ assert.match(await page.textContent('#readout'), /mph · hook left/);
 // A touch fling, with real touch events: a quick flick throws harder than a slow push. (On tablets every fling
 // used to come out at the slowest speed.)
 const cdp0 = await ctx.newCDPSession(page);
+// As the turn passes, the next player taps their card first (see 'The card as the turn passes' below).
+const takeCard = async p => { if (await p.isVisible('#handoff')) await p.tap('#handoff'); };
 const fling = async (step, gap) => {
   await until(() => page.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
+  await takeCard(page);
   await cdp0.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 195, y: 700 }] });
   for (let i = 1; i <= 8; i++) { await new Promise(r => setTimeout(r, gap)); await cdp0.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 195, y: 700 - i * step }] }); }
   await cdp0.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
@@ -131,6 +134,7 @@ console.log(`  touch: slow push ${slowMph} mph, quick fling ${quickMph} mph`);
 // page read the same steady fling at anything from 12 to 22 mph.)
 const steadyFling = async () => {
   await until(() => page.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
+  await takeCard(page);
   const t0 = Date.now() / 1000, sent = [];
   const touch = (type, i, touchPoints) => sent.push(cdp0.send('Input.dispatchTouchEvent', { type, touchPoints, timestamp: t0 + i * 0.008 }));
   touch('touchStart', 0, [{ x: 195, y: 700 }]);
@@ -530,8 +534,8 @@ const state = p => p.evaluate(() => ({ phase: pinDrop.phase, x: pinDrop.ball.x }
 
 // After a ball there are about 3.8 s of waiting (the pins settling, the sweep, the camera coming back): a tap on the
 // lane plays the rest of it four times as fast. A swipe begun as the camera comes back throws once aiming begins, and
-// a tap that only hurried things on gets no word about how to throw. The turn's call for the next player stays up as
-// long as ever.
+// a tap that only hurried things on gets no word about how to throw. The card for the next player's turn stays up
+// until it's tapped, and a swipe meanwhile throws nothing.
 {
   const { c, p, cdp } = await lane({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true }, {}, ['Ana', 'Ben']);
   try {
@@ -558,11 +562,17 @@ const state = p => p.evaluate(() => ({ phase: pinDrop.phase, x: pinDrop.ball.x }
     assert.ok(slow > 3.4, `the wait after a ball was ${slow.toFixed(2)} s without a tap`);
     assert.ok(fast < slow / 2.5, `a tap made the wait ${fast.toFixed(2)} s, against ${slow.toFixed(2)} s`);
     console.log(`  the wait after a ball: ${slow.toFixed(2)} s, or ${fast.toFixed(2)} s with a tap`);
-    // The turn passed to Ben (Ana's two balls are in): his call is still up a second after his ball could be aimed.
+    // The turn passed to Ben (Ana's two balls are in): his card is still up a second after his ball could be aimed,
+    // a swipe on it throws nothing, and a tap takes it away.
     await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
     assert.equal(await p.evaluate(() => pinDrop.game.turn), 1, 'the turn did not pass to Ben');
     await wait(1000);
-    assert.match(await p.textContent('#call'), /Ben’s turn/, 'the call for Ben\'s turn went with the hurry');
+    assert.equal(await p.isVisible('#handoff'), true, 'the card for Ben\'s turn went with the hurry');
+    assert.equal(await p.textContent('#handoffWho'), 'Ben’s turn');
+    await touchStroke(cdp, [[0, -280, 8]]);
+    assert.equal((await state(p)).phase, 'aim', 'a swipe threw Ben\'s ball before his card was tapped');
+    await p.click('#handoff');
+    assert.equal(await p.isVisible('#handoff'), false, 'a tap did not take Ben\'s card away');
     // A swipe begun just as the camera starts back, at the normal speed, throws once aiming begins.
     await p.evaluate(() => { pinDrop.speed = 4; pinDrop.throw({ x: 0, speed: 290, angle: 0, hook: 0 }); });
     await p.evaluate(() => new Promise(r => { (function f() { if (pinDrop.phase === 'return') { pinDrop.speed = 1; r(); } else requestAnimationFrame(f); })(); }));
@@ -754,7 +764,8 @@ const freshRack = SPOTS.map((s, i) => `${i + 1}@${s.x.toFixed(6)},${s.y.toFixed(
     assert.match(await p.textContent('#who'), /Ben/);
     assert.deepEqual(await upPins(p), freshRack, 'Ben does not face a fresh rack');
     const calls = await p.evaluate(() => window.calls);
-    for (const word of ['Strike!', 'Double!', 'Turkey!', 'Ben’s turn']) assert.ok(calls.some(t => t.startsWith(word)), `no "${word}" among ${JSON.stringify(calls)}`);
+    for (const word of ['Strike!', 'Double!', 'Turkey!']) assert.ok(calls.some(t => t.startsWith(word)), `no "${word}" among ${JSON.stringify(calls)}`);
+    assert.equal(await p.textContent('#handoffWho'), 'Ben’s turn');
     // The rest throw in the gutter.
     await until(() => p.evaluate(() => {
       if (pinDrop.phase === 'aim') pinDrop.throw({ x: 14, speed: 300, angle: 0.02, hook: 0 });
@@ -1342,6 +1353,7 @@ for (const tap of ['#menuBtn', '#card']) {
       if (pinDrop.phase === 'aim' && pinDrop.game.turn === 0) pinDrop.throw({ x: 0, speed: 300, angle: 0, hook: 0 });
       return pinDrop.phase === 'aim' && pinDrop.game.turn === 1;
     }), 30000, 'Player 2 never came up');
+    await takeCard(p);
     assert.equal(await p.isVisible('#hint'), true, "no hint on Player 2's first ball");
   } finally { await c.close(); }
 }
@@ -1529,6 +1541,8 @@ for (const tap of ['#menuBtn', '#card']) {
     await p.evaluate(() => {
       window.calls = [document.getElementById('call').textContent];
       new MutationObserver(() => window.calls.push(document.getElementById('call').textContent)).observe(document.getElementById('call'), { childList: true, subtree: true });
+      // The card as the turn passes.
+      new MutationObserver(() => window.calls.push(document.getElementById('handoffWho').textContent)).observe(document.getElementById('handoffWho'), { childList: true, subtree: true });
       window.wheres = [];
       new MutationObserver(() => window.wheres.push(document.getElementById('where').textContent)).observe(document.getElementById('where'), { childList: true, subtree: true, characterData: true });
     });
@@ -1619,7 +1633,8 @@ for (const tap of ['#menuBtn', '#card']) {
 }
 
 // A ball's callout stays off the Pin Drop sign over the pins (it used to land on it on a tablet), and the call for
-// the next player's turn stays off the pins they're aiming at: on a phone, and a tablet either way up.
+// the first player's turn stays off the pins they're aiming at: on a phone, and a tablet either way up. As the turn
+// passes, it's the next player's card instead, and nothing is called over the pins.
 {
   const { c, p } = await lane({ viewport: { width: 390, height: 844 }, hasTouch: true }, {}, ['Ana', 'Ben']);
   try {
@@ -1627,6 +1642,9 @@ for (const tap of ['#menuBtn', '#card']) {
       const el = document.getElementById('call'), top = parseFloat(el.style.top);
       return { text: el.textContent, top, bottom: top + el.offsetHeight, ...pinDrop.view.spots() };
     });
+    const first = await call();
+    assert.match(first.text, /Ana’s turn/);
+    assert.ok(first.top >= first.aimDeckFront, `"${first.text}" (from ${first.top}) is over the pins (down to ${first.aimDeckFront})`);
     for (const [width, height] of [[390, 844], [820, 1180], [1180, 820]]) {
       await p.setViewportSize({ width, height });
       await wait(100);
@@ -1640,9 +1658,9 @@ for (const tap of ['#menuBtn', '#card']) {
         assert.ok(b.bottom <= b.signTop || b.top >= b.signBottom, `at ${width}x${height} "${b.text}" (${b.top}–${b.bottom}) is on the sign (${b.signTop}–${b.signBottom})`);
         await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
       }
-      const t = await call();
-      assert.match(t.text, /’s turn/);
-      assert.ok(t.top >= t.aimDeckFront, `at ${width}x${height} "${t.text}" (from ${t.top}) is over the pins (down to ${t.aimDeckFront})`);
+      assert.match(await p.textContent('#handoffWho'), /’s turn/);
+      assert.equal(await p.isVisible('#handoff'), true, `at ${width}x${height} no card as the turn passed`);
+      assert.doesNotMatch((await call()).text, /’s turn/, `at ${width}x${height} the turn was called over the pins as well`);
     }
   } finally { await c.close(); }
 }
@@ -2095,6 +2113,31 @@ for (const motion of ['reduce', 'no-preference']) {
     assert.deepEqual([saved.best, saved.bestBy, saved.bests], [90, 'Ana', { Ana: 90 }], 'a game with a head start counted toward a best');
     assert.deepEqual([saved.games[0].scores[1].score, saved.games[0].scores[1].head], [101, 20]);
     assert.match(await p.textContent('#record li'), /Ana 90 · Ben 101 \(\+20\)/);
+  } finally { await c.close(); }
+}
+
+// The card as the turn passes: only to another player, never between two balls of one turn. While it's up the keys do
+// nothing on the lane; it has the focus, so Enter takes it, and the keys work again.
+{
+  const { c, p } = await lane({ viewport: { width: 1280, height: 800 } }, {}, ['Ana', 'Ben']);
+  try {
+    const bowl = () => p.evaluate(async () => {
+      pinDrop.speed = 10;
+      pinDrop.throw({ x: 14, speed: 300, angle: 0.02, hook: 0 });
+      await new Promise(r => { const t = setInterval(() => { if (pinDrop.phase === 'aim') { clearInterval(t); r(); } }, 30); });
+      return { turn: pinDrop.game.turn, card: !document.getElementById('handoff').hidden };
+    });
+    assert.deepEqual(await bowl(), { turn: 0, card: false }, 'a card between two balls of Ana\'s turn');
+    assert.deepEqual(await bowl(), { turn: 1, card: true }, 'no card as the turn passed to Ben');
+    assert.equal(await p.evaluate(() => document.activeElement.id), 'handoff');
+    assert.equal(await p.evaluate(() => getComputedStyle(document.getElementById('handoffWho')).color), 'rgb(255, 122, 107)', 'Ben\'s card is not in his ball\'s colour');
+    const x0 = await p.evaluate(() => pinDrop.ball.x);
+    await p.keyboard.press('ArrowLeft');
+    assert.equal(await p.evaluate(() => pinDrop.ball.x), x0, 'the keys moved the ball behind the card');
+    await p.keyboard.press('Enter');
+    assert.equal(await p.isVisible('#handoff'), false, 'Enter did not take the card away');
+    await p.keyboard.press('ArrowLeft');
+    assert.ok(await p.evaluate(x0 => pinDrop.ball.x < x0, x0), 'the keys did nothing once the card was gone');
   } finally { await c.close(); }
 }
 
