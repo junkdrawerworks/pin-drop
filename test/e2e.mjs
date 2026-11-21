@@ -488,6 +488,21 @@ const nineAndMiss = Array.from({ length: 18 }, (_, i) => (i % 2 ? 0 : 9));   // 
   } finally { await c.close(); }
 }
 
+// A first strike shows as 10+ while it waits for its bonus balls, in the bowler's total and on the next player's
+// scorecard, not as a 0 (its frame stays blank, as on a real card).
+{
+  const { c, p } = await lane({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true }, {}, ['Ana', 'Ben']);
+  try {
+    await p.evaluate(({ pocket, seed }) => { pinDrop.speed = 4; pinDrop.seed = seed; pinDrop.throw(pocket); }, { pocket, seed: strikeSeed });
+    await until(() => p.evaluate(() => pinDrop.game.players[0].rolls.length === 1), 20000, 'the strike never finished');
+    assert.equal(await p.evaluate(() => pinDrop.game.players[0].rolls[0]), 10, `seed ${strikeSeed} didn't strike`);
+    assert.equal(await p.textContent('#frames .f.sum'), '10+', "Ana's total after her strike");
+    assert.equal(await p.textContent('#frames .f .tot'), '', "the strike's frame has a total before its bonus balls");
+    await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
+    assert.equal(await p.textContent('#others'), 'Ana 10+', "Ana's score on Ben's scorecard");
+  } finally { await c.close(); }
+}
+
 // A ball that hooks into the gutter says why, once a game for each player: Ana's swipe bows left, so it hooks right,
 // and from the right of the lane it goes in the right-hand gutter. Her next one says nothing more. Ben's straight
 // ball into the gutter isn't a hook; his hook to the left into the left gutter gets the word turned round. The word

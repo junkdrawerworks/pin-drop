@@ -67,11 +67,23 @@ export function next(rolls) {
   return { frame: 9, ball: 3, fresh: false, done: true };
 }
 
-// The total so far (frames still waiting on bonus balls count what they have).
+// The total so far: the running total of the last frame whose total is known. A strike or spare still waiting on its
+// bonus balls counts nothing yet (its frame stays blank on the card, as on a real one): see pending().
 export function total(rolls) {
   const fs = frames(rolls);
   for (let k = fs.length - 1; k >= 0; k--) if (fs[k].total !== null) return fs[k].total;
   return 0;
+}
+
+// The total so far with the pins of each strike or spare still waiting on its bonus balls: what the card shows as
+// "10+" while a mark waits. It's total() whenever no mark is waiting, and never more than the game will end up with.
+export function pending(rolls) {
+  let t = total(rolls);
+  for (const f of frames(rolls)) {
+    const [a, b = 0] = f.balls;
+    if (f.total === null && (a === 10 || a + b === 10)) t += f.balls.reduce((s, n) => s + n, 0);
+  }
+  return t;
 }
 
 // What's called out for a ball: [the big words, the line under them, the kind of callout ('' for a strike, 'teal' for

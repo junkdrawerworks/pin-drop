@@ -1,7 +1,7 @@
 // The scoring rules and the physics, without a browser:  node --test test/
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { frames, next, total, best, isSplit, callFor } from '../js/scoring.js';
+import { frames, next, total, pending, best, isSplit, callFor } from '../js/scoring.js';
 import { play, rack, Sim, rng } from '../js/physics.js';
 import { through } from './aim.mjs';
 
@@ -69,6 +69,26 @@ test('splits', () => {
   for (const left of [[2, 8], [3, 9], [2, 4, 5], [1, 7], [1, 7, 10], [10], [6, 10], [2, 4, 7], [3, 6, 9, 10]]) {
     assert.equal(isSplit(left), false, `the ${left.join('-')} is not a split`);
   }
+});
+
+test('the total while a strike or spare waits for its bonus balls: the pins so far, with more to come', () => {
+  assert.equal(total([10]), 0);            // the card's frame stays blank, as on a real one
+  assert.equal(pending([10]), 10);         // but the sum reads 10+
+  assert.equal(pending([10, 7]), 10);      // the 7's frame isn't over, and isn't waiting on anything
+  assert.equal(pending([10, 7, 2]), 28);   // resolved: exact again
+  assert.equal(pending([10, 10]), 20);
+  assert.equal(pending([10, 10, 10]), 50); // 30 in the first frame, two strikes waiting
+  assert.equal(pending([6, 4]), 10);
+  assert.equal(pending([9, 0, 10]), 19);
+  assert.equal(pending([7]), 0);           // no mark waiting: as total()
+  assert.equal(pending([7, 2]), 9);
+  assert.equal(pending([...Array(18).fill(0), 10, 7]), 17);   // the tenth waits on its third ball
+  assert.equal(pending(Array(11).fill(10)), 290);             // 270 and the tenth's two strikes
+  // Never more than the game ends up with, ball by ball, and the same as total() once it's over.
+  const game = [10, 7, 3, 9, 0, 10, 0, 8, 8, 2, 0, 6, 10, 10, 10, 8, 1];
+  for (let k = 0; k <= game.length; k++) assert.ok(pending(game.slice(0, k)) <= total(game), `after ${k} balls`);
+  assert.equal(pending(game), total(game));
+  assert.equal(pending(Array(12).fill(10)), 300);
 });
 
 // Each ball of a game called out in turn: the callout for each, as [big, small], given the pins each left standing.

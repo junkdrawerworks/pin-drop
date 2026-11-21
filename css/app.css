@@ -68,6 +68,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .f .tot { display: block; text-align: center; font-size: 11.5px; letter-spacing: -0.02em; line-height: 17px; font-weight: 600; font-variant-numeric: tabular-nums; min-height: 17px; }
 .f.now { background: rgba(255, 201, 74, 0.13); box-shadow: inset 0 -2px 0 var(--gold); }
 .f.sum { display: grid; place-items: center; font-size: 15px; font-weight: 800; color: var(--gold); font-variant-numeric: tabular-nums; }
+/* A total with a strike or spare still to count: "10+", lighter, the plus smaller. */
+.f.sum.waiting { font-weight: 600; }
+.f.sum i, .others b i { font-style: normal; font-weight: 600; font-size: 0.8em; margin-left: 1px; opacity: 0.8; }
 .frames.roomy .f .balls { height: 20px; }
 .frames.roomy .f .balls span { font-size: 13px; line-height: 20px; max-width: 20px; }
 .frames.roomy .f .tot { font-size: clamp(10.5px, 2.9vw, 14px); letter-spacing: -0.02em; line-height: 22px; min-height: 22px; }

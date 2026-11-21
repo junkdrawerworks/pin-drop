@@ -1,7 +1,7 @@
 // Pin Drop: the game around the lane. Turns and frames, the swipe, the pinsetter, the scorecards and the sheets.
 import { Sim, rack, LANE, BALL_R } from './physics.js';
 import { Renderer, BALL_COLOURS } from './render.js';
-import { frames, next, total, isSplit, callFor } from './scoring.js';
+import { frames, next, total, pending, isSplit, callFor } from './scoring.js';
 import * as sound from './sound.js';
 import { load, save } from './store.js';
 import { stroke, addPoints, readStroke, throwPoints, liftAs, throwOf } from './swipe.js';
@@ -400,7 +400,14 @@ function cardHTML(rolls, now, big) {
     }
     h += `<span class="f${i === now ? ' now' : ''}"><span class="balls">${spans}</span><span class="tot">${f && f.total !== null ? f.total : ''}</span></span>`;
   }
-  return h + `<span class="f sum">${total(rolls)}</span></span>`;
+  return h + `<span class="f sum${pending(rolls) > total(rolls) ? ' waiting' : ''}"><span>${sumHTML(rolls)}</span></span></span>`;
+}
+
+// A player's total, and while a strike or spare waits for its bonus balls, the pins so far with a plus ("10+"): a
+// plain 0 after a first strike read as a strike scoring nothing. Once a game is over it's exact.
+function sumHTML(rolls) {
+  const t = total(rolls), p = pending(rolls);
+  return p > t ? `${p}<i>+</i>` : `${t}`;
 }
 
 function hud() {
@@ -420,7 +427,7 @@ function hud() {
   const others = game.players.map((q, i) => ({ q, i })).filter(o => o.i !== game.turn);
   $('others').hidden = others.length === 0;
   $('others').innerHTML = others.map(({ q, i }) =>
-    `<span><i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${colourOf(i)[0]};margin-right:5px"></i>${esc(q.name)} <b>${total(q.rolls)}</b></span>`).join('');
+    `<span><i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${colourOf(i)[0]};margin-right:5px"></i>${esc(q.name)} <b>${sumHTML(q.rolls)}</b></span>`).join('');
 }
 
 function boardHTML(withBest) {
