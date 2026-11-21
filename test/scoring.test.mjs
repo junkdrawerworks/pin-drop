@@ -189,6 +189,29 @@ test('a ball down the middle of the gutter knocks nothing over, and runs on into
   assert.equal(sim.ball.state, 'pit');
 });
 
+// With bumpers up, the same ball comes off the rail and stays on the lane to the pins; so does a slow ball hooking
+// hard into the left gutter, which rolls along the rail. A straight ball that never reaches the edge plays out the same.
+test('bumpers keep a ball out of the gutter, and change nothing for one that stays on the lane', () => {
+  for (const shot of [{ x: 14, speed: 300, angle: 0.02, hook: 0 }, { x: -10, speed: 200, angle: -0.004, hook: -60 }]) {
+    const without = play(rack(), shot, 1);
+    assert.equal(without.ball.side !== undefined, true, 'the test ball does not go in the gutter without bumpers');
+    const sim = new Sim(rack(), { ...shot, bumpers: true }, 1);
+    const kinds = new Set();
+    let furthest = 0;
+    while (!sim.settled) {
+      sim.step(1 / 60);
+      for (const e of sim.events) kinds.add(e.kind);
+      sim.events.length = 0;
+      if (sim.ball.state === 'lane') furthest = Math.max(furthest, sim.ball.y);
+      assert.notEqual(sim.ball.state, 'gutter', 'a ball went in the gutter with bumpers up');
+    }
+    assert.ok(kinds.has('bumper') && !kinds.has('gutter'), [...kinds].join());
+    assert.ok(furthest > 720, `with bumpers the ball got only ${furthest.toFixed(0)} in down the lane`);
+  }
+  const straight = { x: 0, speed: 290, angle: 0, hook: 0 };
+  assert.deepEqual(play(rack(), { ...straight, bumpers: true }, 3).standing, play(rack(), straight, 3).standing);
+});
+
 // A ball hooked into the pocket, 2.5 in right of the middle of the head pin, strikes about two times in three (40 of
 // these 60 seeds; Mark's band for it is about 40-65%); one thrown straight at the middle of the head pin seldom does
 // (5 of 60).

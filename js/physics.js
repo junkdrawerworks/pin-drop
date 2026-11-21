@@ -21,6 +21,8 @@ export const SPOTS = [[0, 0], [-6, 1], [6, 1], [-12, 2], [0, 2], [12, 2], [-18, 
   .map(([x, r]) => ({ x, y: LANE.head + r * ROW }));
 
 export const BALL_R = 4.25;
+// How far across the ball's middle can go with bumpers up: its side touches the rail over the edge of the gutter.
+export const BUMPER = LANE.half - BALL_R;
 export const PIN_R = 2.38;       // at the belly, where the ball meets it
 export const PIN_LEN = 15;
 const LYING_R = 2.2;             // a lying pin, on average along its length (it tumbles, so a little fat)
@@ -60,9 +62,11 @@ function pin(id, x, y) {
 
 // How a throw leaves the hand: where it's released (x), how fast (in/s), its angle off straight (radians,
 // positive towards the right) and its hook (in/s of side spin to turn into sideways speed; negative hooks left).
+// With `bumpers`, a rail along each side of the lane keeps the ball out of the gutters.
 export class Sim {
-  constructor(pins, { x, speed, angle, hook }, seed = 1) {
+  constructor(pins, { x, speed, angle, hook, bumpers = false }, seed = 1) {
     this.pins = pins;
+    this.bumpers = bumpers;
     this.ball = { x, y: 6, vx: speed * Math.sin(angle), vy: speed * Math.cos(angle), spin: hook, state: 'lane', roll: 0, hookAt: null };
     this.t = 0;
     this.acc = 0;         // time not yet stepped
@@ -100,6 +104,13 @@ export class Sim {
       b.vx += (this.rand() - 0.5) * 40 * dt * Math.pow(b.vy / 290, 1.5);
       b.vy = Math.max(60, b.vy - mu * G * 0.12 * dt);
       b.x += b.vx * dt; b.y += b.vy * dt;
+      // Bumpers: the ball comes off the rail at the lane's edge with half its sideways speed, the way it was going.
+      // (Its spin carries on, so a ball hooking into the rail rolls along it.)
+      if (this.bumpers && Math.abs(b.x) > BUMPER && b.y < LANE.deck) {
+        const side = Math.sign(b.x);
+        b.x = side * BUMPER;
+        if (Math.sign(b.vx) === side) { this.events.push({ kind: 'bumper', x: b.x, y: b.y, power: Math.min(1, Math.abs(b.vx) / 60) }); b.vx *= -0.5; }
+      }
       if (Math.abs(b.x) > LANE.half && b.y < LANE.deck) {
         b.state = 'gutter'; b.side = Math.sign(b.x);
         this.events.push({ kind: 'gutter', x: b.x, y: b.y, power: 1 });

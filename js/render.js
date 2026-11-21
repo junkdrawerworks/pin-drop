@@ -146,6 +146,7 @@ export class Renderer {
     this.masking(s.t);
     for (const k of [-2, -1, 1, 2]) this.lane(k * NEXT_LANE, true);
     this.lane(0, false);
+    if (s.bumpers) this.bumpers();
     // The neighbours' pins, dimmer, the back row first so the front ones stand in front of them.
     for (const k of [-2, -1, 1, 2]) for (let i = SPOTS.length - 1; i >= 0; i--) this.uprightPin(k * NEXT_LANE + SPOTS[i].x, SPOTS[i].y, 0, 0, true);
     this.marked = s.marks || null;
@@ -346,6 +347,17 @@ export class Renderer {
         g.fillStyle = '#2a1f1a'; g.fill();
         g.strokeStyle = 'rgba(255,201,74,0.25)'; g.stroke();
       }
+    }
+  }
+
+  // Bumpers: a padded rail along each side of the lane, over the edge of the gutter, from the foul line to the end of
+  // the pin deck (where the physics has them: see BUMPER).
+  bumpers() {
+    const g = this.g;
+    for (const side of [-1, 1]) {
+      const x = side * (LANE.half + 1);
+      if (this.wall(x - side, 0, LANE.deck, 0, 4.5)) { g.fillStyle = '#1d6b6b'; g.fill(); }
+      if (this.quad(Math.min(x, x - side * 2), Math.max(x, x - side * 2), 0, LANE.deck, 4.5)) { g.fillStyle = '#3fd0c9'; g.fill(); }
     }
   }
 

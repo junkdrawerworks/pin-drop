@@ -111,7 +111,7 @@ function knock(freq, gain, len, t) {
   o.start(t); o.stop(t + len + 0.05);
 }
 
-// A hit: ball on pin, pin on pin, pin on the kickback or the floor.
+// A hit: ball on pin, pin on pin, the ball off a bumper, a pin on the kickback or the floor.
 export function hit(kind, power) {
   if (!ctx || !on || power < 0.03) return;
   const t = ctx.currentTime;
@@ -127,6 +127,8 @@ export function hit(kind, power) {
     knock(240 * r(), v * 0.6, 0.07, t);
     burst(white, 750 * r(), 3.5, v * 0.9, 0.045, t);
     burst(white, 1500 * r(), 5, v * 0.25, 0.03, t);
+  } else if (kind === 'bumper') {
+    knock(120 * r(), v * 0.5, 0.12, t);              // the ball off a padded rail: a dull bump
   } else if (kind === 'wall') {
     knock(140 * r(), v * 0.4, 0.1, t);
     burst(noise, 420, 2, v * 0.8, 0.09, t);

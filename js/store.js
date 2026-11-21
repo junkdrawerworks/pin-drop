@@ -4,9 +4,10 @@ export const KEY = 'pin-drop.v1';
 // `thrown` counts each player's balls by name, so the hint on how to throw shows for a new player's first few, and
 // `hookShown` and `slideShown` how many balls each has been shown how to hook and how to line up with pins left.
 // `best` is the best game here, by `bestBy` (the names of everyone on it, joined with " & "); `bests` is each player's
-// own best by name. Both by-name lists are kept with no prototype, so a name like "constructor" is just a name.
+// own best by name. A game bowled with bumpers counts toward neither, and is kept with `bumpers: true` on its score. Both by-name lists are kept with no prototype, so a name like "constructor" is just a name.
+// `opts` holds each player's switches on the title by name ({ bumpers }), for the next time they play here.
 const blank = () => ({ names: ['You'], sound: true, best: 0, games: [], current: null, throws: 0, thrown: byName(), bests: byName(),
-  hookShown: byName(), slideShown: byName() });
+  hookShown: byName(), slideShown: byName(), opts: byName() });
 const byName = (o = {}) => Object.assign(Object.create(null), o && typeof o === 'object' ? o : {});
 export const int = v => Math.max(0, Math.trunc(Number(v)) || 0);
 
@@ -16,7 +17,7 @@ export function parse(json) {
     const s = JSON.parse(json || 'null');
     if (!s || typeof s !== 'object') return blank();
     return { ...blank(), ...s, best: int(s.best), games: Array.isArray(s.games) ? s.games : [], thrown: byName(s.thrown), bests: byName(s.bests),
-      hookShown: byName(s.hookShown), slideShown: byName(s.slideShown) };
+      hookShown: byName(s.hookShown), slideShown: byName(s.slideShown), opts: byName(s.opts) };
   } catch { return blank(); }
 }
 
@@ -37,8 +38,8 @@ export function load() {
 // Folds the records kept in `theirs` into `mine`: another window of Pin Drop (a home-screen copy and a browser tab, a
 // tab brought back) may have finished a game since this one loaded, and writing this one's stale copy over it would
 // lose that game and maybe the best. The games are both lists together, newest first; the best and each player's
-// best, ball count and lessons shown are the higher of the two. The names, the sound and the game in progress stay
-// this window's.
+// best, ball count and lessons shown are the higher of the two. The names and their switches, the sound and the game in
+// progress stay this window's.
 export function merge(mine, theirs) {
   const seen = new Map();
   for (const g of [...(mine.games || []), ...(theirs.games || [])]) {

@@ -1943,11 +1943,12 @@ for (const motion of ['reduce', 'no-preference']) {
     await p.click('#addPlayer');
     await p.click('#addPlayer');
     await p.fill('#players li:nth-child(2) input', 'Ben');
-    assert.deepEqual(await p.$$eval('#players button', els => els.map(e => e.getAttribute('aria-label'))), ['Remove You', 'Remove Ben', 'Remove Player 3']);
+    assert.deepEqual(await p.$$eval('#players .remove', els => els.map(e => e.getAttribute('aria-label'))), ['Remove You', 'Remove Ben', 'Remove Player 3']);
     await p.fill('#players li:nth-child(2) input', '');
-    assert.equal(await p.getAttribute('#players li:nth-child(2) button', 'aria-label'), 'Remove Player 2');
+    assert.equal(await p.getAttribute('#players li:nth-child(2) .remove', 'aria-label'), 'Remove Player 2');
+    assert.equal(await p.getAttribute('#players li:nth-child(2) .bump', 'aria-label'), 'Bumpers for Player 2');
     await p.fill('#players li:nth-child(2) input', 'Ben');
-    await p.focus('#players li:nth-child(2) button');
+    await p.focus('#players li:nth-child(2) .remove');
     await p.keyboard.press('Enter');
     assert.deepEqual(await p.$$eval('#players input', els => els.map(e => e.value)), ['You', 'Player 3']);
     assert.equal(await p.evaluate(() => document.activeElement === document.querySelector('#players li:nth-child(2) input')), true, 'removing a player dropped the focus');
@@ -2002,6 +2003,60 @@ for (const motion of ['reduce', 'no-preference']) {
     assert.equal(now.bestBy, 'Ana');
     assert.deepEqual(now.games, after.games, "B's ball lost A's game");
     assert.deepEqual(now.current.players[0].rolls.length, 1, "B's game in progress wasn't kept");
+  } finally { await c.close(); }
+}
+
+// ---- Playing with others ------------------------------------------------------------------------------------
+
+// Bumpers: switched on for Ana on the title, her ball comes off the rail instead of dropping in the gutter (Ben's,
+// without, drops in), and the switch is still on for her next time.
+{
+  const { c, p } = await kept({}, { names: ['Ana', 'Ben'] });
+  try {
+    assert.equal(await p.getAttribute('#players li:nth-child(1) .bump', 'aria-pressed'), 'false');
+    await p.click('#players li:nth-child(1) .bump');
+    assert.equal(await p.getAttribute('#players li:nth-child(1) .bump', 'aria-pressed'), 'true');
+    await p.click('#start');
+    assert.deepEqual(await p.evaluate(() => pinDrop.game.players.map(q => !!q.bumpers)), [true, false]);
+    // The ball into the right gutter from the 10-pin side, for each of them, watched every few frames.
+    const roll = () => p.evaluate(async () => {
+      await new Promise(r => { const t = setInterval(() => { if (pinDrop.phase === 'aim') { clearInterval(t); r(); } }, 50); });
+      pinDrop.speed = 2;
+      pinDrop.throw({ x: 14, speed: 300, angle: 0.02, hook: 0 });
+      const seen = new Set();
+      await new Promise(r => { const t = setInterval(() => { seen.add(pinDrop.ball.state); if (pinDrop.phase !== 'rolling') { clearInterval(t); r(); } }, 15); });
+      return { seen: [...seen], bumpers: !!pinDrop.shot.bumpers };
+    });
+    const ana = await roll();
+    assert.deepEqual([ana.bumpers, ana.seen.includes('gutter')], [true, false], `Ana's ball with bumpers: ${ana.seen}`);
+    await roll();   // her second ball
+    assert.equal(await p.evaluate(() => pinDrop.game.players[0].rolls.length), 2);
+    const ben = await roll();
+    assert.deepEqual([ben.bumpers, ben.seen.includes('gutter')], [false, true], `Ben's ball without: ${ben.seen}`);
+    await p.reload();
+    assert.deepEqual(await p.$$eval('#players .bump', els => els.map(e => e.getAttribute('aria-pressed'))), ['true', 'false'], 'Ana\'s bumpers were not kept for next time');
+  } finally { await c.close(); }
+}
+
+// A game bowled with bumpers is kept marked in the recent games, and doesn't count toward the best here or the
+// player's own: Ana's 90 with bumpers beats Cal's 50, but Cal's stays the best, and the end says why.
+{
+  const { c, p } = await kept({}, { names: ['Ana'], best: 50, bestBy: 'Cal', bests: { Cal: 50 }, current: { players: [{ name: 'Ana', rolls: [...nineAndMiss], x: 0, bumpers: true }], turn: 0, leftover: null } });
+  try {
+    await p.click('#resume');
+    await p.evaluate(() => { pinDrop.speed = 10; pinDrop.throw({ x: 14, speed: 300, angle: 0.02, hook: 0 }); });
+    await until(() => p.evaluate(() => pinDrop.phase === 'aim' && pinDrop.game.players[0].rolls.length === 19), 20000, 'the first ball of the tenth never finished');
+    await p.evaluate(() => { pinDrop.throw({ x: 14, speed: 300, angle: 0.02, hook: 0 }); });
+    await until(() => p.isVisible('#end'), 20000, 'no end of the game');
+    const score = await p.evaluate(() => pinDrop.game.players[0].rolls.reduce((a, b) => a + b, 0));
+    assert.ok(score > 50, `Ana's game came to ${score}`);
+    assert.equal(await p.textContent('#endLine'), 'With bumpers, so it doesn’t count toward your best.');
+    assert.equal(await p.isVisible('#endBadge'), false, 'a new best badge for a game with bumpers');
+    await p.click('#toTitle');
+    const saved = await p.evaluate(() => JSON.parse(localStorage.getItem('pin-drop.v1')));
+    assert.deepEqual([saved.best, saved.bestBy, saved.bests], [50, 'Cal', { Cal: 50 }], 'a game with bumpers counted toward a best');
+    assert.equal(saved.games[0].scores[0].bumpers, true);
+    assert.match(await p.textContent('#record li'), new RegExp(`Ana ${score} \\(bumpers\\)`));
   } finally { await c.close(); }
 }
 

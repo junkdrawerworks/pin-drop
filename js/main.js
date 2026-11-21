@@ -17,7 +17,7 @@ const SETTLE = 1.2, SWEEP = 1.75, RETURN = 0.85;   // seconds
 const clamp = (v, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, v));
 const ease = t => { t = clamp(t); return t * t * (3 - 2 * t); };
 
-let game = null;          // { players: [{ name, rolls, x }], turn, leftover }
+let game = null;          // { players: [{ name, rolls, x, splits, bumpers }], turn, leftover }
 let phase = 'title';      // title, aim, rolling, settle, sweep, return, over
 let phaseT = 0, camT = 0;
 let pins = rack(), ball = idle(0), sim = null;
@@ -65,7 +65,8 @@ function loop(now) {
   const moving = shownLesson && !shownLesson.still && shownLesson.u >= 0 && shownLesson.u % 2.4 < 1.65;
   const resting = shown !== null || (phase === 'aim' && !strokes.size && !guide && !moving);
   if (stale || phase !== drawnPhase || !resting || (shown === null && now - drawnAt >= 80)) {
-    view.draw({ t: now / 1000, pins, ball: phase === 'sweep' ? null : ball, guide, sweep, colour: colourOf(game ? game.turn : 0), marks: marks(), lesson: shownLesson });
+    view.draw({ t: now / 1000, pins, ball: phase === 'sweep' ? null : ball, guide, sweep, colour: colourOf(game ? game.turn : 0), marks: marks(), lesson: shownLesson,
+      bumpers: !!game?.players[game.turn].bumpers });
     stale = false; drawnAt = now; drawnPhase = phase;
   }
   requestAnimationFrame(loop);
@@ -147,12 +148,15 @@ function follow(x, dt) {
 
 // ---- A game --------------------------------------------------------------------------------------------
 
-// A new game for these players, each standing where `spots` says (Bowl again keeps where each one stood).
-function startGame(names, spots = []) {
+// A new game for these players ([{ name, bumpers }]), each standing where `spots` says (Bowl again keeps where each
+// one stood). Each player's switches on the title are kept by name for next time.
+function startGame(lineup, spots = []) {
   hush();
-  game = { players: names.map((name, i) => ({ name, rolls: [], x: spots[i] || 0 })), turn: 0, leftover: null };
+  const names = lineup.map(q => q.name);
+  game = { players: lineup.map((q, i) => ({ name: q.name, rolls: [], x: spots[i] || 0, ...(q.bumpers ? { bumpers: true } : {}) })), turn: 0, leftover: null };
   told = new Set(); toldHook = new Set();
   store.names = names;
+  store.opts = Object.fromEntries(lineup.filter(q => q.bumpers).map(q => [q.name, { bumpers: true }]));
   keep();
   $('hud').hidden = false;
   show(null);
@@ -190,6 +194,7 @@ function aim() {
 }
 
 function throwBall(shot) {
+  shot = { ...shot, ...rails() };
   unwind();   // Space held as a ball goes another way (a click and flick) would throw again once it's back
   guide = null;
   learnt(shot);
@@ -672,8 +677,10 @@ canvas.addEventListener('contextmenu', e => e.preventDefault());   // no menu po
 function shotFrom(pts, final, gain = 1) {
   const a = pts[0], b = pts[pts.length - 1];
   if (-(b.y - a.y) < (final ? 40 : 12)) return final ? null : guide;
-  return { x: ball.x, ...throwOf(pts, gain) };
+  return { x: ball.x, ...throwOf(pts, gain), ...rails() };
 }
+// A player with bumpers up throws with them (and the guide shows the ball coming off them).
+const rails = () => (game?.players[game.turn].bumpers ? { bumpers: true } : {});
 
 // ---- The keyboard -------------------------------------------------------------------------------------------
 
@@ -692,7 +699,7 @@ const hookAt = speed => {
   return h0 + (h1 - h0) * clamp((speed - s0) / (s1 - s0));
 };
 const windSpeed = () => 170 + 220 * clamp((performance.now() - windAt) / 1000 / WIND);
-const keyShot = () => { const speed = windSpeed(); return { x: ball.x, speed, angle: 0, hook: keyHook * hookAt(speed), keys: true }; };
+const keyShot = () => { const speed = windSpeed(); return { x: ball.x, speed, angle: 0, hook: keyHook * hookAt(speed), keys: true, ...rails() }; };
 const hookWord = () => (keyHook === 0 ? 'straight' : keyHook < 0 ? 'hook left' : 'hook right');
 function winding() {
   guide = keyShot();
@@ -937,7 +944,7 @@ function titleScreen() {
   view.setCamera(0);
   resumeButton();
   blockedDue = false;   // the title says it
-  drawPlayers(store.names?.length ? store.names : ['You']);
+  drawPlayers(lineup());
   disarmStart();
   record();
   show('title');
@@ -957,27 +964,38 @@ function resumeButton() {
   } else if (startArmed) disarmStart();
 }
 
-function drawPlayers(names) {
+// The players as they were last set up on the title: [{ name, bumpers }].
+const lineup = () => (store.names?.length ? store.names : ['You'])
+  .map(name => ({ name, bumpers: Object.hasOwn(store.opts, name) && !!store.opts[name]?.bumpers }));
+
+// The players on the title, each with a name, and a Bumpers switch (pressed or not).
+function drawPlayers(list) {
   const ol = $('players');
-  ol.innerHTML = names.map((n, i) => `<li><span class="ball" style="background:radial-gradient(circle at 35% 30%, ${colourOf(i)[0]}, ${colourOf(i)[1]} 55%, ${colourOf(i)[2]})"></span>`
-    + `<input type="text" maxlength="14" value="${esc(n)}" aria-label="Player ${i + 1}’s name" autocomplete="off" spellcheck="false">`
-    + (names.length > 1 ? `<button type="button" aria-label="Remove ${esc(n)}">×</button>` : '') + '</li>').join('');
+  ol.innerHTML = list.map((q, i) => `<li><span class="ball" style="background:radial-gradient(circle at 35% 30%, ${colourOf(i)[0]}, ${colourOf(i)[1]} 55%, ${colourOf(i)[2]})"></span>`
+    + `<input type="text" maxlength="14" value="${esc(q.name)}" aria-label="Player ${i + 1}’s name" autocomplete="off" spellcheck="false">`
+    + `<button type="button" class="bump" aria-pressed="${!!q.bumpers}" aria-label="Bumpers for ${esc(q.name)}">Bumpers</button>`
+    + (list.length > 1 ? `<button type="button" class="remove" aria-label="Remove ${esc(q.name)}">×</button>` : '') + '</li>').join('');
   // Each remove button is named for the player as their name is typed. Removing one from the keyboard puts the focus
   // on the name now in its place; with a finger or a mouse, on the remove button there (focusing a name would bring
   // up a phone's keyboard).
   ol.querySelectorAll('li').forEach((li, i) => {
-    const input = li.querySelector('input'), b = li.querySelector('button');
+    const input = li.querySelector('input'), b = li.querySelector('.remove'), bump = li.querySelector('.bump');
+    const named = () => input.value.trim() || `Player ${i + 1}`;
+    bump.addEventListener('click', () => bump.setAttribute('aria-pressed', String(bump.getAttribute('aria-pressed') !== 'true')));
+    input.addEventListener('input', () => { b?.setAttribute('aria-label', `Remove ${named()}`); bump.setAttribute('aria-label', `Bumpers for ${named()}`); });
     if (!b) return;
-    input.addEventListener('input', () => b.setAttribute('aria-label', `Remove ${input.value.trim() || `Player ${i + 1}`}`));
     b.addEventListener('click', e => {
-      drawPlayers(readNames().filter((_, j) => j !== i));
+      drawPlayers(readPlayers().filter((_, j) => j !== i));
       const rows = ol.querySelectorAll('li'), row = rows[Math.min(i, rows.length - 1)];
-      (e.detail === 0 ? row.querySelector('input') : row.querySelector('button') || $('addPlayer')).focus();
+      (e.detail === 0 ? row.querySelector('input') : row.querySelector('.remove') || $('addPlayer')).focus();
     });
   });
-  $('addPlayer').hidden = names.length >= MAX_PLAYERS;
+  $('addPlayer').hidden = list.length >= MAX_PLAYERS;
 }
-const readNames = () => [...$('players').querySelectorAll('input')].map((el, i) => el.value.trim() || `Player ${i + 1}`);
+const readPlayers = () => [...$('players').querySelectorAll('li')].map((li, i) => ({
+  name: li.querySelector('input').value.trim() || `Player ${i + 1}`,
+  bumpers: li.querySelector('.bump').getAttribute('aria-pressed') === 'true',
+}));
 
 function record() {
   const games = store.games || [];
@@ -991,10 +1009,12 @@ function record() {
       // a tie), with the same said in words for a screen reader.
       const top = Math.max(...g.scores.map(q => int(q.score)));
       const tied = g.scores.filter(q => int(q.score) === top).length > 1;
+      // A score bowled with bumpers says so.
       const pairs = g.scores.map((q, i) => {
         const won = g.scores.length > 1 && int(q.score) === top;
         const sep = i < g.scores.length - 1 ? ' ·' : '';
-        return `<span class="pair">${esc(q.name)} <b${won ? ' class="won"' : ''}>${int(q.score)}</b>${won ? `<span class="sr"> ${tied ? 'tied' : 'won'}</span>` : ''}${sep}</span>`;
+        const how = q.bumpers ? ' <small>(bumpers)</small>' : '';
+        return `<span class="pair">${esc(q.name)} <b${won ? ' class="won"' : ''}>${int(q.score)}</b>${how}${won ? `<span class="sr"> ${tied ? 'tied' : 'won'}</span>` : ''}${sep}</span>`;
       });
       return `<li><span class="when">${d}</span><span class="scores">${pairs.join(' ')}</span></li>`;
     }).join('') + '</ol>';
@@ -1003,17 +1023,21 @@ function record() {
   $('record').innerHTML = h;
 }
 
+// Whether a player's game counts toward the bests: not with bumpers.
+const counts = q => !q.bumpers;
+
 // The game's over: keep it, with every player's balls as well as their score (for working out averages and the
-// like later), and any new bests.
+// like later), and any new bests. A game bowled with bumpers is kept marked, and never counts toward a best.
 function finish() {
-  const scores = game.players.map(q => ({ name: q.name, score: total(q.rolls), rolls: q.rolls.slice(), splits: (q.splits || []).slice() }));
-  const top = Math.max(...scores.map(s => s.score));
+  const scores = game.players.map(q => ({ name: q.name, score: total(q.rolls), rolls: q.rolls.slice(), splits: (q.splits || []).slice(), ...(q.bumpers ? { bumpers: true } : {}) }));
+  const counted = scores.filter((_, i) => counts(game.players[i]));
+  const top = Math.max(-1, ...counted.map(s => s.score));
   // Whether there was a best here to beat, and each player's own best before this game (null for a first game).
   game.hadBest = !!store.best;
-  game.newBest = top > (store.best || 0);
+  game.newBest = counted.length > 0 && top > (store.best || 0);
   game.before = scores.map(s => (Object.hasOwn(store.bests, s.name) ? store.bests[s.name] : null));
-  if (game.newBest) { store.best = top; store.bestBy = [...new Set(scores.filter(s => s.score === top).map(s => s.name))].join(' & '); }
-  for (const s of scores) if (!Object.hasOwn(store.bests, s.name) || s.score > store.bests[s.name]) store.bests[s.name] = s.score;
+  if (game.newBest) { store.best = top; store.bestBy = [...new Set(counted.filter(s => s.score === top).map(s => s.name))].join(' & '); }
+  for (const s of counted) if (!Object.hasOwn(store.bests, s.name) || s.score > store.bests[s.name]) store.bests[s.name] = s.score;
   store.games = [{ at: Date.now(), scores }, ...(store.games || [])].slice(0, 20);
   store.current = null;
   put();
@@ -1033,6 +1057,7 @@ function endWords() {
   const winners = scores.filter(s => s.score === top);
   if (scores.length === 1) {
     const was = game.before?.[0] ?? null;
+    if (!counts(game.players[0]) && top !== 300) return [`${top}`, 'With bumpers, so it doesn’t count toward your best.', false, false];
     return [`${top}`, top === 300 ? 'A perfect game.' : was === null ? 'Your first game here.' : top > was ? 'Your best game yet.'
       : top === was ? 'That equals your best.' : `Your best is ${was}.`, top === 300 || (was !== null && top > was), was !== null && top > was];
   }
@@ -1082,8 +1107,8 @@ function keep() {
 }
 
 $('addPlayer').addEventListener('click', () => {
-  const names = readNames();
-  if (names.length < MAX_PLAYERS) drawPlayers([...names, `Player ${names.length + 1}`]);
+  const list = readPlayers();
+  if (list.length < MAX_PLAYERS) drawPlayers([...list, { name: `Player ${list.length + 1}` }]);
   const inputs = $('players').querySelectorAll('input');
   inputs[inputs.length - 1]?.select();
 });
@@ -1103,7 +1128,7 @@ $('lineup').addEventListener('submit', e => {
     return;
   }
   disarmStart();
-  startGame(readNames());
+  startGame(readPlayers());
 });
 // Anything else done on the title calls it off (but Enter in a name is a second go at Bowl).
 for (const type of ['pointerdown', 'keydown', 'input']) {
@@ -1143,7 +1168,7 @@ $('menuQuit').addEventListener('click', () => {
   store.current = null; put();
   titleScreen();
 });
-$('again').addEventListener('click', () => startGame(game.players.map(q => q.name), game.players.map(q => q.x)));
+$('again').addEventListener('click', () => startGame(game.players.map(q => ({ name: q.name, bumpers: !!q.bumpers })), game.players.map(q => q.x)));
 $('toTitle').addEventListener('click', titleScreen);
 // Escape closes the menu, How to play and the scorecard as their buttons do, and on the lane it opens the menu.
 document.addEventListener('keydown', e => {

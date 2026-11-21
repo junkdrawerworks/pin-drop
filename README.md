@@ -45,7 +45,9 @@ thrown straight at the head pin.
   badge and a chime. While a second ball is aimed, the pins left show under the scorecard as ten dots, the way an
   alley's screen shows them.
 - **Up to four players** pass the phone round, each with their own ball colour. Pin Drop keeps your best game and your
-  last few scores, and a game you leave half-way carries on where you were.
+  last few scores, and a game you leave half-way carries on where you were. **Bumpers**, switched on next to a player's
+  name, keep their ball out of the gutters: it comes off a rail along each side of the lane. A game with bumpers is
+  marked in the recent games and doesn't count toward a best.
 - **Sound** is made on the spot (the thud of the ball landing, its rumble, the clatter of the pins, the pinsetter's
   whirr and clunk), with a switch in the menu that stops the buzz too, on a phone that buzzes.
 
@@ -88,7 +90,7 @@ GitHub Pages serves it from `main`, at its own address set by `CNAME`.
   and played from file://) and `e2e.mjs` (a whole two-player game in Chromium, three players, strikes in a
   four-player tenth frame and a spare in a one-player one, carrying on after a reload at any moment, every sound
   finishing, two windows open at once, the first ball's marks and the lessons for a new player, bowling from the
-  keyboard, the note on a phone on its side, Sound off stopping the buzz, the thud and the pinsetter's clunks, a tap
+  keyboard, the note on a phone on its side, bumpers, Sound off stopping the buzz, the thud and the pinsetter's clunks, a tap
   hurrying the pinsetter, the pins left under the scorecard, strikes in a row building up to a perfect game and a new
   best, Watch again, the ring for a split, the camera cutting with Reduce Motion, offline, installable). `aim.mjs` aims the tests' balls: the angle that
   sends a ball through a spot at the head pin, and the pocket ball, 2.5 in right of the head pin's middle, that strikes
