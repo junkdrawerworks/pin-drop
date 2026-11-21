@@ -84,11 +84,14 @@ export function best(rolls) {
   return total(r);
 }
 
-// Pins are neighbours if they stand side by side or one diagonally behind the other.
-const NEAR = [[2, 3], [1, 3, 4, 5], [1, 2, 5, 6], [2, 7, 8, 5], [2, 3, 4, 6, 8, 9], [3, 5, 9, 10], [4, 8], [4, 5, 7, 9], [5, 6, 8, 10], [6, 9]];
+// Pins hold each other together if nothing could be down between them: one diagonally in front of the other, or a
+// "sleeper" standing straight behind another (the 2-8, the 3-9), with no pin's spot between them. Two pins side by
+// side have the pin in front of them between them, so they don't.
+const NEAR = [[2, 3], [1, 4, 5, 8], [1, 5, 6, 9], [2, 7, 8], [2, 3, 8, 9], [3, 9, 10], [4], [2, 4, 5], [3, 5, 6], [6]];
 
-// A split: the head pin is down after the first ball and what's left stands in two or more groups with a gap
-// between them (the 7–10, but also the 2–7 and 3–10 "baby splits").
+// A split, by the USBC Playing Rules, Rule 3g: what stands after the first ball, when the head pin is down and at
+// least one pin is down between two or more standing pins (the 7-10, the 3-10) or immediately ahead of two or more
+// (the 5-6, the 9-10). So it's a split when what's left falls into two or more groups.
 export function isSplit(standing) {
   if (standing.includes(1) || standing.length < 2) return false;
   const seen = new Set([standing[0]]), todo = [standing[0]];

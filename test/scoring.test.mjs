@@ -59,15 +59,15 @@ test('the best a game can still reach', () => {
   assert.equal(best([9, 0]), 9 + 270);
 });
 
+// USBC Playing Rules, Rule 3g: a split is what stands after the first ball when the head pin is down and at least
+// one pin is down between two or more standing pins (7-9, 3-10), or immediately ahead of two or more (5-6).
 test('splits', () => {
-  assert.equal(isSplit([7, 10]), true);
-  assert.equal(isSplit([2, 7]), true);
-  assert.equal(isSplit([3, 10]), true);
-  assert.equal(isSplit([4, 6, 7, 10]), true);
-  assert.equal(isSplit([4, 5]), false);
-  assert.equal(isSplit([1, 7, 10]), false);   // the head pin's still up
-  assert.equal(isSplit([10]), false);
-  assert.equal(isSplit([6, 10]), false);
+  for (const left of [[7, 10], [2, 7], [3, 10], [4, 6, 7, 10], [7, 9], [5, 6], [4, 5], [9, 10], [7, 8], [5, 6, 10]]) {
+    assert.equal(isSplit(left), true, `the ${left.join('-')} is a split`);
+  }
+  for (const left of [[2, 8], [3, 9], [2, 4, 5], [1, 7], [1, 7, 10], [10], [6, 10], [2, 4, 7], [3, 6, 9, 10]]) {
+    assert.equal(isSplit(left), false, `the ${left.join('-')} is not a split`);
+  }
 });
 
 test('the same throw plays out the same way every time', () => {
