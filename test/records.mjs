@@ -197,6 +197,58 @@ const nineAndMiss = Array.from({ length: 18 }, (_, i) => (i % 2 ? 0 : 9));   // 
   }
 }
 
+// ---- Spare practice ------------------------------------------------------------------------------------------
+
+// Practise spares under Bowl: ten leaves, one ball each, for the first person on the title. Each is set up as a second
+// ball would face it (the pins left shown under the scorecard), the card along the top marks each one made or missed,
+// and the end says how many were made. Nothing of it is kept, and a game left half-way still carries on afterwards.
+{
+  const LEAVES = ['10', '7', '3,6,10', '2,4,5,8', '6,10', '4,7', '3,10', '5', '2,8', '3,5,6,9'];
+  const current = { players: [{ name: 'Ana', rolls: [7, 2], x: 0, c: 0 }, { name: 'Ben', rolls: [], x: 0, c: 1 }], turn: 1, leftover: null };
+  const { c, p } = await kept({ names: ['Ana', 'Ben'], games: [{ at: 5, scores: [{ name: 'Ana', score: 90, rolls: nineAndMiss.concat([9, 0]), splits: [] }] }], current });
+  try {
+    assert.equal(await p.isVisible('#practice'), true, 'no Practise spares on the title');
+    await p.click('#practice');
+    assert.equal(await p.evaluate(() => pinDrop.phase), 'aim');
+    assert.equal(await p.evaluate(() => pinDrop.game.players.map(q => q.name).join()), 'Ana');
+    // Good lines at the 10 pin (from the left, across the lane) and the 5 (straight at it); the rest in the gutter.
+    const good = { 0: { x: -12, speed: 280, angle: 0.0402, hook: 0 }, 7: { x: 0, speed: 280, angle: 0, hook: 0 } };
+    const seen = [];
+    for (let i = 0; i < 10; i++) {
+      await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, `never ready for leave ${i + 1}`);
+      seen.push({
+        pins: await p.evaluate(() => pinDrop.pins.filter(q => q.state === 'up').map(q => q.id).join()),
+        dots: await p.getAttribute('#leave', 'aria-label'),
+        where: await p.textContent('#where'),
+      });
+      await p.evaluate(shot => { pinDrop.speed = 10; pinDrop.seed = 1; pinDrop.throw(shot); }, good[i] || { x: 14, speed: 300, angle: 0.02, hook: 0 });
+    }
+    assert.deepEqual(seen.map(v => v.pins), LEAVES);
+    assert.equal(seen[2].dots, 'Pins left: 3, 6 and 10');
+    assert.deepEqual([seen[0].where, seen[9].where], ['Spare practice · 1 of 10', 'Spare practice · 10 of 10']);
+    await until(() => p.isVisible('#end'), 20000, 'no end of practice');
+    assert.equal(await p.textContent('#endTitle'), '2 of 10');
+    assert.equal(await p.textContent('#endLine'), 'Ana made 2 of 10.');
+    assert.deepEqual(await p.$$eval('#endCards .leaves li b', els => els.map(e => e.textContent)),
+      ['Made', 'Missed', 'Missed', 'Missed', 'Missed', 'Missed', 'Missed', 'Made', 'Missed', 'Missed']);
+    assert.deepEqual([await p.textContent('#again'), await p.textContent('#toTitle'), await p.isVisible('#share')], ['Practise again', 'Done', false]);
+    // Not a game: nothing new kept, and the game left half-way is still there to carry on.
+    const s = await saved(p);
+    assert.deepEqual([s.games.length, s.current.players[0].rolls, s.current.turn], [1, [7, 2], 1]);
+    // Practise again starts over; Done goes back to the title, with Carry on.
+    await p.click('#again');
+    assert.deepEqual(await p.evaluate(() => [pinDrop.phase, pinDrop.game.practice.i, pinDrop.pins.length]), ['aim', 0, 1]);
+    await p.click('#menuBtn');
+    assert.equal(await p.isVisible('#menuBoard'), false, 'a Scorecard in the menu in practice');
+    await p.click('#menuQuit');
+    assert.equal(await p.isVisible('#title'), true, 'End practice did not go back to the title');
+    assert.match(await p.textContent('#resume'), /Carry on · Ben’s turn, frame 1/);
+    // And a game afterwards has its own buttons back.
+    await p.click('#resume');
+    assert.equal(await p.evaluate(() => pinDrop.game.players.length), 2);
+  } finally { await c.close(); }
+}
+
 assert.deepEqual(problems, [], 'problems while using it');
 await browser.close();
 server.close();

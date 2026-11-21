@@ -2,7 +2,7 @@
 import { Sim, rack, rng, LANE, BALL_R, BOARD, SPOTS } from './physics.js';
 import { plan, cpuName, LEVELS, LEVEL_KEYS } from './computer.js';
 import { Renderer, BALL_COLOURS, CPU_COLOURS } from './render.js';
-import { frames, next, total, pending, isSplit, callFor, cardText, boxes, best as most, statsLine } from './scoring.js';
+import { frames, next, total, pending, isSplit, callFor, cardText, boxes, best as most, statsLine, PRACTICE } from './scoring.js';
 import * as sound from './sound.js';
 import { load, save as write, parse, merge, forget, numbers, int, keeping, KEY, GAMES } from './store.js';
 import { stroke, addPoints, readStroke, throwPoints, liftAs, throwOf, MOUSE } from './swipe.js';
@@ -240,6 +240,7 @@ function throwBall(shot) {
 
 // The ball's done: count the pins, mark the card, say something, and work out who's next.
 function scoreBall() {
+  if (game.practice) { practiceBall(); return; }
   const standing = sim.standing;
   const p = current();
   const st = next(p.rolls);
@@ -858,6 +859,7 @@ const scoreOf = q => total(q.rolls) + int(q.head);
 
 function hud() {
   if (!game) return;
+  if (game.practice) { practiceHud(); return; }
   const p = current(), st = next(p.rolls);
   // Each player's dot in the light shade of their ball, to stand out on the dark card.
   $('who').innerHTML = `<i style="background:${colourOf(game.turn)[0]}"></i>${esc(p.name)}`;
@@ -958,6 +960,89 @@ function readout(text) {
 // A buzz on a phone that can (never on an iPhone or iPad, where a web page can't): Sound off in the menu stops it too.
 function buzz(p) { if (!store.sound) return; try { navigator.vibrate?.(p); } catch { /* not on this device */ } }
 function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+// ---- Spare practice -----------------------------------------------------------------------------------------
+// "Practise spares" under Bowl: ten common leaves (PRACTICE in scoring.js), one ball at each, with the same aim, roll
+// and pinsetter as a game, for the first person on the title. Each comes as a second ball would (the pins left under
+// the scorecard, and a new player is shown how to line up with them), and the end says how many were made. Nothing of
+// it is kept: it never counts toward the games or the bests, and a game left half-way still carries on afterwards.
+const leaveOf = i => rack().filter(q => PRACTICE[i].includes(q.id));
+const leaveName = ids => (ids.length === 1 ? `the ${ids[0]} pin` : `the ${ids.join('–')}`);
+function startPractice(who) {
+  hush();
+  $('handoff').hidden = true;
+  game = { players: [{ name: who.name, rolls: [10 - PRACTICE[0].length], x: who.x || 0, c: 0, ...(who.bumpers ? { bumpers: true } : {}) }], turn: 0,
+    leftover: leaveOf(0), practice: { i: 0, made: [] } };
+  told = new Set(); toldHook = new Set(); tonight = null;
+  $('hud').hidden = false;
+  show(null);
+  pins = leaveOf(0);
+  aim();
+  say('Spare practice', 'Ten leaves, one ball each', 'small', '', 'aim');
+  tell(`Spare practice: ten leaves, one ball each. First, ${leaveName(PRACTICE[0])}.`);
+}
+$('practice').addEventListener('click', () => { sound.wake(); disarmStart(); startPractice(readPlayers().find(q => !q.cpu)); });
+
+// A practice ball's done: made or not, called out, and on to the next leave, or the end.
+function practiceBall() {
+  const standing = sim.standing, p = current(), pr = game.practice;
+  const made = standing.length === 0, knocked = Math.max(0, before - standing.length);
+  pr.made.push(made);
+  store.throws = (store.throws || 0) + 1;
+  store.thrown[p.name] = (store.thrown[p.name] || 0) + 1;
+  readout('');
+  const count = `${pr.made.filter(Boolean).length} of ${pr.made.length}`;
+  if (made) { if (!called) { say(wasSplit ? 'Picked up!' : 'Spare!', count, 'teal'); cheer('teal'); } }
+  else say(knocked === 0 ? (sawGutter ? 'Gutter ball' : 'Missed') : String(knocked), count, 'small');
+  pr.i++;
+  const more = pr.i < PRACTICE.length;
+  tell(`${made ? 'Made it' : 'Missed it'}: ${count}.${more ? ` Next, ${leaveName(PRACTICE[pr.i])}.` : ''}`);
+  if (more) {
+    game.leftover = leaveOf(pr.i);
+    p.rolls = [10 - PRACTICE[pr.i].length];
+    phase = 'settle';
+  } else phase = 'over';
+  phaseT = 0;
+  hud();
+  put();   // the balls thrown, for the hint on how to throw
+}
+
+// The scorecard along the top in practice: a box for each leave, / when it was made and - when it wasn't, and the
+// number made.
+function practiceHud() {
+  const p = current(), pr = game.practice, n = pr.made.filter(Boolean).length;
+  $('who').innerHTML = `<i style="background:${colourOf(0)[0]}"></i>${esc(p.name)}`;
+  $('where').textContent = pr.i < PRACTICE.length ? `Spare practice · ${pr.i + 1} of ${PRACTICE.length}` : 'Done';
+  const boxes = PRACTICE.map((_, i) => {
+    const m = i < pr.made.length ? (pr.made[i] ? '/' : '-') : '';
+    return `<span class="f${i === pr.i && phase !== 'over' ? ' now' : ''}"><span class="tot${m === '/' ? ' s' : ''}">${m}</span></span>`;
+  }).join('');
+  $('frames').outerHTML = `<span id="frames" class="frames practice" aria-hidden="true">${boxes}<span class="f sum"><span>${n}</span></span></span>`;
+  $('cardSay').textContent = `spare practice, ${n} made of ${pr.made.length}. Show the menu`;
+  $('others').hidden = true;
+  leaveCard();
+}
+
+// The end of practice: how many were made, and each leave with whether it was.
+const pinsSVG = ids => `<svg viewBox="-22 -4 44 26" aria-hidden="true">${SPOTS.map((q, i) => `<circle cx="${q.x}" cy="${(3 - ROWS[i]) * 6}" r="2.6"${ids.includes(i + 1) ? ' class="up"' : ''}/>`).join('')}</svg>`;
+function practiceEnd() {
+  const p = current(), made = game.practice.made, n = made.filter(Boolean).length;
+  $('endTitle').textContent = `${n} of ${made.length}`;
+  $('endTitle').classList.add('score');
+  $('endLine').textContent = `${isYou(p.name) ? 'You' : p.name} made ${n} of ${made.length}.`;
+  $('endCards').innerHTML = `<ul class="leaves">${PRACTICE.map((ids, i) => `<li class="${made[i] ? 'made' : 'missed'}">${pinsSVG(ids)}`
+    + `<span>${ids.join('–')}</span><b>${made[i] ? 'Made' : 'Missed'}</b><span class="sr">: ${leaveName(ids)}</span></li>`).join('')}</ul>`;
+  show('end');
+  $('hud').hidden = true; $('others').hidden = true;
+}
+
+// The end card's buttons, for a game or for practice.
+function endFor(practice) {
+  $('again').textContent = practice ? 'Practise again' : 'Bowl again';
+  $('toTitle').textContent = practice ? 'Done' : 'Change players';
+  $('share').hidden = practice || (!navigator.share && !navigator.clipboard?.writeText);
+  $('endBadge').hidden = true; $('endTally').hidden = true;
+}
 
 // ---- Sheets --------------------------------------------------------------------------------------------
 
@@ -1304,6 +1389,8 @@ function endWords() {
 function showEnd() {
   hush();   // the last ball's callout, which can outlast the wait for this card
   $('replay').hidden = true;
+  endFor(!!game.practice);
+  if (game.practice) { practiceEnd(); return; }
   // The fourth: a best beaten (a player's own, playing alone; the best here, with others), with a gold badge and a chime.
   const [title, line, best, beaten] = endWords();
   $('endTitle').textContent = title;
@@ -1332,7 +1419,7 @@ function put() {
 
 // Saves after every ball, as the next ball will find things: whose turn, and the pins left standing.
 function keep() {
-  if (game && !game.players.every(q => next(q.rolls).done)) {
+  if (game && !game.practice && !game.players.every(q => next(q.rolls).done)) {
     const pending = game.nextTurn != null;
     store.current = { players: game.players, turn: pending && game.nextTurn >= 0 ? game.nextTurn : game.turn, leftover: pending ? null : game.leftover };
   }
@@ -1381,13 +1468,18 @@ $('resume').addEventListener('click', () => { sound.wake(); resumeGame(); });
 // any new best) rather than pausing a game that's finished, which could then be ended without ever seeing that.
 function openMenu() {
   if (phase === 'over') { showEnd(); return; }
-  dropStrokes(); stopGlide(); quitArmed = false; $('menuQuit').textContent = 'End this game'; show('menu');
+  dropStrokes(); stopGlide(); quitArmed = false;
+  // Practice has no scorecard, and ending it loses nothing, so it ends with one tap.
+  $('menuQuit').textContent = game.practice ? 'End practice' : 'End this game';
+  $('menuBoard').hidden = !!game.practice;
+  show('menu');
 }
 $('menuBtn').addEventListener('click', openMenu);
 $('menuResume').addEventListener('click', () => show(null));
 $('menuBoard').addEventListener('click', () => { $('boardCards').innerHTML = boardHTML(false); show('board'); });
 $('card').addEventListener('click', () => {
   if (phase === 'over') { showEnd(); return; }
+  if (game.practice) { openMenu(); return; }   // no scorecard to show
   $('boardCards').innerHTML = boardHTML(false); show('board');
 });
 $('boardDone').addEventListener('click', () => show(null));
@@ -1404,6 +1496,7 @@ $('menuSound').addEventListener('click', () => { store.sound = !store.sound; sou
 let quitArmed = false;
 $('menuQuit').addEventListener('click', () => {
   if (phase === 'over') { showEnd(); return; }
+  if (game.practice) { titleScreen(); return; }
   if (!quitArmed) { quitArmed = true; $('menuQuit').textContent = 'Tap again to end it'; return; }
   store.current = null; put();
   titleScreen();
@@ -1411,6 +1504,7 @@ $('menuQuit').addEventListener('click', () => {
 // Bowl again: the same players, the second leading off this time (and the first going last), each with their own ball
 // colour and spot on the approach.
 $('again').addEventListener('click', () => {
+  if (game.practice) { startPractice(game.players[0]); return; }
   const lineup = game.players.map((q, i) => ({ name: q.name, x: q.x, c: q.c ?? i, ...extras(q) }));   // the computer too
   startGame([...lineup.slice(1), lineup[0]]);
 });

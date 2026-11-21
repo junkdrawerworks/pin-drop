@@ -205,3 +205,8 @@ export function isSplit(standing) {
   }
   return seen.size < standing.length;
 }
+
+// Spare practice: ten common leaves (the pins standing after a first ball), one ball at each. The corner pins, the
+// splits and clusters that come up most, each side's bucket (a diamond of four), and a sleeper (a pin hidden straight
+// behind another).
+export const PRACTICE = [[10], [7], [3, 6, 10], [2, 4, 5, 8], [6, 10], [4, 7], [3, 10], [5], [2, 8], [3, 5, 6, 9]];
