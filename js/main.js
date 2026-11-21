@@ -1,7 +1,7 @@
 // Pin Drop: the game around the lane. Turns and frames, the swipe, the pinsetter, the scorecards and the sheets.
 import { Sim, rack, LANE, BALL_R, BOARD, SPOTS } from './physics.js';
 import { Renderer, BALL_COLOURS } from './render.js';
-import { frames, next, total, pending, isSplit, callFor, cardText, boxes } from './scoring.js';
+import { frames, next, total, pending, isSplit, callFor, cardText, boxes, best as most } from './scoring.js';
 import * as sound from './sound.js';
 import { load, save as write, parse, merge, int, keeping, KEY } from './store.js';
 import { stroke, addPoints, readStroke, throwPoints, liftAs, throwOf, MOUSE } from './swipe.js';
@@ -848,10 +848,15 @@ function leaveCard() {
   el.setAttribute('aria-label', up.length ? `Pins left: ${up.length === 1 ? up[0] : `${up.slice(0, -1).join(', ')} and ${up.at(-1)}`}` : 'No pins left');
 }
 
+// The scorecards of everyone in the game: at the end, with the winner marked; on the Scorecard sheet during a game,
+// with the most each player can still reach under their total ("max 212"), as a league's screen shows it, so in a
+// close finish everyone can see whether the player behind can still catch up.
 function boardHTML(withBest) {
   const best = Math.max(...game.players.map(scoreOf));
   const tied = game.players.filter(q => scoreOf(q) === best).length > 1;
-  return game.players.map((q, i) => `<div class="row"><div class="name"><span><i style="background:${colourOf(i)[0]}"></i>${esc(q.name)}</span>${withBest && game.players.length > 1 && scoreOf(q) === best ? `<em>${tied ? 'Tied' : 'Winner'}</em>` : ''}</div>${cardHTML(q.rolls, -1, true, true, q.splits, int(q.head))}</div>`).join('');
+  const max = q => (withBest || next(q.rolls).done ? ''
+    : `<p class="max"><span aria-hidden="true">max </span><span class="sr">${esc(q.name)} can still reach </span>${most(q.rolls) + int(q.head)}</p>`);
+  return game.players.map((q, i) => `<div class="row"><div class="name"><span><i style="background:${colourOf(i)[0]}"></i>${esc(q.name)}</span>${withBest && game.players.length > 1 && scoreOf(q) === best ? `<em>${tied ? 'Tied' : 'Winner'}</em>` : ''}</div>${cardHTML(q.rolls, -1, true, true, q.splits, int(q.head))}${max(q)}</div>`).join('');
 }
 
 let callTimer = 0, callUntil = 0, callAt = null;   // when the callout on screen goes, and where it is ('pins' or 'aim')

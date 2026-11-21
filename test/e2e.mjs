@@ -2141,6 +2141,22 @@ for (const motion of ['reduce', 'no-preference']) {
   } finally { await c.close(); }
 }
 
+// The Scorecard sheet during a game: under each player's total, the most they can still reach (with Ben's head start
+// counted), for a screen reader too. Not on the end of the game's cards.
+{
+  const { best: most } = await import('../js/scoring.js');
+  const ana = [10, 7, 2, 9], ben = [3, 4, 10, 6];
+  const { c, p } = await kept({}, { names: ['Ana', 'Ben'], current: { players: [{ name: 'Ana', rolls: ana, x: 0 }, { name: 'Ben', rolls: ben, x: 0, head: 10 }], turn: 0, leftover: [{ id: 7, ...SPOTS[6] }] } });
+  try {
+    await p.click('#resume');
+    await p.click('#card');
+    const shown = await p.$$eval('#boardCards .max', els => els.map(e => ({ seen: e.textContent.replace(/^.*can still reach /, ''), said: e.querySelector('.sr').textContent })));
+    assert.deepEqual(shown.map(m => m.seen), [String(most(ana)), String(most(ben) + 10)], 'the most each can still reach');
+    assert.equal(shown[0].said, 'Ana can still reach ');
+    assert.equal(await p.$eval('#boardCards .max [aria-hidden]', e => e.textContent), 'max ');
+  } finally { await c.close(); }
+}
+
 assert.deepEqual(problems.filter(p => !p.startsWith('failed with the network down:')), [], 'problems while using it');
 await browser.close();
 server.close();
