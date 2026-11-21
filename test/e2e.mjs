@@ -503,6 +503,49 @@ for (const [width, height, insets] of [[390, 844, { top: 47, bottom: 34, left: 0
   } finally { await c.close(); }
 }
 
+// The lane is repainted only when something on it can change: once as a sheet opens and then not while it stays up
+// (repainting a phone-sized canvas every frame behind the title or the menu kept the main thread busy), once after the
+// screen turns round with a sheet up, about twelve times a second while a ball waits, and every frame while it rolls.
+{
+  const c = await browser.newContext({ serviceWorkers: 'block', viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  const p = await c.newPage();
+  p.on('pageerror', e => problems.push(e.message));
+  try {
+    await p.goto(base);
+    await p.evaluate(() => document.fonts.ready);
+    await p.evaluate(() => {
+      const v = pinDrop.view, draw = v.draw.bind(v);
+      window.draws = 0; window.frames = 0;
+      v.draw = s => { window.draws++; draw(s); };
+      (function frame() { window.frames++; requestAnimationFrame(frame); })();
+    });
+    const count = async ms => { const a = await p.evaluate(() => [draws, frames]); await wait(ms); const b = await p.evaluate(() => [draws, frames]); return { draws: b[0] - a[0], frames: b[1] - a[1] }; };
+    await wait(200);
+    const title = await count(1000);
+    assert.ok(title.draws === 0, `the lane was drawn ${title.draws} times in a second behind the title`);
+    // Turned round with the title up: drawn again at the new size, not left blank.
+    await p.setViewportSize({ width: 844, height: 390 });
+    await until(() => p.evaluate(() => draws > 0), 2000, 'the lane was not drawn again after turning round');
+    const lit = await p.evaluate(() => { const cv = document.getElementById('lane'); return cv.getContext('2d').getImageData(cv.width / 2, cv.height / 2, 1, 1).data[3]; });
+    assert.equal(lit, 255, 'the lane is blank behind the title after turning round');
+    await p.setViewportSize({ width: 390, height: 844 });
+    await p.click('#start');
+    await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 5000, 'never on the lane');
+    await wait(200);
+    const waiting = await count(1000);
+    assert.ok(waiting.draws >= 5 && waiting.draws <= 16, `drawn ${waiting.draws} times in a second while the ball waits`);
+    await p.click('#menuBtn');
+    await wait(200);
+    const menu = await count(1000);
+    assert.equal(menu.draws, 0, `the lane was drawn ${menu.draws} times in a second behind the menu`);
+    await p.click('#menuResume');
+    await p.evaluate(() => { pinDrop.seed = 1; pinDrop.throw({ x: 10, speed: 290, angle: 0.03, hook: -45 }); });
+    const rolling = await count(800);
+    assert.equal(await p.evaluate(() => pinDrop.phase), 'rolling');
+    assert.ok(rolling.draws >= rolling.frames - 2, `drawn ${rolling.draws} times in ${rolling.frames} frames as the ball rolled`);
+  } finally { await c.close(); }
+}
+
 // On a phone that only manages about ten frames a second, the ball still rolls at full speed: in 1.5 s it has rolled
 // for more than 1.2 s of the game (a frame's step was capped at 1/30 s, so the whole roll played at a third of the speed).
 {

@@ -38,6 +38,12 @@ const colourOf = i => BALL_COLOURS[i % BALL_COLOURS.length];
 // ---- The lane, every frame -------------------------------------------------------------------------------
 
 let last = performance.now();
+// The lane is drawn every frame while anything on it moves. Behind a sheet (the title, the menu, How to play, the
+// scorecard, the end of the game) nothing does, so it's drawn once as the sheet opens, or the screen changes size, and
+// then left alone; while a ball waits to be thrown, only the sign's stars twinkle, so it's drawn about twelve times a
+// second. (Repainting the whole canvas every frame kept a phone's main thread busy behind the title and the menu.)
+let stale = true, drawnAt = -Infinity, drawnPhase = null;
+const redraw = () => { stale = true; };
 function loop(now) {
   // Up to a tenth of a second a frame, so a phone that can't keep up still rolls at full speed (the physics steps in
   // fixed slices however long the frame, so it plays out the same); a longer gap, as after a stall, is held back.
@@ -47,7 +53,11 @@ function loop(now) {
   // A hand over the lane while there's a ball to pick up, closed while it's held.
   document.body.classList.toggle('aiming', phase === 'aim' && !paused);
   document.body.classList.toggle('dragging', !!touch);
-  view.draw({ t: now / 1000, pins, ball: phase === 'sweep' ? null : ball, guide, sweep, colour: colourOf(game ? game.turn : 0) });
+  const resting = shown !== null || (phase === 'aim' && !strokes.size && !guide);
+  if (stale || phase !== drawnPhase || !resting || (shown === null && now - drawnAt >= 80)) {
+    view.draw({ t: now / 1000, pins, ball: phase === 'sweep' ? null : ball, guide, sweep, colour: colourOf(game ? game.turn : 0) });
+    stale = false; drawnAt = now; drawnPhase = phase;
+  }
   requestAnimationFrame(loop);
 }
 
@@ -470,6 +480,7 @@ canvas.addEventListener('pointermove', e => {
 const lift = e => {
   const t = strokes.get(e.pointerId);
   if (!t) return;
+  redraw();   // where the ball was left
   strokes.delete(e.pointerId);
   const led = t === touch;   // only the lead stroke moves the ball
   if (led) { touch = null; guide = null; leading(); }
@@ -618,6 +629,7 @@ const visible = el => !!el?.isConnected && el.getClientRects().length > 0;
 function show(id) {
   const was = shown;
   shown = id;
+  redraw();
   if (dialogs.includes(id) && (was === null || was === 'menu')) opener = document.activeElement;
   for (const s of sheets) $(s).hidden = s !== id;
   for (const s of behind) $(s).inert = !!id;
@@ -641,6 +653,7 @@ function show(id) {
 
 // Out of sight (another app, another tab), nothing plays; back again, it carries on unless a sheet is up.
 document.addEventListener('visibilitychange', () => {
+  redraw();   // a phone may have thrown the canvas away while the page was out of sight
   if (document.hidden) sound.sleep();
   else if (!paused) sound.wake(false);
 });
@@ -879,7 +892,9 @@ addEventListener('storage', e => {
   if (phase === 'title') { resumeButton(); record(); }
 });
 
-addEventListener('resize', () => { view.resize(); view.setCamera(camT, followX); if (phase === 'aim') hint(); });
+addEventListener('resize', () => { view.resize(); view.setCamera(camT, followX); redraw(); if (phase === 'aim') hint(); });
+// The sign's lettering, once its font has come (drawn before then, it would stay in the stand-in font behind a sheet).
+document.fonts?.addEventListener?.('loadingdone', redraw);
 
 // For the tests and the screenshot tool.
 window.pinDrop = {
@@ -892,7 +907,7 @@ window.pinDrop = {
   throw(shot) { if (phase === 'aim') throwBall({ x: ball.x, ...shot }); },
   set speed(v) { timeScale = v; },
   set seed(v) { fixedSeed = v; },
-  camera(t) { camT = t; view.setCamera(t, 0); },
+  camera(t) { camT = t; view.setCamera(t, 0); redraw(); },
   shotFrom,
   view,
 };
