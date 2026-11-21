@@ -365,9 +365,12 @@ canvas.addEventListener('pointermove', e => {
   track(touch, e);
   const was = touch.mode;
   readStroke(touch);
-  if (touch.mode === 'throw' && was !== 'throw') hint();   // out of the way of the throw
+  if ((touch.mode === 'throw') !== (was === 'throw')) hint();   // out of the way of a throw, and back for a move
   if (touch.mode === 'move') {
-    slide(touch, touch.pts[touch.pts.length - 1].x - touch.pts[0].x);   // the ball follows the finger
+    // The ball follows the finger, from where it stood when the stroke began (a stroke that started with a wobble
+    // down or up takes it from there as soon as it's clearly sideways).
+    slide(touch, touch.pts[touch.pts.length - 1].x - touch.pts[0].x);
+    guide = null;
   } else if (touch.mode === 'throw') {
     if (was === 'move') slide(touch, 0);   // a hook swipe that started sideways: the ball goes back where it stood
     const p = throwPoints(touch), a = p[0], b = p[p.length - 1];

@@ -288,6 +288,26 @@ const state = p => p.evaluate(() => ({ phase: pinDrop.phase, x: pinDrop.ball.x }
     assert.equal(moved.phase, 'aim', 'moving the ball diagonally threw it');
     assert.ok(moved.x > before + 3, `the ball only moved from ${before} to ${moved.x}`);
 
+    // A sideways drag that starts with the thumb settling 11 px down, or 11 px up: the ball follows the finger while
+    // it drags (it stayed put, and lifting said "Swipe up to roll", or it jumped across only on lifting).
+    for (const wobble of [11, -11]) {
+      const from = (await state(p)).x;
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 250, y: 640 }] });
+      await wait(16);
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 250, y: 640 + wobble }] });
+      for (let i = 1; i <= 10; i++) { await wait(16); await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 250 - i * 10, y: 640 + wobble }] }); }
+      await wait(50);
+      const mid = await state(p);
+      assert.ok(mid.x < from - 5, `${wobble} px ${wobble > 0 ? 'down' : 'up'}, then 100 px across: the ball was at ${mid.x} mid-drag, from ${from}`);
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await wait(50);
+      const end = await state(p);
+      assert.equal(end.phase, 'aim');
+      assert.ok(Math.abs(end.x - mid.x) < 0.5, `the ball jumped from ${mid.x} to ${end.x} on lifting`);
+      assert.notEqual(await p.textContent('#hint'), 'Swipe up to roll', 'a sideways drag was told to swipe up');
+      await touchStroke(cdp, [[100, 0, 8]], 150);   // back where it was
+    }
+
     // A flick too short to throw says so.
     await touchStroke(cdp, [[0, -30, 3]]);
     assert.equal((await state(p)).phase, 'aim');

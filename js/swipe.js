@@ -19,13 +19,20 @@ export function swipeSpeed(pts) {
 
 // What a stroke on the lane is so far, from its points (the first where the finger went down): null while it's too
 // short to tell, 'move' for sliding the ball across, 'throw' for a swipe up, 'none' for one heading down. Its first
-// 10 px decide, but a stroke can change its mind into a throw: a backswing that comes back up 12 px throws from its
-// lowest point (s.from), and a sideways start that then goes well up (over 60 px, and more than twice as far up as
-// across) throws from where it began. Updates s.mode and s.from, and returns the mode.
+// 10 px decide, but a stroke can change its mind. One that heads down or up a little as the thumb settles, then goes
+// clearly sideways (over 20 px, and more than twice as far across as up or down, before it has gone 40 px up), moves
+// the ball. A backswing that comes back up 12 px throws from its lowest point (s.from), and a sideways start that then
+// goes well up (over 60 px, and more than twice as far up as across) throws from where it began. Updates s.mode and
+// s.from, and returns the mode.
 export function readStroke(s) {
   const a = s.pts[0], b = s.pts[s.pts.length - 1];
   const dx = b.x - a.x, dy = b.y - a.y;
   if (!s.mode && Math.hypot(dx, dy) > 10) s.mode = Math.abs(dx) > Math.abs(dy) ? 'move' : dy < 0 ? 'throw' : 'none';
+  if (s.mode === 'none' || s.mode === 'throw') {
+    // Sideways from where the throw would start (where the finger went down, or the bottom of a backswing).
+    const o = s.pts[s.from || 0], ox = b.x - o.x, oy = b.y - o.y;
+    if (-oy < 40 && Math.abs(ox) > 20 && Math.abs(ox) > 2 * Math.abs(oy)) { s.mode = 'move'; s.from = 0; }
+  }
   if (s.mode === 'none') {
     let low = 0;
     s.pts.forEach((p, i) => { if (p.y >= s.pts[low].y) low = i; });
