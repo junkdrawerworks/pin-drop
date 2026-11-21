@@ -1,0 +1,14 @@
+{
+  "name": "pin-drop",
+  "private": true,
+  "type": "module",
+  "description": "Ten-pin bowling with one swipe.",
+  "scripts": {
+    "test": "node --test test/scoring.test.mjs && node test/e2e.mjs",
+    "build": "node tools/build.mjs"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "upng-js": "^2.1.0"
+  }
+}

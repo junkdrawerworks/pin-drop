@@ -1,0 +1,111 @@
+// The scoring rules and the physics, without a browser:  node --test test/
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { frames, next, total, best, isSplit } from '../js/scoring.js';
+import { play, rack, Sim } from '../js/physics.js';
+
+test('an all-gutter game is 0 and a perfect game is 300', () => {
+  assert.equal(total(Array(20).fill(0)), 0);
+  assert.equal(total(Array(12).fill(10)), 300);
+  assert.equal(next(Array(12).fill(10)).done, true);
+  assert.equal(next(Array(11).fill(10)).done, false);
+});
+
+test('all spares of 5 and a 5 at the end make 150', () => {
+  assert.equal(total(Array(21).fill(5)), 150);
+});
+
+test('strikes and spares wait for their bonus balls', () => {
+  const fs = frames([10, 7]);
+  assert.equal(fs[0].total, null);
+  assert.deepEqual(fs[0].marks, ['', 'X']);
+  assert.equal(frames([10, 7, 2])[0].total, 19);
+  assert.equal(frames([10, 7, 2])[1].total, 28);
+  assert.equal(frames([6, 4])[0].total, null);
+  assert.deepEqual(frames([6, 4, 3])[0].marks, ['6', '/']);
+  assert.equal(frames([6, 4, 3])[0].total, 13);
+  assert.deepEqual(frames([0, 0])[0].marks, ['-', '-']);
+});
+
+test('a known game adds up', () => {
+  // A real scorecard: X 7/ 9- X -8 8/ -6 X X X81
+  const rolls = [10, 7, 3, 9, 0, 10, 0, 8, 8, 2, 0, 6, 10, 10, 10, 8, 1];
+  assert.deepEqual(frames(rolls).map(f => f.total), [20, 39, 48, 66, 74, 84, 90, 120, 148, 167]);
+  assert.deepEqual(frames(rolls)[9].marks, ['X', '8', '1']);
+  assert.equal(next(rolls).done, true);
+});
+
+test('the tenth frame: bonus balls, and fresh racks when earned', () => {
+  const nine = Array(18).fill(0);
+  assert.deepEqual(next(nine), { frame: 9, ball: 0, fresh: true, done: false });
+  assert.deepEqual(next([...nine, 10]), { frame: 9, ball: 1, fresh: true, done: false });
+  assert.deepEqual(next([...nine, 10, 3]), { frame: 9, ball: 2, fresh: false, done: false });
+  assert.deepEqual(next([...nine, 10, 10]), { frame: 9, ball: 2, fresh: true, done: false });
+  assert.deepEqual(next([...nine, 4, 6]), { frame: 9, ball: 2, fresh: true, done: false });
+  assert.equal(next([...nine, 4, 5]).done, true);
+  assert.deepEqual(frames([...nine, 10, 3, 7])[9].marks, ['X', '3', '/']);
+  assert.deepEqual(frames([...nine, 4, 6, 10])[9].marks, ['4', '/', 'X']);
+  assert.equal(total([...nine, 10, 10, 10]), 30);
+});
+
+test('frames 1 to 9: a second ball faces what the first left', () => {
+  assert.deepEqual(next([7]), { frame: 0, ball: 1, fresh: false, done: false });
+  assert.deepEqual(next([7, 2]), { frame: 1, ball: 0, fresh: true, done: false });
+  assert.deepEqual(next([10]), { frame: 1, ball: 0, fresh: true, done: false });
+});
+
+test('the best a game can still reach', () => {
+  assert.equal(best([]), 300);
+  assert.equal(best([9, 0]), 9 + 270);
+});
+
+test('splits', () => {
+  assert.equal(isSplit([7, 10]), true);
+  assert.equal(isSplit([2, 7]), true);
+  assert.equal(isSplit([3, 10]), true);
+  assert.equal(isSplit([4, 6, 7, 10]), true);
+  assert.equal(isSplit([4, 5]), false);
+  assert.equal(isSplit([1, 7, 10]), false);   // the head pin's still up
+  assert.equal(isSplit([10]), false);
+  assert.equal(isSplit([6, 10]), false);
+});
+
+test('the same throw plays out the same way every time', () => {
+  const shot = { x: 8, speed: 290, angle: 0.004, hook: -35 };
+  assert.deepEqual(play(rack(), shot, 42).standing, play(rack(), shot, 42).standing);
+});
+
+test('a ball down the middle of the gutter knocks nothing over', () => {
+  const sim = play(rack(), { x: 14, speed: 300, angle: 0.02, hook: 0 }, 1);
+  assert.equal(sim.standing.length, 10);
+});
+
+test('hooking into the pocket strikes far more often than a straight ball at the head pin', () => {
+  // Find the angle that takes the ball through x at the head pin line.
+  const through = (x0, xh, hook) => {
+    let lo = -0.08, hi = 0.08;
+    for (let k = 0; k < 40; k++) {
+      const m = (lo + hi) / 2, s = new Sim([], { x: x0, speed: 290, angle: m, hook }, 1);
+      while (s.ball.y < 720 && s.ball.state === 'lane') s.step(1 / 240);
+      if (s.ball.x < xh) lo = m; else hi = m;
+    }
+    return (lo + hi) / 2;
+  };
+  const rate = (x0, xh, hook) => {
+    const angle = through(x0, xh, hook);
+    let n = 0;
+    for (let seed = 1; seed <= 40; seed++) if (play(rack(), { x: x0, speed: 290, angle, hook }, seed).standing.length === 0) n++;
+    return n / 40;
+  };
+  const pocket = rate(10, 1.5, -40), head = rate(0, 0, 0);
+  assert.ok(pocket >= 0.3, `pocket strikes ${pocket}`);
+  assert.ok(head <= 0.1, `head-on strikes ${head}`);
+  assert.ok(pocket > head + 0.25);
+});
+
+test('a second ball can pick up a leftover pin', () => {
+  // The 10 pin alone, and a ball sent straight at it.
+  const pins = rack([{ id: 10, x: 18, y: 751.18 }]);
+  const sim = play(pins, { x: 18, speed: 280, angle: 0, hook: 0 }, 3);
+  assert.equal(sim.standing.length, 0);
+});
