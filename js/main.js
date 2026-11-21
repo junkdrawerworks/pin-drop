@@ -59,7 +59,7 @@ function update(dt) {
     for (const e of sim.events) {
       if (e.kind === 'gutter') { sawGutter = true; sound.gutter(); buzz(15); }
       else if (e.kind !== 'pit') sound.hit(e.kind, e.power);
-      if (e.kind === 'ball' && !felt) { felt = true; buzz(25); }
+      if (e.kind === 'ball' && !felt) { felt = true; buzz(25); sound.duck(); }
     }
     sim.events.length = 0;
     // Every pin the ball faced has gone over: a strike or a spare, whatever the deadwood does next (a pin that's going

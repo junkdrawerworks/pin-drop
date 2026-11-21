@@ -56,13 +56,14 @@ export function roll(level) {
     const depth = ctx.createGain(); depth.gain.value = 0.28;
     lfo.connect(depth); depth.connect(pulse.gain);
     const g = ctx.createGain(); g.gain.value = 0;
-    src.connect(hp); hp.connect(lp); lp.connect(body); body.connect(pulse); pulse.connect(g); g.connect(master);
+    const duck = ctx.createGain(); duck.gain.value = 1;   // dips while the ball hits the pins (see duck())
+    src.connect(hp); hp.connect(lp); lp.connect(body); body.connect(pulse); pulse.connect(g); g.connect(duck);
     const hsrc = ctx.createBufferSource(); hsrc.buffer = white; hsrc.loop = true;
     const hbp = ctx.createBiquadFilter(); hbp.type = 'bandpass'; hbp.frequency.value = 2200; hbp.Q.value = 0.7;
     const hg = ctx.createGain(); hg.gain.value = 0;
-    hsrc.connect(hbp); hbp.connect(hg); hg.connect(master);
+    hsrc.connect(hbp); hbp.connect(hg); hg.connect(duck); duck.connect(master);
     src.start(); hsrc.start(); lfo.start();
-    rumble = { src, hsrc, lfo, g, hg };
+    rumble = { src, hsrc, lfo, g, hg, duck };
   }
   if (!rumble) return;
   const t = ctx.currentTime;
@@ -73,6 +74,18 @@ export function roll(level) {
     const r = rumble; rumble = null;
     setTimeout(() => { for (const n of [r.src, r.hsrc, r.lfo]) { try { n.stop(); } catch { /* already stopped */ } } }, 600);
   }
+}
+
+// The rumble drops back by about 8 dB for 0.4 s as the ball reaches the pins, so the crash rides over it rather than
+// under it (it was louder than the crash's first half second).
+export function duck() {
+  if (!ctx || !rumble) return;
+  const t = ctx.currentTime, d = rumble.duck.gain;
+  d.cancelScheduledValues(t);
+  d.setValueAtTime(d.value, t);
+  d.linearRampToValueAtTime(0.4, t + 0.02);
+  d.setValueAtTime(0.4, t + 0.4);
+  d.linearRampToValueAtTime(1, t + 0.6);
 }
 
 // A burst of noise through a band-pass filter, dying away over `len` seconds.
@@ -122,10 +135,13 @@ export function hit(kind, power) {
   }
 }
 
-// The ball dropping into the gutter.
+// The ball dropping into the gutter: a low drop, and a hollow clatter in the channel that a phone's small speaker
+// can carry (the drop alone is all under 150 Hz, which it can't).
 export function gutter() {
   if (!ctx || !on) return;
   const t = ctx.currentTime;
+  burst(white, 520, 1.3, 0.5, 0.2, t);
+  knock(300, 0.3, 0.09, t);
   const o = ctx.createOscillator(); o.type = 'sine';
   o.frequency.setValueAtTime(140, t); o.frequency.exponentialRampToValueAtTime(60, t + 0.25);
   const g = ctx.createGain();
@@ -143,7 +159,7 @@ export function chime(big) {
     const lp = ctx.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2400;
     const g = ctx.createGain();
     const s = t + i * 0.09;
-    g.gain.setValueAtTime(0.0001, s); g.gain.exponentialRampToValueAtTime(0.09, s + 0.01);
+    g.gain.setValueAtTime(0.0001, s); g.gain.exponentialRampToValueAtTime(0.057, s + 0.01);   // under the crash, not as loud
     g.gain.exponentialRampToValueAtTime(0.0001, s + 0.5);
     o.connect(lp); lp.connect(g); g.connect(master); o.start(s); o.stop(s + 0.55);
   });

@@ -1031,8 +1031,9 @@ for (const names of [['Ana', 'Ben'], ['Alexandrinaaaa', 'Bartholomewwww', 'Chris
   } finally { await c.close(); }
 }
 
-// The rumble of a rolling ball stops behind the menu (the roll stands still there), and nothing plays while the page
-// is out of sight. Every gain node is watched; the rumble is the one that isn't a fixed level.
+// The rumble of a rolling ball stops behind the menu (the roll stands still there), nothing plays while the page is
+// out of sight, and the rumble drops back as the ball hits the pins. Every gain node is watched; the rumble is the one
+// that isn't a fixed level.
 {
   const { c, p } = await lane({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
   try {
@@ -1063,6 +1064,15 @@ for (const names of [['Ana', 'Ben'], ['Alexandrinaaaa', 'Bartholomewwww', 'Chris
     assert.equal(await p.evaluate(() => window.audio?.state), 'suspended', 'the sound plays on while the page is hidden');
     await hide(false); await wait(100);
     assert.equal(await p.evaluate(() => window.audio?.state), 'running', 'the sound did not come back with the page');
+    // As the ball reaches the pins, the rumble drops back (a gain holds at 0.4 for a few tenths of a second; the
+    // knocks' own gains are gone in less than 0.2 s), so the crash rides over it.
+    await until(() => p.evaluate(() => pinDrop.pins.some(q => q.vx || q.vy)), 5000, 'the ball never reached the pins');
+    const ducked = () => p.evaluate(() => gains.map((g, i) => (Math.abs(g.gain.value - 0.4) < 0.01 ? i : -1)).filter(i => i >= 0));
+    await wait(80);
+    const early = await ducked();
+    await wait(200);
+    const held = (await ducked()).filter(i => early.includes(i));
+    assert.ok(held.length > 0, 'the rumble did not drop back as the ball hit the pins');
   } finally { await c.close(); }
 }
 
