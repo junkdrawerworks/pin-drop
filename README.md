@@ -37,7 +37,8 @@ It's a static site: plain HTML, CSS and JavaScript, with no build step.
 
 ```sh
 npx http-server -p 8080 -c-1 .     # then open http://localhost:8080
-npm test                           # the scoring and physics in Node, then the game in Chromium (needs Playwright)
+npm test                           # the scoring and physics in Node, then the game and its one-file copy in Chromium
+                                   # (needs Playwright, and npm install first)
 node tools/screenshots.mjs         # README screenshots and og.png (npm install first)
 node tools/make-icons.mjs          # the PNG icons from icon.svg
 npm run build                      # dist/artifact.html, the whole game in one file (npm install first)
