@@ -423,18 +423,19 @@ function cardHTML(rolls, now, big) {
 function hud() {
   if (!game) return;
   const p = current(), st = next(p.rolls);
-  $('who').innerHTML = `<i style="background:${colourOf(game.turn)[1]}"></i>${esc(p.name)}`;
+  // Each player's dot in the light shade of their ball, to stand out on the dark card.
+  $('who').innerHTML = `<i style="background:${colourOf(game.turn)[0]}"></i>${esc(p.name)}`;
   $('where').textContent = st.done ? 'Done' : `Frame ${st.frame + 1} · ball ${st.ball + 1}`;
   $('frames').outerHTML = cardHTML(p.rolls, st.done ? -1 : st.frame).replace('<span class="frames', '<span id="frames" class="frames');
   const others = game.players.map((q, i) => ({ q, i })).filter(o => o.i !== game.turn);
   $('others').hidden = others.length === 0;
   $('others').innerHTML = others.map(({ q, i }) =>
-    `<span><i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${colourOf(i)[1]};margin-right:5px"></i>${esc(q.name)} <b>${total(q.rolls)}</b></span>`).join('');
+    `<span><i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${colourOf(i)[0]};margin-right:5px"></i>${esc(q.name)} <b>${total(q.rolls)}</b></span>`).join('');
 }
 
 function boardHTML(withBest) {
   const best = Math.max(...game.players.map(q => total(q.rolls)));
-  return game.players.map((q, i) => `<div class="row"><div class="name"><span><i style="background:${colourOf(i)[1]}"></i>${esc(q.name)}</span>${withBest && game.players.length > 1 && total(q.rolls) === best ? '<em>Winner</em>' : ''}</div>${cardHTML(q.rolls, -1, true)}</div>`).join('');
+  return game.players.map((q, i) => `<div class="row"><div class="name"><span><i style="background:${colourOf(i)[0]}"></i>${esc(q.name)}</span>${withBest && game.players.length > 1 && total(q.rolls) === best ? '<em>Winner</em>' : ''}</div>${cardHTML(q.rolls, -1, true)}</div>`).join('');
 }
 
 let callTimer = 0;

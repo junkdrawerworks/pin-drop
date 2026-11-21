@@ -674,6 +674,12 @@ const freshRack = SPOTS.map((s, i) => `${i + 1}@${s.x.toFixed(6)},${s.y.toFixed(
   } finally { await c.close(); }
 }
 
+// The contrast between two colours written rgb(r, g, b), by WCAG 2.2's relative luminance.
+const contrast = (a, b) => {
+  const lum = c => c.match(/\d+/g).slice(0, 3).map(v => { v /= 255; return v <= 0.04045 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4; }).reduce((s, v, i) => s + v * [0.2126, 0.7152, 0.0722][i], 0);
+  const [x, y] = [lum(a), lum(b)].sort((m, n) => n - m);
+  return (x + 0.05) / (y + 0.05);
+};
 // The scorecard along the top keeps clear of the other players' scores under it, once there are totals in it too,
 // with four players whose long names wrap the scores onto two lines, on a phone and a tablet either way up.
 for (const names of [['Ana', 'Ben'], ['Alexandrinaaaa', 'Bartholomewwww', 'Christabellaaa', 'Dmitrijevichhh']]) {
@@ -695,6 +701,14 @@ for (const names of [['Ana', 'Ben'], ['Alexandrinaaaa', 'Bartholomewwww', 'Chris
       });
       assert.ok(card <= chips, `${names.length} players at ${width}x${height}: the scorecard (bottom ${card}) runs over the other players' scores (top ${chips})`);
       if (names.length === 4 && width === 390) assert.ok(wrapped, 'the long names fit on one line, so this checks less than it means to');
+      // Each player's dot can be seen on the dark card (3:1 or more), and so can the frame being bowled.
+      const { dots, now } = await p.evaluate(() => ({
+        dots: [...document.querySelectorAll('#who i, #others i')].map(el => getComputedStyle(el).backgroundColor),
+        now: getComputedStyle(document.querySelector('#frames .f.now')).boxShadow,
+      }));
+      assert.equal(dots.length, names.length);
+      for (const dot of dots) assert.ok(contrast(dot, 'rgb(13, 18, 34)') >= 3, `a player's dot (${dot}) is ${contrast(dot, 'rgb(13, 18, 34)').toFixed(2)}:1 on the card`);
+      assert.match(now, /inset/, 'the frame being bowled has no bar under it');
     }
   } finally { await c.close(); }
 }
