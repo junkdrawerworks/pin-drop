@@ -1,7 +1,7 @@
 // Reading a swipe.
 
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
-const STRAIGHT = 0.05;   // a swipe bowed less than this share of its length throws a straight ball
+const STRAIGHT = 0.05;   // a swipe bowed less than this share of its length throws a straight ball (but see curlHook)
 
 // How fast the finger was going, in px/ms: the fastest stretch (of at least 40 ms) in the swipe's last quarter
 // second, since a finger often slows a little just before it lifts. Never less than the swipe's average speed.
@@ -164,8 +164,9 @@ export const MOUSE = 1.5;
 // hook. Gives the ball's speed (in/s), its angle off straight (radians) and its hook (in/s; negative hooks left).
 // The speed is read in screen px per ms against a phone's height held upright (844 px), whatever the size of the
 // screen and whichever way up it is, so the same flick throws the same ball after turning a tablet round. `gain`
-// scales it: MOUSE for a mouse or trackpad.
-export function throwOf(pts, gain = 1) {
+// scales it: MOUSE for a mouse or trackpad. `thumb` is for a touch on a phone, where the hook is read from how the
+// end of the swipe curls (see curlOf) rather than how much the whole of it bends.
+export function throwOf(pts, gain = 1, thumb = false) {
   const a = pts[0], b = pts[pts.length - 1];
   const dx = b.x - a.x, dy = b.y - a.y;
   const len = Math.hypot(dx, dy);
@@ -176,15 +177,69 @@ export function throwOf(pts, gain = 1) {
   // 7.7 in/s (0.44 mph). The slowest there is, 9.7 mph, is a drag under 0.4 px/ms.
   const speed = clamp(290 + 81 * Math.log(Math.max(vn, 0.01) / 1.71), 170, 390);
   const angle = clamp(Math.atan(dx / -dy * 0.08), -0.07, 0.07);
-  // The bend: how far the swipe bows out from a straight line, as a share of its length. Bowing out to the right
-  // (so it finishes turning left) hooks left. A thumb swinging from the wrist draws a slight arc of its own, so up to
-  // a 5% bow is straight; past that the hook grows to the most there is (65) at a 20% bow.
+  return { speed, angle, hook: thumb ? curlHook(pts, len) : bendHook(pts, a, dx, dy, len) };
+}
+
+// The hook from a mouse, a trackpad, a pen or a big touch screen, where the whole hand or arm moves and a swipe comes
+// out straight unless it's meant to bend: how far the swipe bows out from a straight line, as a share of its length.
+// Bowing out to the right (so it finishes turning left) hooks left. Up to a 5% bow is straight; past that the hook
+// grows to the most there is (65) at a 20% bow.
+function bendHook(pts, a, dx, dy, len) {
   let bow = 0;
   for (const p of pts) {
     const right = -((p.x - a.x) * dy - (p.y - a.y) * dx) / len;
     if (Math.abs(right) > Math.abs(bow)) bow = right;
   }
   const c = bow / len;
-  const hook = Math.abs(c) < STRAIGHT ? 0 : -Math.sign(c) * Math.min(65, (Math.abs(c) - STRAIGHT) * 65 / (0.2 - STRAIGHT));
-  return { speed, angle, hook };
+  return Math.abs(c) < STRAIGHT ? 0 : -Math.sign(c) * Math.min(65, (Math.abs(c) - STRAIGHT) * 65 / (0.2 - STRAIGHT));
+}
+
+// The hook from a thumb on a phone. A thumb swiping up swings round its base, low on the side of the phone, so its
+// tip draws an arc bowed away from the hand, 8 to 13% of a 300 px swipe: more than bendHook lets off as straight, and
+// it hooked a right thumb's every ball right and a left thumb's left, however the player tried to swipe straight. But
+// an arc turns as much all the way along, and a hook is the end of the swipe curling (as How to play and the lesson's
+// fingertip show it): so it's read from how far the last quarter heads off from where the steady turning before it
+// would have it heading (see curlOf). Up to 0.15 rad (9°) is straight, and more for a short swipe, which a few px of
+// wobble as the thumb lifts turns that much (5 px across its last eighth); past that, each 0.1 rad hooks 13 more, up
+// to the most there is (65) 0.5 rad (29°) on. The lesson's curl, the last half of a swipe curling over by a fifth of
+// its length, hooks 40 to 50, about what a hook into the pocket wants.
+const CURL = 0.15;
+function curlHook(pts, len) {
+  if (len < 40) return 0;
+  const e = curlOf(pts), straight = Math.max(CURL, 40 / len);
+  return Math.abs(e) < straight ? 0 : Math.sign(e) * Math.min(65, (Math.abs(e) - straight) * 65 / 0.5);
+}
+
+// How far the end of a stroke curls, in radians (negative curls left, anticlockwise on the screen). Cut into twelve
+// equal lengths, the way the last three head against where the steady turning of the 2nd to 7th would have them
+// heading: a straight line through those six's headings, the median of the slopes between each two of them (and its
+// height the median too), so a start that sets off sideways (a thumb settling, a hook swipe started sideways or the
+// bottom of a backswing) doesn't tip it. A circle's arc turns as much in each length, so it doesn't curl at all.
+export function curlOf(pts) {
+  const q = evenly(pts, 12), h = [];
+  for (let j = 0; j < 12; j++) {
+    const a = Math.atan2(q[j + 1].y - q[j].y, q[j + 1].x - q[j].x);
+    h.push(j ? h[j - 1] + Math.atan2(Math.sin(a - h[j - 1]), Math.cos(a - h[j - 1])) : a);   // unwound
+  }
+  const slopes = [], heights = [];
+  for (let i = 1; i <= 6; i++) for (let j = i + 1; j <= 6; j++) slopes.push((h[j] - h[i]) / (j - i));
+  const turn = median(slopes);
+  for (let i = 1; i <= 6; i++) heights.push(h[i] - turn * i);
+  const at = median(heights);
+  return (h[9] + h[10] + h[11]) / 3 - (at + turn * 10);
+}
+const median = v => { v.sort((a, b) => a - b); const m = v.length >> 1; return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2; };
+
+// n + 1 points evenly spaced along a stroke, from its first to its last.
+function evenly(pts, n) {
+  const run = [0];
+  for (let i = 1; i < pts.length; i++) run.push(run[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y));
+  const out = [];
+  for (let j = 0, i = 1; j <= n; j++) {
+    const d = run[run.length - 1] * j / n;
+    while (i < pts.length - 1 && run[i] < d) i++;
+    const u = (d - run[i - 1]) / (run[i] - run[i - 1] || 1), a = pts[i - 1], b = pts[i] || a;
+    out.push({ x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u });
+  }
+  return out;
 }

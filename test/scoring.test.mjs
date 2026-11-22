@@ -413,7 +413,7 @@ test('a mouse or trackpad flick counts one and a half times as hard as the same 
   assert.ok(mph(1.2, MOUSE) > mph(1.2) + 1.5, `a quick trackpad flick threw ${mph(1.2, MOUSE).toFixed(1)} mph`);
 });
 
-test('hook: a thumb\'s natural arc rolls straight, a deliberate curve hooks hard', async () => {
+test('hook with a mouse, a trackpad or a big touch screen: a slight bend rolls straight, a deliberate curve hooks hard', async () => {
   const { throwOf } = await import('../js/swipe.js');
   // A 300 px swipe up that bows out to the right by `bow` of its length at the middle (so it hooks left).
   const hook = bow => {
@@ -421,7 +421,8 @@ test('hook: a thumb\'s natural arc rolls straight, a deliberate curve hooks hard
     for (let i = 0; i <= 20; i++) { const u = i / 20; pts.push({ x: 4 * bow * 300 * u * (1 - u), y: -300 * u, t: i * 12 }); }
     return throwOf(pts).hook;
   };
-  // A thumb pivoting at the wrist bows a 300 px swipe by 10% or so, but often less: up to 5% is straight.
+  // Up to 5% is straight. (A thumb on a phone bows a swipe more than that of its own accord, so there the hook is read
+  // from how the end curls instead: see swipe.test.mjs.)
   assert.equal(hook(0.03), 0);
   assert.equal(hook(0.045), 0);
   assert.ok(hook(0.08) < 0 && hook(0.08) > -20, `a slight curve hooks ${hook(0.08)}`);

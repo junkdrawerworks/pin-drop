@@ -686,10 +686,14 @@ canvas.addEventListener('pointerdown', e => {
   try { canvas.setPointerCapture(e.pointerId); } catch { /* fine without */ }
   // `extra`: another finger was already down, so this one tapping or brushing the lane gets no word about it.
   // `gain`: a mouse or trackpad flick counts harder (see MOUSE in swipe.js).
+  // `thumb`: a touch on a phone, most likely a thumb, whose own arc isn't a hook (see curlHook in swipe.js).
   // `early`: it began as the camera came back, so a tap that only hurried things on gets no word about how to throw.
-  strokes.set(e.pointerId, { ...stroke(e, performance.now()), id: e.pointerId, x0: ball.x, extra: strokes.size > 0, early: phase === 'return', gain: e.pointerType === 'mouse' ? MOUSE : 1 });
+  strokes.set(e.pointerId, { ...stroke(e, performance.now()), id: e.pointerId, x0: ball.x, extra: strokes.size > 0, early: phase === 'return',
+    gain: e.pointerType === 'mouse' ? MOUSE : 1, thumb: e.pointerType === 'touch' && phoneSized() });
   leading();
 });
+// A phone's screen, not a tablet's or a laptop's: under 600 px across its short side.
+const phoneSized = () => Math.min(screen.width, screen.height) < 600;
 // Each finger position an event brings, with the times it happened (see addPoints in swipe.js).
 function track(t, e) {
   const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [];
@@ -726,7 +730,7 @@ canvas.addEventListener('pointermove', e => {
     if (was === 'move') slide(touch, touch.slid || 0);
     const p = throwPoints(touch), a = p[0], b = p[p.length - 1];
     // The guide shows only while letting go would throw, so pulling back down calls it off where you can see it.
-    guide = -(b.y - a.y) < 12 || Math.abs(b.x - a.x) > Math.abs(b.y - a.y) ? null : shotFrom(p, false, touch.gain);
+    guide = -(b.y - a.y) < 12 || Math.abs(b.x - a.x) > Math.abs(b.y - a.y) ? null : shotFrom(p, false, touch.gain, touch.thumb);
   }
 });
 const lift = e => {
@@ -746,7 +750,7 @@ const lift = e => {
   if (phase === 'return' && (as === 'throw' || as === 'move')) aim();
   if (as === 'throw') {
     if (led) slide(t, t.slid || 0);
-    const shot = shotFrom(p, true, t.gain);
+    const shot = shotFrom(p, true, t.gain, t.thumb);
     if (shot) { dropStrokes(); throwBall(shot); return; }
   } else if (as === 'move') {
     if (led) slide(t, t.pts[t.pts.length - 1].x - t.pts[0].x);
@@ -770,11 +774,11 @@ guardEdges({ surfaces: [canvas] });
 
 // A swipe, read as a throw (see throwOf), from where the ball stands; or nothing, for a swipe too short to throw
 // (and while swiping, the guide as it was until the swipe is long enough to show one). `gain` is MOUSE for a mouse
-// or trackpad.
-function shotFrom(pts, final, gain = 1) {
+// or trackpad, and `thumb` is for a touch on a phone.
+function shotFrom(pts, final, gain = 1, thumb = false) {
   const a = pts[0], b = pts[pts.length - 1];
   if (-(b.y - a.y) < (final ? 40 : 12)) return final ? null : guide;
-  return { x: ball.x, ...throwOf(pts, gain), ...rails() };
+  return { x: ball.x, ...throwOf(pts, gain, thumb), ...rails() };
 }
 // A player with bumpers up throws with them (and the guide shows the ball coming off them).
 const rails = () => (game?.players[game.turn].bumpers ? { bumpers: true } : {});
@@ -1721,6 +1725,7 @@ window.pinDrop = {
   get pins() { return pins; },
   get ball() { return ball; },
   get shot() { return lastShot; },
+  get guide() { return guide; },
   get lesson() { return lesson && { kind: lesson.kind, playing: lesson.playing }; },
   // As a player would after tapping their card, if the turn has just passed.
   throw(shot) { if (phase === 'aim') { takeTurn(); throwBall({ x: ball.x, ...shot }); } },

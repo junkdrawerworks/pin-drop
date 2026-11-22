@@ -8,7 +8,7 @@
 // fingerprint of every file in SHELL: change any of them and test/e2e.mjs fails until FILES is changed to match (it
 // says what to), which changes this file, so every copy is made whole again at once.
 const CACHE = 'pin-drop-v7'; // bump the number when the file list changes
-const FILES = 'e4550433'; // test/e2e.mjs checks this
+const FILES = 'bfb9c959'; // test/e2e.mjs checks this
 const SHELL = [
   './', 'index.html', 'icon.svg', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png', 'icon-512-maskable.png',
   'css/app.css', 'js/main.js', 'js/edge-guard.js', 'js/physics.js', 'js/render.js', 'js/scoring.js', 'js/sound.js', 'js/store.js', 'js/swipe.js', 'js/computer.js', 'js/sync.js', 'js/balls.js',

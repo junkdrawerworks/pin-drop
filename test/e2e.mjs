@@ -1322,7 +1322,7 @@ for (const tap of ['#menuBtn', '#card']) {
   } finally { await c.close(); }
 }
 
-// A ball that hooks into the gutter says why, once a game for each player: Ana's swipe bows left, so it hooks right,
+// A ball that hooks into the gutter says why, once a game for each player: Ana's swipe curls right, so it hooks right,
 // and from the right of the lane it goes in the right-hand gutter. Her next one says nothing more. Ben's straight
 // ball into the gutter isn't a hook; his slow hook to the left into the left gutter is too much hook for its speed,
 // which comes ahead of the word about a slow ball. Cy hooks left into the gutter from the right edge of the lane, so
@@ -1346,8 +1346,9 @@ for (const tap of ['#menuBtn', '#card']) {
     await touchStroke(cdp, [[90, 0, 6]], 195, 660);
     const curved = await ball(async () => {
       const path = [];
-      // An 8% bow: a hook of about 15, which any speed carries (a slow ball with more gets a word of its own, below).
-      for (let i = 0; i <= 14; i++) { const t = i / 14; path.push([285 - 27 * Math.sin(t * Math.PI), 660 - 320 * t]); }
+      // The end curling 28 px right: a hook of about 12, which any speed carries (a slow ball with more gets a word of
+      // its own, below). (It was an 8% bow of the whole swipe, which on a phone is a thumb's own arc, and straight.)
+      for (let i = 0; i <= 14; i++) { const t = i / 14; path.push([285 + 28 * Math.max(0, (t - 0.5) / 0.5) ** 2, 660 - 320 * t]); }
       await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: path[0][0], y: path[0][1] }] });
       for (const [x, y] of path.slice(1)) { await wait(12); await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y }] }); }
       await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
@@ -1373,6 +1374,45 @@ for (const tap of ['#menuBtn', '#card']) {
     const edge = await ball(() => p.evaluate(() => pinDrop.throw({ x: 16, speed: 260, angle: 0, hook: -60 })), 'Cy');
     assert.equal(edge.side, -1);
     assert.equal(edge.call, 'Gutter ballYour swipe curved, so it hooked left: swipe straighter');
+  } finally { await c.close(); }
+}
+
+// On a phone, a thumb swiping up throws straight, with either hand, though its tip swings round in an arc: a right
+// thumb's bows out 9% to the left, which read as the whole swipe's bend hooked right (and a left thumb's left). The
+// guide shows no hook while swiping either.
+{
+  const { c, p, cdp } = await lane({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true });
+  try {
+    for (const hand of ['right', 'left']) {
+      await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
+      await p.evaluate(() => { pinDrop.speed = 1; });
+      // The thumb's base 380 px from its tip, off to the side, the stroke 300 px long and heading a little right of
+      // straight up halfway (to the left for the left hand), from the ball.
+      const r = 380, sweep = 300 / r, t0 = 0.2 - sweep / 2, px = 195 + r * Math.cos(t0), py = 700 + r * Math.sin(t0);
+      const a0 = Math.atan2(700 - py, 195 - px), path = [];
+      for (let i = 0; i <= 16; i++) {
+        const a = a0 + sweep * i / 16, x = px + r * Math.cos(a);
+        path.push({ x: hand === 'right' ? x : 390 - x, y: py + r * Math.sin(a), t: i * 16 });
+      }
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: path[0].x, y: path[0].y }] });
+      let shown = 0;
+      for (const { x, y } of path.slice(1)) {
+        await wait(16);
+        await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x, y }] });
+        const g = await p.evaluate(() => pinDrop.guide);
+        if (g) { shown++; assert.equal(g.hook, 0, `the guide showed a ${hand} thumb's arc hooking ${g.hook}`); }
+      }
+      assert.ok(shown > 8, `the guide only showed ${shown} times`);
+      await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await until(() => p.evaluate(() => pinDrop.phase === 'rolling'), 3000, `a ${hand} thumb's swipe threw nothing`);
+      const shot = await p.evaluate(() => pinDrop.shot);
+      assert.equal(shot.hook, 0, `a ${hand} thumb's arc threw a hook of ${shot.hook}`);
+      assert.doesNotMatch(await p.textContent('#readout'), /hook/);
+      // Read as the whole swipe's bend, as a mouse's is, it hooks away from the hand.
+      const bent = await p.evaluate(path => pinDrop.shotFrom(path, true).hook, path);
+      assert.ok(hand === 'right' ? bent > 10 : bent < -10, `read by its bend, the ${hand} thumb's arc hooked ${bent}`);
+      await p.evaluate(() => { pinDrop.speed = 10; });
+    }
   } finally { await c.close(); }
 }
 

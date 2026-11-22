@@ -28,12 +28,13 @@ thrown straight at the head pin.
   they leave, and how to curve the end of a swipe to hook, each until they touch the lane (and drawn still with Reduce
   Motion on). A phone held on its side asks to be turned upright, where the pins show properly; a tablet plays either
   way.
-- **Hook it for strikes.** Bend your swipe and the ball keeps that side spin through the oil on the front 40 feet, then
-  grips the dry back end and curves. Coming into the pocket at an angle (just right of the head pin, for a ball that
-  hooks left) is how most strikes happen. Straight balls work too, and leave more splits. The throw is forgiving about
-  speed: a swipe a little faster or slower than your best throws much the same ball, and firm flicks still differ.
-  Firm beats flat out: thrown much harder than about 19 mph, the ball sends the pins low and straight back, and they
-  leave more corner pins.
+- **Hook it for strikes.** Curl the end of your swipe and the ball keeps that side spin through the oil on the front 40
+  feet, then grips the dry back end and curves. On a phone, only the curl at the end counts, so the arc a thumb draws of
+  its own accord as it swings up throws straight, with either hand. Coming into the pocket at an angle (just right of
+  the head pin, for a ball that hooks left) is how most strikes happen. Straight balls work too, and leave more splits.
+  The throw is forgiving about speed: a swipe a little faster or slower than your best throws much the same ball, and
+  firm flicks still differ. Firm beats flat out: thrown much harder than about 19 mph, the ball sends the pins low and
+  straight back, and they leave more corner pins.
 - **The pins are simulated, not decided.** Each one stands until something pushes it hard enough to tip it, then
   cartwheels across the deck taking out its neighbours, bounces off the side walls or drops into the pit or gutter. A
   soft hit makes a pin wobble, and it may or may not go. Real leaves turn up: the 10 pin, the 4–7, the 7–10 split.
@@ -143,9 +144,9 @@ GitHub Pages serves it from `main`, at its own address set by `CNAME`.
   both under the SIL Open Font License, served from here so nothing loads from elsewhere.
 - `sw.js`: the offline copy. `manifest.webmanifest` and the icons: installing it to a home screen.
 - `test/`: `scoring.test.mjs` (rules and physics), `swipe.test.mjs` (reading a stroke as a move or a throw, as the
-  finger moves), `standing.test.mjs` (no pin left standing off the deck), `clean.test.mjs` (every ball ends clean,
-  thrown from every corner of what a swipe can make: everything settled, nothing still wobbling, and the next rack
-  just what was left), `store.test.mjs` (what's kept, with two windows open, Forget these scores and the averages), `balls.test.mjs`
+  finger moves, and on a phone a thumb's arc as straight and the end of a swipe curling as a hook), `standing.test.mjs`
+  (no pin left standing off the deck), `clean.test.mjs` (every ball ends clean, thrown from every corner of what a
+  swipe can make: everything settled, nothing still wobbling, and the next rack just what was left), `store.test.mjs` (what's kept, with two windows open, Forget these scores and the averages), `balls.test.mjs`
   (each ball earned from a game's balls, bumpers and the computer, balls earned before there were balls to earn,
   Forget these scores keeping them, merging the balls earned and picked, a kept game's colour by number, and every
   ball drawing),
@@ -157,7 +158,8 @@ GitHub Pages serves it from `main`, at its own address set by `CNAME`.
   stopping, and two devices making the file at once) and
   `e2e.mjs` (a whole two-player game in Chromium, three players, strikes in a four-player tenth frame and a spare in a
   one-player one, carrying on after a reload at any moment, every sound finishing, two windows open at once, the first
-  ball's marks and the lessons for a new player, bowling from the keyboard, the note on a phone on its side, bumpers,
+  ball's marks and the lessons for a new player, bowling from the keyboard, the note on a phone on its side, a thumb's arc
+  throwing straight on a phone, bumpers,
   a player's balls (picking one, a locked one, New, the pick kept and rolled down the lane, from the keyboard and on a
   phone), a ball earned said at the end of a game and of spare practice, a head start, the card as the turn passes, the most each player can still reach, Bowl again's change of who leads
   off and tonight's tally, the computer player's turns, carrying on and records, Sound off stopping the buzz, the thud
