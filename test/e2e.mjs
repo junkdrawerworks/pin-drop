@@ -219,6 +219,81 @@ assert.deepEqual(installErrors, [], 'Chromium says it cannot be installed');
 // Fits a phone: nothing scrolls sideways.
 assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), true, 'the page scrolls sideways on a phone');
 
+// A swipe sideways is nobody's, so it can't run on into Chrome's swipe to go Back or Forward: the page doesn't
+// overscroll and the lane takes every touch. The ball, slid as far as it goes either way, stays 24 px or more from the
+// screen's sides, where Android's back gesture starts, at any phone width (the lane's edges are only scenery).
+for (const [width, height] of [[320, 568], [320, 700], [360, 740], [390, 844]]) {
+  const other = await browser.newContext({ viewport: { width, height }, hasTouch: true, isMobile: true, serviceWorkers: 'block' });
+  const tab = await other.newPage();
+  await tab.goto(base);
+  await tab.click('#start');
+  const look = await tab.evaluate(() => ['html', 'body', '#lane'].map(s => { const c = getComputedStyle(document.querySelector(s)); return [c.overscrollBehaviorX, c.touchAction]; }));
+  assert.deepEqual(look.map(l => l[0]).slice(0, 2), ['none', 'none'], 'the page should not overscroll sideways');
+  assert.equal(look[2][1], 'none', 'the lane should take every touch');
+  for (const way of [-1, 1]) {
+    await tab.mouse.move(width / 2, height - 120); await tab.mouse.down();
+    for (let i = 1; i <= 10; i++) await tab.mouse.move(width / 2 + way * i * 30, height - 118);
+    await tab.mouse.up();
+    const gap = await tab.evaluate(async way => {
+      const { BALL_R } = await import('./js/physics.js');
+      const at = pinDrop.view.p(pinDrop.ball.x + way * BALL_R, pinDrop.ball.y)[0];
+      return way < 0 ? at : innerWidth - at;
+    }, way);
+    assert.ok(gap >= 24, `the ball slid ${way < 0 ? 'left' : 'right'} comes ${gap.toFixed(1)} px from the screen's side at ${width}x${height}`);
+  }
+  await other.close();
+}
+
+// A Back that comes while a finger is on the lane, or just after the browser took a touch from it (as Android's back
+// gesture does when a swipe starts near the screen's side), is taken for a slip: the game stays as it was. A second
+// later, Back leaves in one press, as it always has: the guard's extra history entry goes on when a finger touches the
+// lane and comes off a second after it lifts.
+{
+  const other = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true, serviceWorkers: 'block' });
+  const tab = await other.newPage();
+  const errors = [];
+  tab.on('pageerror', e => errors.push(e.message));
+  await tab.goto(base + 'icon.svg');   // somewhere to go Back to
+  await tab.goto(base);
+  await tab.click('#start');
+  const guarded = () => tab.evaluate(() => history.state?.__edgeGuard === true);
+  assert.equal(await guarded(), false, 'no extra history entry before the lane is touched');
+  await tab.tap('#lane', { position: { x: 195, y: 400 } });
+  await tab.waitForTimeout(1300);
+  assert.equal(await guarded(), false, 'a second after a tap on the lane, no extra entry');
+  const onLane = async what => {
+    await tab.waitForTimeout(300);
+    assert.equal(tab.url(), base, what);
+    assert.deepEqual(await tab.evaluate(() => [pinDrop.phase, document.getElementById('hud').hidden]), ['aim', false], what);
+  };
+  // Back in the middle of sliding the ball.
+  await tab.mouse.move(195, 700); await tab.mouse.down();
+  assert.equal(await guarded(), true, 'a finger down on the lane adds the extra entry');
+  await tab.mouse.move(230, 702, { steps: 4 });
+  await tab.goBack();
+  await onLane('Back in the middle of a drag should stay on the lane');
+  await tab.mouse.up();
+  // The browser takes the touch, then a Back follows.
+  const game = () => tab.evaluate(() => JSON.stringify([pinDrop.game, pinDrop.ball, pinDrop.pins]));
+  const was = await game();
+  await tab.evaluate(() => {
+    const lane = document.getElementById('lane'), at = { pointerId: 7, pointerType: 'touch', clientX: 200, clientY: 700, bubbles: true };
+    lane.dispatchEvent(new PointerEvent('pointerdown', at));
+    lane.dispatchEvent(new PointerEvent('pointercancel', at));
+  });
+  await tab.goBack();
+  await onLane('Back just after the touch was taken should stay on the lane');
+  assert.equal(await game(), was, 'the game should be as it was');
+  // A second on, Back leaves.
+  await tab.tap('#lane', { position: { x: 195, y: 400 } });
+  await tab.waitForTimeout(1300);
+  assert.equal(await guarded(), false, 'with nothing on the lane, there is no extra entry to press Back through');
+  await tab.goBack();
+  await tab.waitForURL(/icon\.svg$/, { timeout: 5000 }).catch(() => assert.fail('Back a while after a touch was taken should leave in one press'));
+  assert.deepEqual(errors, []);
+  await other.close();
+}
+
 // Works offline once it has been opened. The server goes down as well as the browser: in some Chromium builds the
 // browser's offline switch alone doesn't stop the service worker's own requests, and this passed with no copy at all.
 await page.waitForFunction(() => navigator.serviceWorker?.controller, null, { timeout: 10000 });
@@ -574,8 +649,9 @@ const state = p => p.evaluate(() => ({ phase: pinDrop.phase, x: pinDrop.ball.x }
     assert.equal((await state(p)).phase, 'aim', 'a swipe threw Ben\'s ball before his card was tapped');
     await p.click('#handoff');
     assert.equal(await p.isVisible('#handoff'), false, 'a tap did not take Ben\'s card away');
-    // A swipe begun just as the camera starts back, at the normal speed, throws once aiming begins.
-    await p.evaluate(() => { pinDrop.speed = 4; pinDrop.throw({ x: 0, speed: 290, angle: 0, hook: 0 }); });
+    // A swipe begun just as the camera starts back, at the normal speed, throws once aiming begins. Ben's ball goes down
+    // the left side, where it can't strike: a strike would pass the turn, and the next card up would rightly stop the swipe.
+    await p.evaluate(() => { pinDrop.speed = 4; pinDrop.throw({ x: -15, speed: 290, angle: 0, hook: 0 }); });
     await p.evaluate(() => new Promise(r => { (function f() { if (pinDrop.phase === 'return') { pinDrop.speed = 1; r(); } else requestAnimationFrame(f); })(); }));
     await touchStroke(cdp, [[0, -10, 4], [0, -280, 10]]);
     assert.equal((await state(p)).phase, 'rolling', 'a swipe begun as the camera came back threw nothing');
