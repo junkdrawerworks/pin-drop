@@ -185,6 +185,21 @@ export function best() {
   [G5, 987.77, 1174.66, G6].forEach((f, i) => bell(f, 0.2 + i * 0.13, i === 3 ? 0.9 : 0.4, 0.045));
 }
 
+// A new ball earned, as the end of the game shows it: a quick glassy run up, softer than the bell, each note with the
+// ring of a struck glass (a sine with a fainter partial a little under three times as high). `at` seconds from now.
+export function newBall(at = 0) {
+  if (!ctx || !on) return;
+  [E5, 987.77, E6, 1975.53].forEach((f, i) => {
+    for (const [m, gain] of [[1, 0.07], [2.76, 0.018]]) {
+      const o = ctx.createOscillator(); o.type = 'sine'; o.frequency.value = f * m;
+      const g = ctx.createGain(), s = ctx.currentTime + at + i * 0.085, len = i === 3 ? 1.1 : 0.45;
+      g.gain.setValueAtTime(0.0001, s); g.gain.exponentialRampToValueAtTime(gain, s + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, s + len);
+      o.connect(g); g.connect(master); o.start(s); o.stop(s + len + 0.05);
+    }
+  });
+}
+
 // The ball landing on the boards as it's let go: a brief low thud with a little wood in it (all of it under 150 Hz would
 // be lost on a phone's speaker), louder for a harder throw (`speed` in in/s, 170 to 390) but well under a pin hit.
 export const thudLevel = speed => 0.12 + 0.14 * Math.max(0, Math.min(1, (speed - 170) / 220));

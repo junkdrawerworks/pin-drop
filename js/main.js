@@ -1,10 +1,11 @@
 // Pin Drop: the game around the lane. Turns and frames, the swipe, the pinsetter, the scorecards and the sheets.
 import { Sim, rack, rng, LANE, BALL_R, BOARD, SPOTS } from './physics.js';
 import { plan, cpuName, LEVELS, LEVEL_KEYS } from './computer.js';
-import { Renderer, BALL_COLOURS, CPU_COLOURS } from './render.js';
+import { Renderer } from './render.js';
+import { LOOKS, PLAIN, CPU_LOOK, lookById, lookFor, isPlain, picture, practiceEarns } from './balls.js';
 import { frames, next, total, pending, isSplit, callFor, cardText, boxes, best as most, statsLine, PRACTICE } from './scoring.js';
 import * as sound from './sound.js';
-import { load, save as write, parse, merge, forget, numbers, int, keeping, KEY, GAMES } from './store.js';
+import { load, save as write, parse, merge, forget, numbers, catchUp, earn, int, keeping, KEY, GAMES } from './store.js';
 import { stroke, addPoints, readStroke, throwPoints, liftAs, throwOf, MOUSE } from './swipe.js';
 import { drive } from './sync.js';
 import { guardEdges } from './edge-guard.js';
@@ -13,6 +14,7 @@ const $ = id => document.getElementById(id);
 const canvas = $('lane');
 const view = new Renderer(canvas);
 const store = load();
+catchUp(store);   // balls earned in games kept from before there were balls to earn
 sound.setSound(store.sound);
 
 const MAX_PLAYERS = 4;
@@ -20,7 +22,7 @@ const SETTLE = 1.2, SWEEP = 1.75, RETURN = 0.85;   // seconds
 const clamp = (v, lo = 0, hi = 1) => Math.max(lo, Math.min(hi, v));
 const ease = t => { t = clamp(t); return t * t * (3 - 2 * t); };
 
-let game = null;          // { players: [{ name, rolls, x, c, splits, bumpers, head, cpu (its level) }], turn, leftover }
+let game = null;          // { players: [{ name, rolls, x, ball, splits, bumpers, head, cpu (its level) }], turn, leftover }
 let phase = 'title';      // title, aim, rolling, settle, sweep, return, over
 let phaseT = 0, camT = 0;
 let pins = rack(), ball = idle(0), sim = null;
@@ -45,11 +47,20 @@ const hurrying = () => hurry && waiting();
 
 function idle(x) { return { x, y: 6, state: 'lane', roll: 0, vx: 0, vy: 0 }; }
 const current = () => game.players[game.turn];
-// A player's ball colours, by their place in the game: their own colour (`c`, which stays with them when Bowl again
-// changes who leads off), or on the title, the colour of that row.
-// The computer's ball is silver.
-const colourFor = (q, i) => (q?.cpu ? CPU_COLOURS : BALL_COLOURS[(q?.c ?? i) % BALL_COLOURS.length]);
-const colourOf = i => colourFor(game?.players[i], i);
+// A player's ball, by their place in the game: the look they chose (`ball`, which stays with them when Bowl again
+// changes who leads off; see lookFor in balls.js for games from before there were looks). The computer's is silver.
+const lookOf = i => lookFor(game?.players[i], i);
+// The class that shows a look's picture on an element (a dot on a scorecard, a ball on the title): each look's picture
+// is drawn once, into a rule of its own, the first time it's wanted.
+const lookRules = document.head.appendChild(document.createElement('style'));
+const ruled = new Set();
+function lk(look) {
+  if (!ruled.has(look.id)) {
+    ruled.add(look.id);
+    lookRules.sheet.insertRule(`.lk-${look.id} { background-color: ${look.ink}; background-image: url("${picture(look, 96)}"); }`);
+  }
+  return `lk lk-${look.id}`;
+}
 
 // ---- The lane, every frame -------------------------------------------------------------------------------
 
@@ -74,7 +85,7 @@ function loop(now) {
   const moving = shownLesson && !shownLesson.still && shownLesson.u >= 0 && shownLesson.u % 2.4 < 1.65;
   const resting = shown !== null || (phase === 'aim' && !strokes.size && !guide && !moving && !cpuUp());
   if (stale || phase !== drawnPhase || !resting || (shown === null && now - drawnAt >= 80)) {
-    view.draw({ t: now / 1000, pins, ball: phase === 'sweep' ? null : ball, guide, sweep, colour: colourOf(game ? game.turn : 0), marks: marks(), lesson: shownLesson,
+    view.draw({ t: now / 1000, pins, ball: phase === 'sweep' ? null : ball, guide, sweep, look: lookOf(game ? game.turn : 0), marks: marks(), lesson: shownLesson,
       bumpers: !!game?.players[game.turn].bumpers });
     stale = false; drawnAt = now; drawnPhase = phase;
   }
@@ -158,13 +169,13 @@ function follow(x, dt) {
 
 // ---- A game --------------------------------------------------------------------------------------------
 
-// A new game for these players ([{ name, bumpers, head, c, x }]), each with their own ball colour (`c`, or their place)
+// A new game for these players ([{ name, bumpers, head, ball, x }]), each with their own ball (`ball`, or their place's)
 // and standing where they last stood (Bowl again keeps it). Begun from the title, the players and their switches are
 // kept for next time.
 function startGame(lineup, fromTitle = false) {
   hush();
   $('handoff').hidden = true;
-  game = { players: lineup.map((q, i) => ({ name: q.cpu ? cpuName(q.cpu) : q.name, rolls: [], x: q.x || 0, c: q.c ?? i, ...extras(q) })), turn: 0, leftover: null };
+  game = { players: lineup.map((q, i) => ({ name: q.cpu ? cpuName(q.cpu) : q.name, rolls: [], x: q.x || 0, ...(q.cpu ? {} : { ball: lookFor(q, i).id }), ...extras(q) })), turn: 0, leftover: null };
   told = new Set(); toldHook = new Set();
   if (fromTitle) {
     store.names = lineup.filter(q => !q.cpu).map(q => q.name);
@@ -423,10 +434,10 @@ function runSweep() {
 const handoffUp = () => !$('handoff').hidden;
 let handoffFrom = null;   // what had the focus before the card took it, to go back to
 function handOff() {
-  const el = $('handoff'), [light, mid, dark] = colourOf(game.turn);
+  const el = $('handoff'), look = lookOf(game.turn);
   $('handoffWho').textContent = turnLine(current().name);
-  el.style.setProperty('--who', light);
-  el.querySelector('.orb').style.background = `radial-gradient(circle at 35% 30%, ${light}, ${mid} 55%, ${dark})`;
+  el.style.setProperty('--who', look.ink);
+  el.querySelector('.orb').className = `orb ${lk(look)}`;
   el.hidden = false;
   hush();   // the last ball's callout, if it's still fading, would sit over the card
   dropStrokes(); unwind(); hint();
@@ -870,8 +881,8 @@ function hud() {
   if (!game) return;
   if (game.practice) { practiceHud(); return; }
   const p = current(), st = next(p.rolls);
-  // Each player's dot in the light shade of their ball, to stand out on the dark card.
-  $('who').innerHTML = `<i style="background:${colourOf(game.turn)[0]}"></i>${esc(p.name)}`;
+  // Each player's dot: a little picture of their ball.
+  $('who').innerHTML = `<i class="${lk(lookOf(game.turn))}"></i>${esc(p.name)}`;
   // In the tenth, a ball earned by a strike or spare is a bonus ball: the second after a strike, and the third.
   const bonus = st.frame === 9 && (st.ball === 2 || (st.ball === 1 && st.fresh));
   // While the turn passes (the pins settling and the sweep), who's next rather than this player's next frame; at
@@ -887,7 +898,7 @@ function hud() {
   const others = game.players.map((q, i) => ({ q, i })).filter(o => o.i !== game.turn);
   $('others').hidden = others.length === 0;
   $('others').innerHTML = others.map(({ q, i }) =>
-    `<span><i style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${colourOf(i)[0]};margin-right:5px"></i>${esc(q.name)} <b>${sumHTML(q.rolls, int(q.head))}</b></span>`).join('');
+    `<span><i class="${lk(lookOf(i))}"></i>${esc(q.name)} <b>${sumHTML(q.rolls, int(q.head))}</b></span>`).join('');
   leaveCard();
 }
 
@@ -907,14 +918,15 @@ function leaveCard() {
 // ("3 strikes · 2 spares · 4 open", as an alley's screen sums it up); on the Scorecard sheet during a game, with the
 // most each player can still reach under their total ("max 212"), as a league's screen shows it, so in a close finish
 // everyone can see whether the player behind can still catch up.
-// A kept game's are drawn the same way from its scores (see past).
-function boardHTML(withBest, players = game.players) {
+// A kept game's are drawn the same way from its scores (see past). `extra` adds anything more under a player's card
+// (at the end of a game, a ball they earned).
+function boardHTML(withBest, players = game.players, extra = () => '') {
   const best = Math.max(...players.map(scoreOf));
   const tied = players.filter(q => scoreOf(q) === best).length > 1;
   const under = q => (withBest ? `<p class="count">${statsLine(q.rolls)}</p>`
     : next(q.rolls).done ? ''
       : `<p class="max"><span aria-hidden="true">max </span><span class="sr">${esc(q.name)} can still reach </span>${most(q.rolls) + int(q.head)}</p>`);
-  return players.map((q, i) => `<div class="row"><div class="name"><span><i style="background:${colourFor(q, i)[0]}"></i>${esc(q.name)}</span>${withBest && players.length > 1 && scoreOf(q) === best ? `<em>${tied ? 'Tied' : 'Winner'}</em>` : ''}</div>${cardHTML(q.rolls, -1, true, true, q.splits, int(q.head))}${under(q)}</div>`).join('');
+  return players.map((q, i) => `<div class="row"><div class="name"><span><i class="${lk(lookFor(q, i))}"></i>${esc(q.name)}</span>${withBest && players.length > 1 && scoreOf(q) === best ? `<em>${tied ? 'Tied' : 'Winner'}</em>` : ''}</div>${cardHTML(q.rolls, -1, true, true, q.splits, int(q.head))}${under(q)}${extra(q)}</div>`).join('');
 }
 
 let callTimer = 0, callUntil = 0, callAt = null;   // when the callout on screen goes, and where it is ('pins' or 'aim')
@@ -980,7 +992,7 @@ const leaveName = ids => (ids.length === 1 ? `the ${ids[0]} pin` : `the ${ids.jo
 function startPractice(who) {
   hush();
   $('handoff').hidden = true;
-  game = { players: [{ name: who.name, rolls: [10 - PRACTICE[0].length], x: who.x || 0, c: 0, ...(who.bumpers ? { bumpers: true } : {}) }], turn: 0,
+  game = { players: [{ name: who.name, rolls: [10 - PRACTICE[0].length], x: who.x || 0, ball: lookFor(who, 0).id, ...(who.bumpers ? { bumpers: true } : {}) }], turn: 0,
     leftover: leaveOf(0), practice: { i: 0, made: [] } };
   told = new Set(); toldHook = new Set(); tonight = null;
   $('hud').hidden = false;
@@ -1010,7 +1022,12 @@ function practiceBall() {
     game.leftover = leaveOf(pr.i);
     p.rolls = [10 - PRACTICE[pr.i].length];
     phase = 'settle';
-  } else phase = 'over';
+  } else {
+    phase = 'over';
+    // The Target, for making enough of them: the one ball practice can earn.
+    game.newBalls = practiceEarns(pr.made.filter(Boolean).length).filter(id => earn(store, p.name, id)).map(id => ({ name: p.name, id }));
+    if (game.newBalls.length) drive.changed();
+  }
   phaseT = 0;
   hud();
   put();   // the balls thrown, for the hint on how to throw
@@ -1020,7 +1037,7 @@ function practiceBall() {
 // number made.
 function practiceHud() {
   const p = current(), pr = game.practice, n = pr.made.filter(Boolean).length;
-  $('who').innerHTML = `<i style="background:${colourOf(0)[0]}"></i>${esc(p.name)}`;
+  $('who').innerHTML = `<i class="${lk(lookOf(0))}"></i>${esc(p.name)}`;
   $('where').textContent = pr.i < PRACTICE.length ? `Spare practice · ${pr.i + 1} of ${PRACTICE.length}` : 'Done';
   const boxes = PRACTICE.map((_, i) => {
     const m = i < pr.made.length ? (pr.made[i] ? '/' : '-') : '';
@@ -1040,7 +1057,7 @@ function practiceEnd() {
   $('endTitle').classList.add('score');
   $('endLine').textContent = `${isYou(p.name) ? 'You' : p.name} made ${n} of ${made.length}.`;
   $('endCards').innerHTML = `<ul class="leaves">${PRACTICE.map((ids, i) => `<li class="${made[i] ? 'made' : 'missed'}">${pinsSVG(ids)}`
-    + `<span>${ids.join('–')}</span><b>${made[i] ? 'Made' : 'Missed'}</b><span class="sr">: ${leaveName(ids)}</span></li>`).join('')}</ul>`;
+    + `<span>${ids.join('–')}</span><b>${made[i] ? 'Made' : 'Missed'}</b><span class="sr">: ${leaveName(ids)}</span></li>`).join('')}</ul>${newBallsHTML(p)}`;
   show('end');
   $('hud').hidden = true; $('others').hidden = true;
 }
@@ -1055,8 +1072,8 @@ function endFor(practice) {
 
 // ---- Sheets --------------------------------------------------------------------------------------------
 
-const sheets = ['title', 'menu', 'howSheet', 'board', 'end', 'past', 'numbers'];
-const dialogs = ['menu', 'howSheet', 'board', 'end', 'past', 'numbers'];
+const sheets = ['title', 'menu', 'howSheet', 'board', 'end', 'past', 'numbers', 'balls'];
+const dialogs = ['menu', 'howSheet', 'board', 'end', 'past', 'numbers', 'balls'];
 // Everything behind a sheet, out of reach of Tab and a screen reader while one is up.
 const behind = ['lane', 'handoff', 'hud', 'others', 'call', 'hint', 'readout', 'replay'];
 // One How to play: the title's folded-up copy is the sheet's list.
@@ -1155,27 +1172,26 @@ const lineup = () => [...(store.names?.length ? store.names : ['You'])
   .map(name => ({ name, ...(Object.hasOwn(store.opts, name) ? extras(store.opts[name] || {}) : {}) })),
 ...(LEVELS[store.cpu] ? [{ cpu: store.cpu }] : [])];
 
-// The head starts a player's ball offers, in turn, as it's tapped.
+// The head starts on offer in a player's balls sheet.
 const HEADS = [0, 10, 20, 30, 50];
-const headSay = (name, head) => `Head start for ${name}: ${head ? `${head} pins` : 'none'}`;
-const orbStyle = ([light, mid, dark]) => `background:radial-gradient(circle at 35% 30%, ${light}, ${mid} 55%, ${dark})`;
+const ballSay = (name, id, head) => `Ball and head start for ${name}: ${lookById(id)?.name || 'a ball'}, ${head ? `${head} pins` : 'no head start'}`;
 
-// The players on the title, each with their ball (tapped for a head start, shown on it as "+20"), a name, and a
-// Bumpers switch (pressed or not); then the computer, if there is one, with its level. Up to four in all, at least one
-// of them a person, and one computer at most.
+// The players on the title, each with their ball (tapped for their balls and a head start, the head start shown on it
+// as "+20"), a name, and a Bumpers switch (pressed or not); then the computer, if there is one, with its level. Up to
+// four in all, at least one of them a person, and one computer at most.
 function drawPlayers(list) {
   const ol = $('players');
   const people = list.filter(q => !q.cpu);
   let k = 0;
   ol.innerHTML = list.map(q => {
     if (q.cpu) {
-      return `<li class="cpu"><span class="ball"><span class="orb" style="${orbStyle(CPU_COLOURS)}"></span></span>`
+      return `<li class="cpu"><span class="ball"><span class="orb ${lk(CPU_LOOK)}"></span></span>`
         + `<label class="robot"><span>Computer</span><select aria-label="The computer’s level">${LEVEL_KEYS.map(l => `<option value="${l}"${l === q.cpu ? ' selected' : ''}>${LEVELS[l].name}</option>`).join('')}</select></label>`
         + '<button type="button" class="remove" aria-label="Remove the computer">×</button></li>';
     }
     const i = k++;
-    return `<li><button type="button" class="ball" data-head="${int(q.head)}" aria-label="${esc(headSay(q.name, int(q.head)))}">`
-      + `<span class="orb" style="${orbStyle(colourOf(i))}"></span>`
+    return `<li><button type="button" class="ball" data-head="${int(q.head)}" aria-haspopup="dialog">`
+      + `<span class="orb"></span>`
       + `<span class="plus" aria-hidden="true">${int(q.head) ? `+${int(q.head)}` : ''}</span></button>`
       + `<input type="text" maxlength="14" value="${esc(q.name)}" aria-label="Player ${i + 1}’s name" autocomplete="off" spellcheck="false">`
       + `<button type="button" class="bump" aria-pressed="${!!q.bumpers}" aria-label="Bumpers for ${esc(q.name)}">Bumpers</button>`
@@ -1197,20 +1213,105 @@ function drawPlayers(list) {
     const input = li.querySelector('input'), bump = li.querySelector('.bump'), orb = li.querySelector('.ball');
     const named = () => input.value.trim() || `Player ${i + 1}`;
     bump.addEventListener('click', () => bump.setAttribute('aria-pressed', String(bump.getAttribute('aria-pressed') !== 'true')));
-    orb.addEventListener('click', () => {
-      const head = HEADS[(HEADS.indexOf(+orb.dataset.head) + 1) % HEADS.length];
-      orb.dataset.head = head;
-      orb.querySelector('.plus').textContent = head ? `+${head}` : '';
-      orb.setAttribute('aria-label', headSay(named(), head));
-    });
+    orb.addEventListener('click', () => openBalls(i));
+    // A name typed that has a ball of its own brings it back.
     input.addEventListener('input', () => {
       b?.setAttribute('aria-label', `Remove ${named()}`); bump.setAttribute('aria-label', `Bumpers for ${named()}`);
-      orb.setAttribute('aria-label', headSay(named(), +orb.dataset.head));
+      paintBalls();
     });
   });
+  paintBalls();
   $('addPlayer').hidden = list.length >= MAX_PLAYERS;
   $('addCpu').hidden = list.length >= MAX_PLAYERS || people.length < list.length;
 }
+
+// The people's rows on the title, and each one's name (as Bowl would call them).
+const personRows = () => [...$('players').querySelectorAll('li:not(.cpu)')];
+const rowName = (li, i) => li.querySelector('input').value.trim() || `Player ${i + 1}`;
+// Whether a player has earned a ball (by name), or it's a plain one anyone can have.
+const earnedBy = name => (Object.hasOwn(store.earned, name) ? store.earned[name] : Object.create(null));
+const has = (name, id) => isPlain(id) || (!!lookById(id) && Object.hasOwn(earnedBy(name), id));
+// Each person's ball on the title: the one they last picked here, if it's theirs to use; otherwise their row's plain
+// colour, as each row always had, or if someone else on the title has that, the next plain ball nobody has.
+function paintBalls() {
+  const rows = personRows(), names = rows.map(rowName);
+  const picked = names.map(n => (Object.hasOwn(store.picks, n) && has(n, store.picks[n].id) ? store.picks[n].id : null));
+  const used = new Set(picked.filter(Boolean));
+  rows.forEach((li, i) => {
+    let id = picked[i];
+    if (!id) {
+      const free = PLAIN.map((_, k) => PLAIN[(i + k) % PLAIN.length]).find(l => !used.has(l.id));
+      id = (free || PLAIN[i % PLAIN.length]).id;
+      used.add(id);
+    }
+    const b = li.querySelector('.ball'), head = int(b.dataset.head);
+    b.dataset.look = id;
+    b.querySelector('.orb').className = `orb ${lk(lookById(id))}`;
+    b.querySelector('.plus').textContent = head ? `+${head}` : '';
+    // A ball earned since they last looked: a dot on theirs, until they do.
+    const since = Object.hasOwn(store.seen, names[i]) ? int(store.seen[names[i]]) : 0;
+    const fresh = Object.entries(earnedBy(names[i])).some(([k, at]) => lookById(k) && at > since);
+    b.classList.toggle('fresh', fresh);
+    b.setAttribute('aria-label', `${ballSay(names[i], id, head)}${fresh ? '. A new ball to see' : ''}`);
+  });
+}
+
+// ---- A player's balls ------------------------------------------------------------------------------------------
+// Tapping a player's ball on the title opens their balls: every ball there is, the ones they can have to pick from
+// (the one they're using marked) and the rest dimmed with a lock and how to earn each, and the head start below. A ball
+// earned since they last looked is marked New. What they pick is kept by their name, for next time, here and on every
+// device that saves to Drive.
+let ballsRow = -1, ballsSince = 0;   // the row the sheet is for, and when that player last looked before this
+const LOCK = '<svg class="lock" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10.5" width="14" height="10" rx="2.5"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/></svg>';
+function openBalls(i) {
+  const li = personRows()[i];
+  if (!li) return;
+  ballsRow = i;
+  const name = rowName(li, i), b = li.querySelector('.ball');
+  ballsSince = Object.hasOwn(store.seen, name) ? int(store.seen[name]) : 0;
+  $('ballsTitle').textContent = isYou(name) ? 'Your ball' : `${name}’s ball`;
+  const mine = LOOKS.filter(l => has(name, l.id)).length;
+  $('ballsCount').textContent = `${mine} of ${LOOKS.length} balls`;
+  $('locker').innerHTML = LOOKS.map(l => {
+    const ok = has(name, l.id), fresh = ok && !isPlain(l.id) && earnedBy(name)[l.id] > ballsSince;
+    const say = ok ? `${l.name}${fresh ? ', new' : ''}` : `${l.name}, locked. ${l.how}`;
+    return `<li><button type="button" class="pick${ok ? '' : ' locked'}" data-id="${l.id}" aria-pressed="${l.id === b.dataset.look}"${ok ? '' : ' aria-disabled="true"'} aria-label="${esc(say)}">`
+      + `<span class="orb ${lk(l)}">${ok ? '' : LOCK}</span><span class="nm">${esc(l.name)}</span>`
+      + (fresh ? '<span class="new">New</span>' : ok ? '' : `<span class="earn">${esc(l.how)}</span>`) + '</button></li>';
+  }).join('');
+  showHead(int(b.dataset.head));
+  show('balls');
+  store.seen[name] = Math.max(Date.now(), ballsSince);
+  put();
+  drive.changed();
+}
+function showHead(head) {
+  for (const h of $('heads').querySelectorAll('button')) h.setAttribute('aria-pressed', String(+h.dataset.head === head));
+}
+$('locker').addEventListener('click', e => {
+  const btn = e.target.closest('.pick'), li = personRows()[ballsRow];
+  if (!btn || !li || btn.getAttribute('aria-disabled') === 'true') return;
+  const name = rowName(li, ballsRow);
+  store.picks[name] = { id: btn.dataset.id, at: Date.now() };
+  put();
+  drive.changed();
+  paintBalls();
+  for (const p of $('locker').querySelectorAll('.pick')) p.setAttribute('aria-pressed', String(p.dataset.id === li.querySelector('.ball').dataset.look));
+});
+$('heads').addEventListener('click', e => {
+  const btn = e.target.closest('button'), li = personRows()[ballsRow];
+  if (!btn || !li) return;
+  li.querySelector('.ball').dataset.head = btn.dataset.head;
+  showHead(+btn.dataset.head);
+  paintBalls();
+});
+function closeBalls() {
+  const li = personRows()[ballsRow];
+  ballsRow = -1;
+  show('title');
+  li?.querySelector('.ball').focus({ preventScroll: true });
+}
+$('ballsDone').addEventListener('click', closeBalls);
 // What's on the title: each person (named "Player 2" if left blank) and the computer.
 const readPlayers = () => {
   let n = 0;
@@ -1221,6 +1322,7 @@ const readPlayers = () => {
       name: li.querySelector('input').value.trim() || `Player ${i + 1}`,
       bumpers: li.querySelector('.bump').getAttribute('aria-pressed') === 'true',
       head: int(li.querySelector('.ball').dataset.head),
+      ball: li.querySelector('.ball').dataset.look,
     };
   });
 };
@@ -1351,7 +1453,7 @@ function tallyLine() {
 
 function finish() {
   tally();
-  const scores = game.players.map((q, i) => ({ name: q.name, score: scoreOf(q), rolls: q.rolls.slice(), splits: (q.splits || []).slice(), c: q.c ?? i, ...extras(q) }));
+  const scores = game.players.map((q, i) => ({ name: q.name, score: scoreOf(q), rolls: q.rolls.slice(), splits: (q.splits || []).slice(), ...(q.cpu ? {} : { ball: lookFor(q, i).id }), ...extras(q) }));
   const counted = scores.filter((_, i) => counts(game.players[i]));
   const top = Math.max(-1, ...counted.map(s => s.score));
   // Whether there was a best here to beat, and each player's own best before this game (null for a first game).
@@ -1364,6 +1466,8 @@ function finish() {
   if (game.newBest) { store.best = top; store.bestBy = [...new Set(counted.filter(s => s.score === top).map(s => s.name))].join(' & '); store.bestAt = at; }
   for (const s of counted) if (!Object.hasOwn(store.bests, s.name) || s.score > store.bests[s.name]) { store.bests[s.name] = s.score; store.bestsAt[s.name] = at; }
   store.games = [{ at, scores }, ...(store.games || [])].slice(0, GAMES);
+  // The balls this game earned its players (the computer earns none), said on the end card.
+  game.newBalls = catchUp(store).filter(b => b.at === at && game.players.some(q => !q.cpu && q.name === b.name)).map(({ name, id }) => ({ name, id }));
   store.current = null;
   put();
   drive.changed();
@@ -1405,7 +1509,7 @@ function showEnd() {
   hush();   // the last ball's callout, which can outlast the wait for this card
   $('replay').hidden = true;
   endFor(!!game.practice);
-  if (game.practice) { practiceEnd(); return; }
+  if (game.practice) { practiceEnd(); newBallChime(false); return; }
   // The fourth: a best beaten (a player's own, playing alone; the best here, with others), with a gold badge and a chime.
   const [title, line, best, beaten] = endWords();
   $('endTitle').textContent = title;
@@ -1414,12 +1518,29 @@ function showEnd() {
   $('endLine').textContent = line;
   $('endTally').textContent = tallyLine();
   $('endTally').hidden = !$('endTally').textContent;
-  $('endCards').innerHTML = boardHTML(true);
+  $('endCards').innerHTML = boardHTML(true, game.players, newBallsHTML);
   clearTimeout(sharedTimer); $('share').textContent = 'Share';
   show('end');
   $('hud').hidden = true; $('others').hidden = true;
   if (best) buzz([40, 60, 40]);   // a best, or a perfect game
   if (beaten && !game.cheered) { game.cheered = true; sound.best(); }   // once, not each time the card is opened again
+  newBallChime(beaten);
+}
+
+// Under a player's card at the end of a game (or of spare practice), each ball it earned them: "New ball for Ana:
+// Marble · your first strike", with a little picture of it; and a chime as the card comes up, once, after any for a
+// new best.
+function newBallsHTML(q) {
+  const order = id => LOOKS.findIndex(l => l.id === id);
+  return (game.newBalls || []).filter(b => b.name === q.name).sort((a, b) => order(a.id) - order(b.id)).map(b => {
+    const l = lookById(b.id);
+    return l ? `<p class="earned"><span class="orb ${lk(l)}" aria-hidden="true"></span><span>New ball for ${esc(isYou(q.name) ? 'you' : q.name)}: <b>${esc(l.name)}</b> · ${esc(l.why)}</span></p>` : '';
+  }).join('');
+}
+function newBallChime(after) {
+  if (!game.newBalls?.length || game.chimed) return;
+  game.chimed = true;
+  sound.newBall(after ? 1.3 : 0.35);
 }
 
 // What's on this device, saved; the first time the browser won't keep it, a word about that, once: in a game, in the
@@ -1517,10 +1638,10 @@ $('menuQuit').addEventListener('click', () => {
   titleScreen();
 });
 // Bowl again: the same players, the second leading off this time (and the first going last), each with their own ball
-// colour and spot on the approach.
+// and spot on the approach.
 $('again').addEventListener('click', () => {
   if (game.practice) { startPractice(game.players[0]); return; }
-  const lineup = game.players.map((q, i) => ({ name: q.name, x: q.x, c: q.c ?? i, ...extras(q) }));   // the computer too
+  const lineup = game.players.map((q, i) => ({ name: q.name, x: q.x, ball: lookFor(q, i).id, ...extras(q) }));   // the computer too
   startGame([...lineup.slice(1), lineup[0]]);
 });
 $('toTitle').addEventListener('click', titleScreen);
@@ -1552,6 +1673,7 @@ document.addEventListener('keydown', e => {
   if (shown === 'menu' || shown === 'board') show(null);
   else if (shown === 'howSheet') show(game ? null : 'title');
   else if (shown === 'past' || shown === 'numbers') closePast();
+  else if (shown === 'balls') closeBalls();
   else if (!shown && game && phase !== 'over') openMenu();
   else return;
   e.preventDefault();
@@ -1564,8 +1686,9 @@ addEventListener('storage', e => {
   if (e.key !== KEY || e.newValue === null) return;
   const theirs = parse(e.newValue);
   merge(store, theirs);
+  catchUp(store);
   if (phase === 'title' || phase === 'over') store.current = theirs.current;
-  if (phase === 'title') { resumeButton(); record(); }
+  if (phase === 'title') { resumeButton(); record(); paintBalls(); }
 });
 
 // Google Drive, at pin-drop.junkdrawer.works only (see sync.js): the block under the record on the title, and the cloud
@@ -1577,9 +1700,12 @@ drive.onUpdate(() => {
   let raw = null;
   try { raw = localStorage.getItem(KEY); } catch { return; }
   merge(store, parse(raw));
+  catchUp(store);
   if (phase === 'title') {
     resumeButton(); record();
-    if (!$('players').contains(document.activeElement)) drawPlayers(lineup());
+    // Not under a player's balls sheet, which is for one of these rows.
+    if (shown === 'title' && !$('players').contains(document.activeElement)) drawPlayers(lineup());
+    else paintBalls();
   }
 });
 

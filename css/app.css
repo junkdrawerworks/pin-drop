@@ -51,6 +51,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .who { display: flex; justify-content: space-between; align-items: baseline; padding: 0 2px 4px; font-size: 13px; color: var(--muted); }
 .who b { color: var(--cream); font-weight: 700; font-size: 14px; display: flex; align-items: center; gap: 6px; }
 .who b i { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+/* A little picture of a ball (see lk() in main.js): the scorecards' dots, the balls on the title and in the sheet. */
+.lk { background-size: cover; background-position: center; background-repeat: no-repeat; border-radius: 50%; }
 .icon {
   width: 44px; height: 44px; flex: none; border-radius: 12px;
   background: rgba(13, 18, 34, 0.82); border: 1px solid var(--line);
@@ -103,6 +105,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .others { display: flex; gap: 6px; flex-wrap: wrap; pointer-events: none; }
 .others span { font-size: 12px; padding: 2px 8px; border-radius: 99px; background: rgba(13, 18, 34, 0.7); border: 1px solid var(--line); color: var(--muted); }
 .others b { color: var(--cream); font-variant-numeric: tabular-nums; }
+.others span > i.lk { display: inline-block; width: 9px; height: 9px; margin-right: 5px; vertical-align: -1px; }
 
 /* STRIKE! */
 .call {
@@ -193,7 +196,7 @@ button { font: inherit; color: inherit; cursor: pointer; }
   display: grid; justify-items: center; gap: 6px; width: min(340px, 100%); box-sizing: border-box; padding: 20px 24px 18px; border-radius: 20px;
   background: var(--panel); border: 2px solid var(--who, var(--line)); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
 }
-.handoff .orb { width: 52px; height: 52px; border-radius: 50%; box-shadow: inset -6px -8px 12px rgba(0, 0, 0, 0.45), inset 4px 4px 8px rgba(255, 255, 255, 0.3); }
+.handoff .orb { width: 52px; height: 52px; border-radius: 50%; box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4); }
 .handoff b { font-family: Shrikhand, Georgia, serif; font-weight: 400; font-size: 34px; line-height: 1.15; color: var(--who, var(--cream)); overflow-wrap: anywhere; }
 .handoff .card > span:last-child { color: var(--muted); font-weight: 600; font-size: 17px; }
 .handoff:focus { outline: none; }
@@ -257,11 +260,12 @@ h1[tabindex]:focus, h2[tabindex]:focus { outline: none; }
 #lineup { margin: 0; }
 .players { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .players li { display: flex; align-items: center; gap: 10px; }
-/* The ball is a button for a head start, shown on it in a gold tag ("+20"). */
+/* The ball is a button for the player's balls and head start, the head start shown on it in a gold tag ("+20"). */
 .players .ball { position: relative; display: grid; place-items: center; flex: none; width: 44px; height: 44px; padding: 0; margin: 0 -6px 0 -10px; border: 0; background: none; }
-.players .ball .orb { width: 24px; height: 24px; border-radius: 50%; box-shadow: inset -3px -4px 6px rgba(0, 0, 0, 0.45), inset 2px 2px 4px rgba(255, 255, 255, 0.3); }
+.players .ball .orb { width: 26px; height: 26px; border-radius: 50%; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35); }
 .players .ball .plus { position: absolute; right: -1px; bottom: 3px; padding: 0 4px; border-radius: 99px; background: var(--gold); color: #2a1a05; font-size: 11px; font-weight: 800; line-height: 15px; }
 .players .ball .plus:empty { display: none; }
+.players .ball.fresh::after { content: ''; position: absolute; top: 6px; right: 4px; width: 9px; height: 9px; border-radius: 50%; background: var(--teal); box-shadow: 0 0 0 2px var(--panel); }
 .players .ball:focus-visible { outline: 2px solid var(--teal); outline-offset: -2px; }
 .players input {
   flex: 1; min-width: 0; font: inherit; color: var(--cream); background: var(--panel-2);
@@ -386,12 +390,48 @@ button.best:focus-visible { outline: 2px solid var(--teal); outline-offset: -2px
 
 .cards { display: grid; gap: 14px; margin-top: 12px; }
 .cards .row .name { display: flex; justify-content: space-between; font-weight: 700; margin-bottom: 4px; }
-.cards .row .name i { display: inline-block; width: 11px; height: 11px; border-radius: 50%; margin-right: 6px; }
+.cards .row .name i { display: inline-block; width: 12px; height: 12px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+/* Under a card at the end: a ball it earned. */
+.cards .row .earned { display: flex; align-items: center; gap: 8px; margin: 6px 0 0 2px; font-size: 14px; color: var(--cream); }
+.cards .row .earned .orb { flex: none; width: 22px; height: 22px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.35); }
+.cards .row .earned b { color: var(--gold); }
+.leaves + .earned { display: flex; align-items: center; justify-content: center; gap: 8px; margin: 12px 0 0; font-size: 14px; }
+.leaves + .earned .orb, .leaves ~ .earned .orb { flex: none; width: 22px; height: 22px; }
+.leaves ~ .earned b { color: var(--gold); }
 .cards .row .name em { font-style: normal; color: var(--gold); font-size: 13px; }
 /* Under a total on the Scorecard sheet: the most that player can still reach. */
 .cards .row .max { margin: 3px 2px 0 0; text-align: right; font-size: 12px; font-weight: 600; color: var(--muted); font-variant-numeric: tabular-nums; }
 /* Under each card at the end of a game: its strikes, spares and open frames. */
 .cards .row .count { margin: 4px 0 0 2px; font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* A player's balls: a grid of every ball, the locked ones dimmed with how to earn them; and the head start. */
+.locker { list-style: none; margin: 12px 0 0; padding: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.locker .pick {
+  position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px; width: 100%; height: 100%; min-height: 44px;
+  margin: 0; padding: 8px 2px 7px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel-2); color: var(--cream);
+  text-align: center; line-height: 1.2;
+}
+.locker .orb { position: relative; display: grid; place-items: center; width: 44px; height: 44px; box-shadow: 0 3px 6px rgba(0, 0, 0, 0.4); }
+.locker .nm { font-size: 13px; font-weight: 700; overflow-wrap: anywhere; }
+.locker .earn { font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+.locker .pick[aria-pressed="true"] { border: 2px solid var(--gold); padding: 7px 1px 6px; background: #2a2a3e; }
+.locker .pick[aria-pressed="true"]::after {
+  content: '\2713'; position: absolute; top: 4px; right: 5px; width: 18px; height: 18px; border-radius: 50%;
+  background: var(--gold); color: #2a1a05; font: 800 12px/18px Figtree, system-ui, sans-serif;
+}
+.locker .locked { background: transparent; cursor: default; }
+.locker .locked .nm { color: var(--muted); }
+.locker .lock { width: 22px; height: 22px; fill: none; stroke: var(--cream); stroke-width: 2.2; stroke-linecap: round; filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.8)); }
+.locker .locked .orb { opacity: 1; filter: none; }
+.locker .locked .orb::before { content: ''; position: absolute; inset: 0; border-radius: 50%; background: rgba(22, 28, 49, 0.62); }
+.locker .locked .lock { position: relative; }
+.locker .new { padding: 1px 7px; border-radius: 99px; background: var(--teal); color: #062a2a; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; }
+.locker .pick:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
+h3.sub { margin: 18px 0 8px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 700; }
+.heads { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.heads button { min-height: 44px; padding: 0; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); color: var(--cream); font-weight: 700; font-size: 15px; }
+.heads button[aria-pressed="true"] { background: var(--gold); border-color: var(--gold); color: #2a1a05; }
+.heads button:focus-visible { outline: 2px solid var(--teal); outline-offset: 2px; }
 
 .jd-foot { margin-top: 18px; text-align: center; font-size: 13px; color: var(--muted); }
 /* Padded out to 44 px tall for a thumb, the padding taken back off so the line stays where it was. */

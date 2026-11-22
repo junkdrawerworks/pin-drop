@@ -44,16 +44,26 @@ thrown straight at the head pin.
   bigger than the last, with stars from a turkey on and a fanfare for a perfect game. A new best game gets a gold
   badge and a chime. While a second ball is aimed, the pins left show under the scorecard as ten dots, the way an
   alley's screen shows them.
-- **Up to four players** pass the phone round, each with their own ball colour. As the turn passes, the next player's
+- **Up to four players** pass the phone round, each with their own ball. As the turn passes, the next player's
   card comes up over the lane ("Ben's turn · Tap to bowl"), and nothing can be thrown until they tap it. The Scorecard
   shows under each player's total the most they can still reach ("max 212"). On Bowl again, the second player leads
   off the next game, and from the second game the end shows tonight's tally ("Tonight: Ben 2 · Ana 1") until you
   change players. Pin Drop keeps your best game and your games, and a game you leave half-way carries on where you
   were. **Bumpers**, switched on next to a player's name, keep their ball out of the gutters: it comes off a
   rail along each side of the lane. A game with bumpers is marked in the recent games and doesn't count toward a best.
-  Tapping a player's ball on the title gives them a **head start** of 10 to 50 pins, the way a league's handicap evens
-  up a game: it's added to their total at the end, in a box of its own on the card, and a game with one doesn't count
-  toward a best either.
+  Tapping a player's ball on the title opens their balls, where a **head start** of 10 to 50 pins evens up a game the
+  way a league's handicap does: it's added to their total at the end, in a box of its own on the card (and shown on
+  their ball on the title, "+20"), and a game with one doesn't count toward a best either.
+- **Balls to earn.** Six plain colours are anyone's from the start, and ten more balls, each with a pattern that rolls
+  with it, are earned by playing: Pearl for finishing a first game, Marble for a first strike, Two-tone for picking up
+  a split, Sparkle for a turkey, Flame for 10 games, Target for making 7 of the 10 in Practise spares, Galaxy for a 200
+  game, Stripe for a clean game (a strike or spare in every frame), Gold for 50 games and Prism for a perfect game. A
+  game with bumpers counts for all but the 200, clean and perfect games; a head start makes no difference, and the
+  computer earns none. Tapping a player's ball on the title shows them all, the locked ones with how to earn them and
+  any earned since they last looked marked New; the ball they pick comes back next time they play, and shows on the
+  lane, the card as the turn passes, the scorecards and their kept games. A ball earned is said under the player's
+  card at the end of the game ("New ball for Ana: Marble · your first strike"), with a chime. Someone who played
+  before there were balls has those their kept games show, and Forget these scores never takes one away.
 - **A computer to play against** when you're on your own: "+ Add a computer player" on the title, at Rookie, Regular
   or Pro (they average about 100, 150 and 200). It bowls its own turns through the same physics, hooking its first
   ball into the pocket and throwing straight at pins left from across the lane, and misses by its level's amount. You
@@ -67,7 +77,7 @@ thrown straight at the head pin.
   scores, under it, clears every game and best after a second tap. The last 500 games are kept.
 - **Practise spares**, under Bowl, sets up ten common leaves (the 10 pin, the 7 pin, the 3–6–10, the 2–4–5–8, the
   6–10, the 4–7, the 3–10, the 5 pin, the 2–8 and the 3–5–6–9), one ball at each, and ends with how many you made.
-  It doesn't count toward anything.
+  It doesn't count toward anything but the Target ball.
 - **Sound** is made on the spot (the thud of the ball landing, its rumble, the clatter of the pins, the pinsetter's
   whirr and clunk), with a switch in the menu that stops the buzz too, on a phone that buzzes.
 
@@ -76,12 +86,13 @@ thrown straight at the head pin.
 At pin-drop.junkdrawer.works, **Save to Google Drive** on the title keeps your games in your own Google Drive, in a
 folder called "Pin Drop" with one file, `Pin Drop.json`, and merges them game by game with every phone, tablet or
 computer where you turn it on, so two devices never lose a game. What goes there: every finished game (each player's
-name, score and balls, which balls left splits, their ball colour, and any bumpers, head start or computer level), the
-best game and each player's best (with when they were bowled), the players and switches last set up on the title and
-the computer's level, how many balls each player has thrown and which lessons they've been shown, and when Forget
+name, score and balls, which balls left splits, the ball they bowled with, and any bumpers, head start or computer
+level), the best game and each player's best (with when they were bowled), the players and switches last set up on the
+title and the computer's level, the ball each player picked and the balls they've earned (with when, and when they
+last looked at them), how many balls each player has thrown and which lessons they've been shown, and when Forget
 these scores was last tapped (which clears the scores before then on every device, including one that turns Drive on
 later). What stays on each device: the sound setting, a game in progress, and whether that device saves to Drive.
-Spare practice isn't kept anywhere.
+Spare practice isn't kept anywhere, but a Target ball it earns is.
 
 It asks Google for `drive.file` only, so it can see nothing in your Drive but the folder and file it made. The sign-in
 lasts an hour and is kept in your browser; after that the cloud in the title's corner asks for a tap. It reads your
@@ -109,18 +120,21 @@ GitHub Pages serves it from `main`, at its own address set by `CNAME`.
 
 ### Files
 
-- `index.html`: the page, its sheets (title, How to play, menu, scorecard, end of game) and the scorecard along the top.
+- `index.html`: the page, its sheets (title, a player's balls, How to play, menu, scorecard, end of game) and the
+  scorecard along the top.
 - `js/physics.js`: the lane, the ball and the pins, in inches seen from above: oil and hook, pin collisions as
   capsules, toppling and wobbling. Seeded, so the same throw always plays out the same way.
 - `js/render.js`: draws the alley in perspective from behind the ball, with the camera following it to the pins.
+- `js/balls.js`: the balls to bowl with: their looks, drawn on a sphere that rolls (for the lane, the picker and the
+  scorecards' dots alike), and how each is earned from a game's balls.
 - `js/scoring.js`: frames, marks, running totals, the tenth frame and splits, all worked out from the list of balls.
 - `js/main.js`: turns, following the finger on the lane, the pinsetter's sweep, callouts and the sheets.
 - `js/swipe.js`: reading a swipe: whether a stroke slides the ball or throws it (a backswing included), and the
   throw's speed, aim and hook.
 - `js/sound.js`: every sound, made with Web Audio.
 - `js/computer.js`: the computer player: where it stands and how it throws at each level.
-- `js/store.js`: what's kept on this device, under `pin-drop.v1`, how two copies of it merge, and each player's
-  averages.
+- `js/store.js`: what's kept on this device, under `pin-drop.v1`, how two copies of it merge (the balls earned and
+  picked too), and each player's averages.
 - `js/sync.js`: saving to Google Drive, at pin-drop.junkdrawer.works only.
 - `js/edge-guard.js`: a Back that comes mid-swipe (Android's back gesture, set off by a swipe near the screen's side)
   is taken for a slip, and the game stays.
@@ -131,16 +145,21 @@ GitHub Pages serves it from `main`, at its own address set by `CNAME`.
 - `test/`: `scoring.test.mjs` (rules and physics), `swipe.test.mjs` (reading a stroke as a move or a throw, as the
   finger moves), `standing.test.mjs` (no pin left standing off the deck), `clean.test.mjs` (every ball ends clean,
   thrown from every corner of what a swipe can make: everything settled, nothing still wobbling, and the next rack
-  just what was left), `store.test.mjs` (what's kept, with two windows open, Forget these scores and the averages),
+  just what was left), `store.test.mjs` (what's kept, with two windows open, Forget these scores and the averages), `balls.test.mjs`
+  (each ball earned from a game's balls, bumpers and the computer, balls earned before there were balls to earn,
+  Forget these scores keeping them, merging the balls earned and picked, a kept game's colour by number, and every
+  ball drawing),
   `computer.test.mjs` (the computer's levels' averages, its pocket ball and its spares), `build.mjs` (the one-file
   copy, built and played from file://), `records.mjs` (the end card's counts, a kept game's scorecard, the averages
   and Forget these scores, Share, and spare practice), `drive.mjs` (Google Drive against `fake-google.mjs`, a stand-in
   for Google from the junkdrawer kit: turning it on, a second device joining, both finishing games, Forget these
-  scores reaching the other device, a refused sign-in, stopping, and two devices making the file at once) and
+  scores reaching the other device, a ball earned and picked on one device reaching the other, a refused sign-in,
+  stopping, and two devices making the file at once) and
   `e2e.mjs` (a whole two-player game in Chromium, three players, strikes in a four-player tenth frame and a spare in a
   one-player one, carrying on after a reload at any moment, every sound finishing, two windows open at once, the first
   ball's marks and the lessons for a new player, bowling from the keyboard, the note on a phone on its side, bumpers,
-  a head start, the card as the turn passes, the most each player can still reach, Bowl again's change of who leads
+  a player's balls (picking one, a locked one, New, the pick kept and rolled down the lane, from the keyboard and on a
+  phone), a ball earned said at the end of a game and of spare practice, a head start, the card as the turn passes, the most each player can still reach, Bowl again's change of who leads
   off and tonight's tally, the computer player's turns, carrying on and records, Sound off stopping the buzz, the thud
   and the pinsetter's clunks, a tap hurrying the pinsetter, the pins left under the scorecard, strikes in a row
   building up to a perfect game and a new best, Watch again, the ring for a split, the camera cutting with Reduce

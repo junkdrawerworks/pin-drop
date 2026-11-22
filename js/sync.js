@@ -2,7 +2,8 @@
 // The page keeps working from localStorage exactly as before. When someone turns this on, what matters across devices
 // goes into one small file in a "Pin Drop" folder in their own Google Drive, and what their other devices saved there is
 // merged in game by game (merge in store.js): every finished game with its balls, the best and each player's best, the
-// players set up on the title, the lessons each has been shown, and Forget these scores. The sound and a game in
+// players set up on the title, the lessons each has been shown, the ball each player picked and the balls they've
+// earned, and Forget these scores. The sound and a game in
 // progress stay on each device. Nothing about this shows away from pin-drop.junkdrawer.works.
 import { KEY, parse, merge } from './store.js';
 
@@ -19,8 +20,8 @@ const FILE = { name: 'Pin Drop.json', mimeType: 'application/json', appPropertie
 const KS = 'pin-drop.sync', KT = 'junkdrawer.google';
 const RETRY = { retry: true };
 
-// What goes to Drive: everything kept here but the sound and the game in progress.
-const SYNCED = ['games', 'best', 'bestBy', 'bestAt', 'bests', 'bestsAt', 'forgot', 'throws', 'thrown', 'hookShown', 'slideShown', 'names', 'opts', 'cpu', 'lineupAt'];
+// What goes to Drive: everything kept here but the sound and the game in progress (the balls included: see merge).
+const SYNCED = ['games', 'best', 'bestBy', 'bestAt', 'bests', 'bestsAt', 'forgot', 'throws', 'thrown', 'hookShown', 'slideShown', 'names', 'opts', 'cpu', 'lineupAt', 'earned', 'picks', 'seen'];
 export function toDoc(s) {
   const doc = { app: 'pin-drop', v: 1 };
   for (const k of SYNCED) if (s[k] !== undefined) doc[k] = s[k];

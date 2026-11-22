@@ -1,6 +1,7 @@
 // Draws the alley in perspective from behind the ball. The camera starts at the foul line looking down the
 // lane and follows the ball to the pins.
 import { LANE, SPOTS, BOARD, BALL_R, PIN_LEN, fallen, path } from './physics.js';
+import { drawBall, PLAIN } from './balls.js';
 
 const NEAR = 6;
 const GOLD_TO = 600;   // the guide's gold arrow ends 50 feet down
@@ -33,15 +34,6 @@ const stationsEvery = step => {
 const STATIONS = stationsEvery(0.5), STATIONS_FAR = stationsEvery(1), STATIONS_SLICED = stationsEvery(0.75);
 // The pin in pieces along its length, white and red, base to head.
 const PIECES = [[0, 10, false], [10, 10.3, true], [10.3, 10.8, false], [10.8, 11.1, true], [11.1, 15, false]];
-// The computer's ball: silver.
-export const CPU_COLOURS = ['#eef1f7', '#8a91a6', '#2b2f3c'];
-export const BALL_COLOURS = [
-  ['#5aa8ff', '#1d4fa8', '#0b1d45'],
-  ['#ff7a6b', '#c22d2d', '#4a0d14'],
-  ['#7be0a4', '#1f8f5c', '#0b3322'],
-  ['#c9a0ff', '#6b3fc4', '#24124d'],
-];
-
 export class Renderer {
   constructor(canvas) {
     this.c = canvas;
@@ -158,7 +150,7 @@ export class Renderer {
     // Near things over far ones.
     const things = [];
     for (const p of s.pins) if (p.state !== 'pit') things.push({ y: depthOf(p), draw: () => this.pin(p, s) });
-    if (s.ball && s.ball.state !== 'pit') things.push({ y: s.ball.y, draw: () => this.ball(s.ball, s.colour) });
+    if (s.ball && s.ball.state !== 'pit') things.push({ y: s.ball.y, draw: () => this.ball(s.ball, s.look || PLAIN[0]) });
     if (s.sweep && s.sweep.on) things.push({ y: s.sweep.y, draw: () => this.sweepBar(s.sweep) });
     things.sort((a, b) => b.y - a.y);
     for (const o of things) o.draw();
@@ -476,48 +468,21 @@ export class Renderer {
     g.restore();
   }
 
-  ball(b, colours) {
+  // The ball, in the look of whoever's bowling (see balls.js), with its shadow on the lane.
+  ball(b, look) {
     const z = BALL_R + (b.z || 0);
-    let X = b.x;
-    if (b.state === 'gutter' || b.state === 'pit') X = b.x;
     const sinkZ = b.state === 'gutter' ? -1.6 : 0;
-    const a = this.p(X, b.y, z + sinkZ);
+    const a = this.p(b.x, b.y, z + sinkZ);
     if (!a) return;
     const g = this.g, R = BALL_R * a[2];
     // Shadow.
-    const sh = this.p(X + 1.2, b.y + 1.5, sinkZ);
+    const sh = this.p(b.x + 1.2, b.y + 1.5, sinkZ);
     if (sh) {
       g.fillStyle = 'rgba(30,14,4,0.35)';
       g.beginPath(); g.ellipse(sh[0], sh[1], R * 1.05, R * 1.05 * this.squash(b.y) * 0.9, 0, 0, Math.PI * 2); g.fill();
     }
-    const [hi, mid, dark] = colours;
-    const grad = g.createRadialGradient(a[0] - R * 0.35, a[1] - R * 0.4, R * 0.1, a[0], a[1], R);
-    grad.addColorStop(0, hi); grad.addColorStop(0.5, mid); grad.addColorStop(1, dark);
-    g.fillStyle = grad;
-    g.beginPath(); g.arc(a[0], a[1], R, 0, Math.PI * 2); g.fill();
-    // A swirl, so you can see it roll.
-    g.save(); g.beginPath(); g.arc(a[0], a[1], R, 0, Math.PI * 2); g.clip();
-    g.strokeStyle = 'rgba(255,255,255,0.14)'; g.lineWidth = R * 0.18;
-    const ph = b.roll % (Math.PI * 2);
-    for (let i = 0; i < 2; i++) {
-      const yy = a[1] + R * Math.cos(ph + i * Math.PI);
-      if (Math.sin(ph + i * Math.PI) < 0) continue;
-      g.beginPath(); g.ellipse(a[0], yy, R * 0.95, R * 0.25, 0.25, 0, Math.PI * 2); g.stroke();
-    }
-    // Finger holes, rolling round.
-    const holes = [[-0.32, 0.55], [0.32, 0.55], [0, -0.1]];
-    for (const [hx, hz0] of holes) {
-      const ang = Math.atan2(hz0, -0.75) - ph, rad = Math.hypot(hz0, 0.75);
-      const ly = Math.cos(ang) * rad, lz = Math.sin(ang) * rad;
-      if (ly > -0.15) continue;
-      const vis = Math.min(1, -ly);
-      g.fillStyle = `rgba(4,6,14,${0.85 * vis})`;
-      g.beginPath(); g.ellipse(a[0] + hx * R, a[1] - lz * R, R * 0.11, R * 0.11 * vis, 0, 0, Math.PI * 2); g.fill();
-    }
-    g.restore();
-    // Shine.
-    g.fillStyle = 'rgba(255,255,255,0.35)';
-    g.beginPath(); g.ellipse(a[0] - R * 0.38, a[1] - R * 0.45, R * 0.22, R * 0.13, -0.6, 0, Math.PI * 2); g.fill();
+    this.look = look.id;   // for the tests: the look last drawn on the lane
+    drawBall(g, a[0], a[1], R, look, b.roll);
   }
 
   // A pin in any state: standing (rocking), falling, lying or in the gutter.

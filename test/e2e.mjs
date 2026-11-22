@@ -179,8 +179,8 @@ const saved = await page.evaluate(() => JSON.parse(localStorage.getItem('pin-dro
 assert.equal(saved.best, Math.max(...scores));
 assert.equal(saved.games.length, 1);
 // Each player's balls are kept with the game, not only the score, and which of them left splits (by their place), and
-// their ball colour, for the game's scorecard on the title.
-assert.deepEqual(saved.games[0].scores.map(({ splits, ...q }) => q), rolls.map((r, i) => ({ name: ['Ana', 'Ben'][i], score: total(r), rolls: r, c: i })));
+// the ball each bowled with (each a plain one of their own: Ana's blue, Ben's red), for the game's scorecard on the title.
+assert.deepEqual(saved.games[0].scores.map(({ splits, ...q }) => q), rolls.map((r, i) => ({ name: ['Ana', 'Ben'][i], score: total(r), rolls: r, ball: ['blue', 'red'][i] })));
 assert.ok(saved.games[0].scores.every(q => Array.isArray(q.splits) && q.splits.every(k => Number.isInteger(k) && k < q.rolls.length)), 'the splits kept with the game');
 assert.equal(saved.current, null);
 console.log('  a two-player game:', scores.join(' and '));
@@ -2155,22 +2155,192 @@ for (const motion of ['reduce', 'no-preference']) {
   } finally { await c.close(); }
 }
 
-// A head start: tapping Ben's ball on the title goes through +10, +20, +30, +50 and back to none, shown on the ball. In
-// the game his total counts it, in a box of its own; he wins on it, and his game is kept marked and not as a best.
+// A player's balls: tapping Ana's ball on the title opens a sheet of every ball, the plain ones and those her kept
+// games have earned her (her first game, and in it her first strike: Pearl and Marble, marked New) to pick from, and the
+// rest locked, each saying how to earn it. Picking Marble puts it on her ball on the title, keeps it for next time, and
+// rolls it down the lane. A locked ball can't be picked. On a phone it all fits, with nothing scrolling sideways. Ben,
+// new, gets the next plain ball nobody has. A game kept before there were balls to pick shows its colours as they were.
+{
+  const strike = [10, ...nineAndMiss.slice(2), 9, 0];
+  const { c, p } = await kept({}, { names: ['Ana', 'Ben'], games: [{ at: 1000, scores: [{ name: 'Ana', score: 100, rolls: strike, splits: [], c: 0 }, { name: 'Ben', score: 90, rolls: [...nineAndMiss, 9, 0], splits: [], c: 1 }] }] });
+  try {
+    const ball = '#players li:nth-child(1) .ball';
+    assert.deepEqual(await p.$$eval('#players .ball', els => els.map(e => [e.dataset.look, e.classList.contains('fresh')])), [['blue', true], ['red', true]], 'the balls on the title');
+    // The scorecard of the game kept before there were balls: Ana in blue, Ben in red.
+    await p.click('#record .game');
+    assert.deepEqual(await p.$$eval('#pastCards .name i', els => els.map(e => [...e.classList].find(k => k.startsWith('lk-')))), ['lk-blue', 'lk-red'], 'an old game lost its colours');
+    await p.click('#pastDone');
+    await p.click(ball);
+    assert.equal(await p.isVisible('#balls'), true, 'the balls did not open');
+    assert.equal(await p.evaluate(() => document.activeElement.id), 'ballsTitle');
+    assert.equal(await p.textContent('#ballsTitle'), 'Ana’s ball');
+    assert.equal(await p.textContent('#ballsCount'), '8 of 16 balls');
+    const picks = () => p.$$eval('#locker .pick', els => els.map(e => ({ id: e.dataset.id, on: e.getAttribute('aria-pressed') === 'true', locked: e.getAttribute('aria-disabled') === 'true', label: e.getAttribute('aria-label'), isNew: !!e.querySelector('.new'), how: e.querySelector('.earn')?.textContent || '' })));
+    let all = await picks();
+    assert.equal(all.length, 16);
+    assert.deepEqual(all.filter(q => q.on).map(q => q.id), ['blue']);
+    assert.deepEqual(all.filter(q => !q.locked).map(q => q.id), ['blue', 'red', 'green', 'purple', 'orange', 'pink', 'pearl', 'marble']);
+    assert.deepEqual(all.filter(q => q.isNew).map(q => q.id), ['pearl', 'marble']);
+    assert.equal(all.find(q => q.id === 'marble').label, 'Marble, new');
+    assert.deepEqual(all.find(q => q.id === 'sparkle'), { id: 'sparkle', on: false, locked: true, label: 'Sparkle, locked. Bowl a turkey', isNew: false, how: 'Bowl a turkey' });
+    // A phone: the sheet doesn't scroll sideways, the grid fits inside the panel, and every ball is a thumb's worth.
+    const fit = await p.evaluate(() => {
+      const box = document.querySelector('#locker').getBoundingClientRect();
+      const out = [...document.querySelectorAll('#locker .pick, #heads button')].map(e => e.getBoundingClientRect())
+        .filter(r => r.left < box.left - 0.5 || r.right > box.right + 0.5 || r.width < 44 || r.height < 44);
+      const panel = document.querySelector('#balls .panel').getBoundingClientRect();
+      return { wide: document.querySelector('#balls').scrollWidth > innerWidth || document.documentElement.scrollWidth > innerWidth, out: out.length, inPanel: box.left >= panel.left && box.right <= panel.right && panel.right <= innerWidth };
+    });
+    assert.deepEqual(fit, { wide: false, out: 0, inPanel: true }, 'the balls do not fit a phone');
+    // A locked ball does nothing (Playwright won't click a control marked disabled unless made to, as a person can).
+    await p.click('#locker [data-id="galaxy"]', { force: true });
+    assert.deepEqual((await picks()).filter(q => q.on).map(q => q.id), ['blue'], 'a locked ball was picked');
+    assert.equal((await p.evaluate(() => JSON.parse(localStorage.getItem('pin-drop.v1')).picks)).Ana, undefined);
+    await p.click('#locker [data-id="marble"]');
+    assert.deepEqual((await picks()).filter(q => q.on).map(q => q.id), ['marble']);
+    assert.equal((await p.evaluate(() => JSON.parse(localStorage.getItem('pin-drop.v1')).picks)).Ana.id, 'marble');
+    await p.click('#ballsDone');
+    assert.equal(await p.evaluate(() => document.activeElement.classList.contains('ball')), true, 'the focus did not go back to Ana\'s ball');
+    assert.deepEqual(await p.$$eval('#players .ball', els => els.map(e => [e.dataset.look, e.classList.contains('fresh'), e.querySelector('.orb').classList.contains(`lk-${e.dataset.look}`)])), [['marble', false, true], ['red', true, true]]);
+    // Ana on Ben's red: Ben moves to the next plain ball nobody has. Two can have the same ball if they pick it.
+    await p.click(ball);
+    await p.click('#locker [data-id="red"]');
+    await p.click('#ballsDone');
+    assert.deepEqual(await p.$$eval('#players .ball', els => els.map(e => e.dataset.look)), ['red', 'green']);
+    await p.click('#players li:nth-child(2) .ball');
+    await p.click('#locker [data-id="red"]');
+    await p.click('#ballsDone');
+    assert.deepEqual(await p.$$eval('#players .ball', els => els.map(e => e.dataset.look)), ['red', 'red']);
+    await p.click('#players li:nth-child(2) .ball');
+    await p.click('#locker [data-id="pink"]');
+    await p.click('#ballsDone');
+    await p.click(ball);
+    await p.click('#locker [data-id="marble"]');
+    // Looked at once, the New marks are gone.
+    assert.deepEqual((await picks()).filter(q => q.isNew).map(q => q.id), [], 'still New after Ana looked');
+    await p.keyboard.press('Escape');
+    assert.equal(await p.isVisible('#title'), true, 'Escape did not close the balls');
+    // The pick is kept: after a reload it's still Ana's, and it's what rolls down the lane.
+    await p.reload();
+    assert.deepEqual(await p.$$eval('#players .ball', els => els.map(e => e.dataset.look)), ['marble', 'pink'], 'the picks were not kept');
+    await p.click('#start');
+    assert.deepEqual(await p.evaluate(() => pinDrop.game.players.map(q => q.ball)), ['marble', 'pink']);
+    await until(() => p.evaluate(() => pinDrop.view.look === 'marble'), 2000, 'the lane did not draw Marble');
+    assert.equal(await p.$eval('#who i', e => e.classList.contains('lk-marble')), true, 'the scorecard\'s dot is not Marble');
+    await p.evaluate(() => { pinDrop.speed = 10; pinDrop.throw({ x: 14, speed: 300, angle: 0.02, hook: 0 }); });
+    await until(() => p.evaluate(() => pinDrop.ball.y > 200), 5000, 'the ball never rolled');
+    assert.equal(await p.evaluate(() => pinDrop.view.look), 'marble', 'Marble did not roll down the lane');
+  } finally { await c.close(); }
+}
+
+// The balls from the keyboard: Enter on a ball opens them, Tab goes through every ball, the head starts and Done, Space
+// picks, a locked ball stays unpicked, and Escape goes back to the ball it came from.
+{
+  const { c, p } = await kept({ viewport: { width: 1280, height: 800 }, isMobile: false, hasTouch: false }, { names: ['Ana'], earned: { Ana: { galaxy: 5 } } });
+  try {
+    await p.focus('#players .ball');
+    await p.keyboard.press('Enter');
+    assert.equal(await p.evaluate(() => document.activeElement.id), 'ballsTitle', 'Enter did not open the balls');
+    const reached = [];
+    for (let k = 0; k < 24; k++) {
+      await p.keyboard.press('Tab');
+      reached.push(await p.evaluate(() => document.activeElement.dataset.id || document.activeElement.dataset.head || document.activeElement.id));
+      if (reached.at(-1) === 'ballsDone') break;
+    }
+    assert.deepEqual(reached, ['blue', 'red', 'green', 'purple', 'orange', 'pink', 'pearl', 'marble', 'twotone', 'sparkle', 'flame', 'target', 'galaxy', 'stripe', 'gold', 'prism', '0', '10', '20', '30', '50', 'ballsDone'], 'Tab through the balls');
+    await p.focus('#locker [data-id="sparkle"]');
+    await p.keyboard.press(' ');
+    await p.focus('#locker [data-id="galaxy"]');
+    await p.keyboard.press(' ');
+    assert.deepEqual(await p.$$eval('#locker [aria-pressed="true"]', els => els.map(e => e.dataset.id)), ['galaxy']);
+    await p.keyboard.press('Escape');
+    assert.equal(await p.evaluate(() => document.activeElement.dataset.look), 'galaxy', 'Escape did not go back to Ana\'s ball');
+  } finally { await c.close(); }
+}
+
+// A ball earned is said on the end card under its player's card ("New ball for Ana: Marble · your first strike"), with
+// a chime, and kept. Ana strikes in her first game here; the computer strikes too, and earns nothing.
+{
+  const { c, p } = await kept({}, { names: ['Ana'], cpu: 'pro', current: { players: [
+    { name: 'Ana', rolls: [10, ...nineAndMiss.slice(2), 9], x: 0, ball: 'blue' },
+    { name: 'Computer (Pro)', cpu: 'pro', rolls: Array(12).fill(10), x: 10 },
+  ], turn: 0, leftover: SPOTS.map((q, i) => ({ id: i + 1, ...q })).filter(q => q.id !== 1) } });
+  try {
+    await p.click('#resume');
+    await p.evaluate(() => {
+      pinDrop.speed = 10;
+      pinDrop.throw({ x: 14, speed: 300, angle: 0.02, hook: 0 });
+    });
+    await until(() => p.isVisible('#end'), 20000, 'no end of the game');
+    const lines = await p.$$eval('#endCards .row', rows => rows.map(r => [...r.querySelectorAll('.earned')].map(e => e.textContent)));
+    assert.deepEqual(lines, [['New ball for Ana: Pearl · your first game', 'New ball for Ana: Marble · your first strike'], []]);
+    assert.deepEqual(await p.$$eval('#endCards .earned .orb', els => els.map(e => [...e.classList].find(k => k.startsWith('lk-')))), ['lk-pearl', 'lk-marble']);
+    const saved = await p.evaluate(() => JSON.parse(localStorage.getItem('pin-drop.v1')));
+    assert.deepEqual(Object.keys(saved.earned), ['Ana'], 'the computer earned a ball');
+    assert.deepEqual(saved.earned.Ana, { pearl: saved.games[0].at, marble: saved.games[0].at });
+    assert.deepEqual(saved.games[0].scores.map(q => q.ball), ['blue', undefined]);
+    // The end card opened again says it again, without another chime; on the title, Ana's ball has a new one to see.
+    await p.click('#toTitle');
+    assert.equal(await p.$eval('#players .ball', e => e.classList.contains('fresh')), true);
+  } finally { await c.close(); }
+}
+
+// Spare practice earns the Target for 7 of the 10 (here, as the last of them is missed), said at its end; nothing else
+// practice does counts toward a ball.
+{
+  const { c, p } = await kept({}, { names: ['Ana'] });
+  try {
+    await p.click('#practice');
+    await p.evaluate(() => {
+      Object.assign(pinDrop.game.practice, { i: 9, made: [true, true, true, true, true, true, true, false, false] });
+      pinDrop.speed = 10;
+      pinDrop.throw({ x: 14, speed: 300, angle: 0.02, hook: 0 });
+    });
+    await until(() => p.isVisible('#end'), 20000, 'no end of practice');
+    assert.equal(await p.textContent('#endTitle'), '7 of 10');
+    assert.equal(await p.textContent('#endCards .earned'), 'New ball for Ana: Target · 7 of 10 spares made');
+    const saved = await p.evaluate(() => JSON.parse(localStorage.getItem('pin-drop.v1')));
+    assert.deepEqual(Object.keys(saved.earned.Ana), ['target']);
+    assert.deepEqual(saved.games, [], 'practice was kept as a game');
+  } finally { await c.close(); }
+}
+
+// A head start: tapping Ben's ball on the title opens his balls, with the head starts under them (none, 10, 20, 30 and
+// 50), one pressed at a time and shown on his ball on the title ("+20"). In the game his total counts it, in a box of
+// its own; he wins on it, and his game is kept marked and not as a best.
 {
   const { c, p } = await kept({}, { names: ['Ana', 'Ben'] });
   try {
     const ball = '#players li:nth-child(2) .ball';
+    await p.click(ball);
+    assert.deepEqual(await p.$$eval('#heads button', els => els.map(e => [e.textContent, e.getAttribute('aria-pressed')])),
+      [['None', 'true'], ['+10', 'false'], ['+20', 'false'], ['+30', 'false'], ['+50', 'false']], 'the head starts on offer');
     const seen = [];
-    for (let k = 0; k < 5; k++) { await p.click(ball); seen.push(await p.textContent(`${ball} .plus`)); }
-    assert.deepEqual(seen, ['+10', '+20', '+30', '+50', ''], 'the head starts a ball offers');
-    await p.click(ball); await p.click(ball);
-    assert.equal(await p.getAttribute(ball, 'aria-label'), 'Head start for Ben: 20 pins');
+    for (const h of ['10', '20', '30', '50', '0']) { await p.click(`#heads [data-head="${h}"]`); seen.push(await p.textContent(`${ball} .plus`)); }
+    assert.deepEqual(seen, ['+10', '+20', '+30', '+50', ''], 'the head starts shown on the ball');
+    await p.click('#heads [data-head="20"]');
+    assert.deepEqual(await p.$$eval('#heads [aria-pressed="true"]', els => els.map(e => e.dataset.head)), ['20']);
+    await p.click('#ballsDone');
+    assert.equal(await p.textContent(`${ball} .plus`), '+20');
+    assert.equal(await p.getAttribute(ball, 'aria-label'), 'Ball and head start for Ben: Red, 20 pins');
     await p.click('#start');
     assert.deepEqual(await p.evaluate(() => pinDrop.game.players.map(q => q.head || 0)), [0, 20]);
     assert.match(await p.textContent('#others'), /Ben 20/, 'the head start is not in Ben\'s total under the card');
+    // And at the end it counts: Ben's last ball, in the gutter, with 81 bowled.
+    await p.evaluate(() => {
+      pinDrop.game.players[0].rolls = Array.from({ length: 20 }, (_, i) => (i % 2 ? 0 : 9));
+      pinDrop.game.players[1].rolls = Array.from({ length: 19 }, (_, i) => (i % 2 ? 0 : 9)).map((n, i) => (i === 18 ? 0 : n));
+      pinDrop.game.turn = 1;
+      pinDrop.speed = 10;
+      pinDrop.throw({ x: 14, speed: 300, angle: 0.02, hook: 0 });
+    });
+    await until(() => p.isVisible('#end'), 20000, 'no end of the game');
+    assert.deepEqual([await p.textContent('#endTitle'), await p.textContent('#endLine')], ['Ben wins!', '101 to 90'], 'the head start from the sheet did not count');
+    await p.click('#toTitle');
     await p.reload();
     assert.equal(await p.textContent(`${ball} .plus`), '+20', 'Ben\'s head start was not kept for next time');
+    await p.click(ball);
+    assert.deepEqual(await p.$$eval('#heads [aria-pressed="true"]', els => els.map(e => e.dataset.head)), ['20'], 'the sheet does not show Ben\'s head start');
   } finally { await c.close(); }
 }
 {
@@ -2254,9 +2424,10 @@ for (const motion of ['reduce', 'no-preference']) {
     assert.equal(await tallied(), '', 'a tally after one game');
     assert.equal(await p.textContent('#endTitle'), 'Ana wins!');
     await p.click('#again');
-    assert.deepEqual(await p.evaluate(() => pinDrop.game.players.map(q => [q.name, q.x, q.c])), [['Ben', 6, 1], ['Ana', -5, 0]], 'Bowl again');
+    assert.deepEqual(await p.evaluate(() => pinDrop.game.players.map(q => [q.name, q.x, q.ball])), [['Ben', 6, 'red'], ['Ana', -5, 'blue']], 'Bowl again');
     assert.deepEqual(await p.evaluate(() => [pinDrop.game.turn, pinDrop.ball.x]), [0, 6]);
-    assert.equal(await p.$eval('#who i', e => e.style.background), 'rgb(255, 122, 107)', 'Ben is not in his own colour');
+    assert.equal(await p.$eval('#who i', e => getComputedStyle(e).backgroundColor), 'rgb(255, 122, 107)', 'Ben is not in his own colour');
+    assert.equal(await p.$eval('#who i', e => e.classList.contains('lk-red')), true, 'Ben\'s dot is not his ball');
     // Ben wins this one: Ana's last ball is in the gutter.
     await finishWith([[...nineAndMiss, 9, 0], [...nineAndMiss, 0]], 1);
     assert.equal(await tallied(), 'Tonight: Ben 1 · Ana 1');
@@ -2304,7 +2475,8 @@ for (const motion of ['reduce', 'no-preference']) {
     assert.equal(await p.isVisible('#handoff'), false, 'a card for the computer\'s turn');
     assert.equal(await p.textContent('#call'), 'Computer’s turn', 'the computer\'s turn called by its long name');
     assert.equal(await p.isVisible('#hint'), false, 'the hint on how to throw, on the computer\'s turn');
-    assert.equal(await p.$eval('#who i', e => e.style.background), 'rgb(238, 241, 247)', 'the computer\'s ball is not silver');
+    assert.equal(await p.$eval('#who i', e => getComputedStyle(e).backgroundColor), 'rgb(238, 241, 247)', 'the computer\'s ball is not silver');
+    assert.equal(await p.evaluate(() => pinDrop.view.look), 'silver', 'the computer\'s ball on the lane is not silver');
     // A straight swipe up on its turn throws nothing of its own: it hurries the computer on, which throws its hook.
     const t0 = Date.now();
     await touchStroke(cdp, [[0, -280, 8]]);

@@ -1,6 +1,7 @@
 // What Pin Drop keeps on this device, all under one key: the players' names, the sound setting, the best games,
 // the last few games, and the game in progress so a reload carries on where you were.
 import { total, stats } from './scoring.js';
+import { earnedIn } from './balls.js';
 
 export const KEY = 'pin-drop.v1';
 // `thrown` counts each player's balls by name, so the hint on how to throw shows for a new player's first few, and
@@ -13,14 +14,27 @@ export const KEY = 'pin-drop.v1';
 // toward a best, and are kept with `cpu` (its level) on its score.
 // `lineupAt` is when the players were last set up on the title (see merge).
 // `games` are the last GAMES games, newest first, each { at (when it ended, ms), scores: [{ name, score, rolls, splits,
-// c (ball colour), bumpers, head, cpu }] }. `bestAt` and `bestsAt` (by name) are when each best was bowled, so that
+// ball (the look bowled with, see balls.js; a game kept before there were looks has `c`, a colour by number), bumpers,
+// head, cpu }] }. `bestAt` and `bestsAt` (by name) are when each best was bowled, so that
 // Forget these scores, which sets `forgot` to when it was tapped, takes away every game and best from before then, in
 // every window and on every device that merges with this one (see merge).
+// The balls (see balls.js), each by player's name: `earned`, the balls they've earned, each with when ({ marble: ms });
+// `picks`, the ball they last chose on the title and when ({ id, at }); and `seen`, when they last opened their balls on
+// the title, so a ball earned since is marked New. None of them is touched by Forget these scores: a ball, once
+// earned, stays.
 export const GAMES = 500;
 const blank = () => ({ names: ['You'], sound: true, best: 0, bestAt: 0, games: [], current: null, throws: 0, thrown: byName(), bests: byName(),
-  bestsAt: byName(), hookShown: byName(), slideShown: byName(), opts: byName(), cpu: null, forgot: 0 });
+  bestsAt: byName(), hookShown: byName(), slideShown: byName(), opts: byName(), cpu: null, forgot: 0, earned: byName(), picks: byName(), seen: byName() });
 const byName = (o = {}) => Object.assign(Object.create(null), o && typeof o === 'object' ? o : {});
 export const int = v => Math.max(0, Math.trunc(Number(v)) || 0);
+// A by-name list whose every entry is made over by `f` (and left out where `f` gives undefined).
+const eachName = (o, f) => {
+  const out = byName();
+  for (const [k, v] of Object.entries(o && typeof o === 'object' && !Array.isArray(o) ? o : {})) { const w = f(v); if (w !== undefined) out[k] = w; }
+  return out;
+};
+const earnedOf = v => eachName(v, at => Math.max(1, int(at)));
+const pickOf = v => (v && typeof v === 'object' && typeof v.id === 'string' ? { id: v.id, at: int(v.at) } : undefined);
 
 // What's kept, from its JSON: anything that isn't a kept Pin Drop counts as nothing kept.
 export function parse(json) {
@@ -29,7 +43,7 @@ export function parse(json) {
     if (!s || typeof s !== 'object') return blank();
     return { ...blank(), ...s, best: int(s.best), bestAt: int(s.bestAt), games: Array.isArray(s.games) ? s.games : [], thrown: byName(s.thrown),
       bests: byName(s.bests), bestsAt: byName(s.bestsAt), hookShown: byName(s.hookShown), slideShown: byName(s.slideShown), opts: byName(s.opts),
-      forgot: int(s.forgot) };
+      forgot: int(s.forgot), earned: eachName(s.earned, earnedOf), picks: eachName(s.picks, pickOf), seen: eachName(s.seen, int) };
   } catch { return blank(); }
 }
 
@@ -53,7 +67,9 @@ export function load() {
 // are the higher of the two (a tie keeps this window's), and each player's ball count and lessons shown the higher.
 // Forget these scores on either side wins over everything bowled before it was tapped. The players set up on the title
 // (the names, their switches and the computer) are whichever side's were set up last (`lineupAt`), and the sound and the
-// game in progress stay this window's.
+// game in progress stay this window's. The balls each player has earned are both sides' together, each with the earlier
+// time; each player's pick is whichever was chosen last (a tie keeps this window's); and when they last saw their balls,
+// the later.
 export function merge(mine, theirs) {
   const forgot = Math.max(int(mine.forgot), int(theirs.forgot));
   // Kept from before Forget these scores was tapped (a best kept before bests had times counts as from then).
@@ -85,14 +101,47 @@ export function merge(mine, theirs) {
     mine[k] = out;
   }
   mine.throws = Math.max(int(mine.throws), int(theirs.throws));
+  const earned = byName();
+  for (const from of [mine.earned, theirs.earned]) {
+    for (const [name, balls] of Object.entries(from || {})) {
+      const out = Object.hasOwn(earned, name) ? earned[name] : (earned[name] = byName());
+      for (const [id, at] of Object.entries(earnedOf(balls))) if (!Object.hasOwn(out, id) || at < out[id]) out[id] = at;
+    }
+  }
+  const picks = eachName(mine.picks, pickOf);
+  for (const [name, v] of Object.entries(eachName(theirs.picks, pickOf))) if (!Object.hasOwn(picks, name) || v.at > picks[name].at) picks[name] = v;
+  const looked = eachName(mine.seen, int);
+  for (const [name, at] of Object.entries(eachName(theirs.seen, int))) if (!Object.hasOwn(looked, name) || at > looked[name]) looked[name] = at;
+  Object.assign(mine, { earned, picks, seen: looked });
   if (int(theirs.lineupAt) > int(mine.lineupAt) && Array.isArray(theirs.names) && theirs.names.length) {
     Object.assign(mine, { names: theirs.names.slice(), opts: byName(theirs.opts), cpu: theirs.cpu ?? null, lineupAt: int(theirs.lineupAt) });
   }
   return mine;
 }
 
+// Every ball the games kept here show a player has earned, added to what they'd earned already (each with the end of the
+// game that first earned it): so someone who played before there were balls to earn has theirs. A ball already earned
+// keeps its time. Gives back what was new: [{ name, id, at }].
+export function catchUp(s) {
+  const out = [];
+  s.earned = eachName(s.earned, earnedOf);
+  for (const [name, balls] of Object.entries(earnedIn(s.games))) {
+    const mine = Object.hasOwn(s.earned, name) ? s.earned[name] : (s.earned[name] = byName());
+    for (const [id, at] of Object.entries(balls)) if (!Object.hasOwn(mine, id)) { mine[id] = at; out.push({ name, id, at }); }
+  }
+  return out;
+}
+
+// A ball earned some other way than in a kept game (spare practice's Target): false if they had it already.
+export function earn(s, name, id, at = Date.now()) {
+  const mine = Object.hasOwn(s.earned, name) ? s.earned[name] : (s.earned[name] = byName());
+  if (Object.hasOwn(mine, id)) return false;
+  mine[id] = Math.max(1, int(at));
+  return true;
+}
+
 // Forget these scores: every game and best kept here goes, now and from any window or device that still has them. The
-// names, the lessons shown and the game in progress stay.
+// names, the lessons shown, the balls earned and picked, and the game in progress stay.
 export function forget(s, now = Date.now()) {
   Object.assign(s, { games: [], best: 0, bestBy: undefined, bestAt: 0, bests: byName(), bestsAt: byName(), forgot: Math.max(now, int(s.forgot)) });
   return s;

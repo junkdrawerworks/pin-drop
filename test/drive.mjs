@@ -190,6 +190,39 @@ async function finishGame(p, name) {
   } finally { await phone.c.close(); await tablet.c.close(); }
 }
 
+// A ball earned and picked on one device reaches the other: the phone has Galaxy (earned, say, in a game since
+// forgotten), Ana picks it there, and it goes to the Drive; the tablet, joining, has it earned and picked for Ana too,
+// on her ball on the title. A ball kept as New on the phone is seen there too once she has looked on either.
+{
+  const g = fakeGoogle();
+  const signIn = p => p.evaluate(() => localStorage.setItem('junkdrawer.google', JSON.stringify({ token: 'tok-mark', exp: Date.now() + 3e6, scope: 'https://www.googleapis.com/auth/drive.file', email: 'mark@gmail.com' })));
+  const phone = await device(g, { names: ['Ana'], earned: { Ana: { galaxy: 500 } } });
+  const tablet = await device(g, { names: ['Ana', 'Ben'] });
+  try {
+    await signIn(phone.p);
+    await phone.p.click('#drive button');
+    await until(() => synced(phone.p), 8000, 'the phone never synced');
+    await phone.p.click('#players .ball');
+    await phone.p.click('#locker [data-id="galaxy"]');
+    await phone.p.click('#ballsDone');
+    await until(() => inDrive(g).picks?.Ana?.id === 'galaxy', 8000, 'Ana\'s pick never reached the Drive');
+    const d = inDrive(g);
+    assert.deepEqual(d.earned, { Ana: { galaxy: 500 } });
+    assert.ok(d.seen.Ana > 500, 'when Ana looked at her balls did not reach the Drive');
+    assert.equal(await tablet.p.$eval('#players .ball', e => e.dataset.look), 'blue');
+    await signIn(tablet.p);
+    await tablet.p.click('#drive button');
+    await until(() => synced(tablet.p), 8000, 'the tablet never synced');
+    const s = await saved(tablet.p);
+    assert.deepEqual([s.earned.Ana, s.picks.Ana.id], [{ galaxy: 500 }, 'galaxy']);
+    await until(() => tablet.p.$eval('#players .ball', e => e.dataset.look === 'galaxy'), 4000, 'Ana\'s ball on the tablet\'s title is not Galaxy');
+    assert.equal(await tablet.p.$eval('#players li:nth-child(2) .ball', e => e.dataset.look), 'red', 'Ben lost his row\'s colour');
+    await tablet.p.click('#players .ball');
+    assert.deepEqual(await tablet.p.$$eval('#locker [aria-pressed="true"]', els => els.map(e => e.dataset.id)), ['galaxy']);
+    assert.equal(await tablet.p.locator('#locker .new').count(), 0, 'Galaxy is New on the tablet after Ana looked on the phone');
+  } finally { await phone.c.close(); await tablet.c.close(); }
+}
+
 // Two devices that each made the file at the same moment: the second is folded into the first and binned, and every
 // game from both is kept.
 {
