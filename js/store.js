@@ -1,4 +1,5 @@
-// What Pin Drop keeps on this device, all under one key: the players' names, the sound setting, the best games,
+// What Pin Drop keeps on this device, all under one key: the players' names, the sound setting and whether the alley
+// screen plays its cartoons (`toons`), the best games,
 // the last few games, and the game in progress so a reload carries on where you were.
 import { total, stats } from './scoring.js';
 import { earnedIn } from './balls.js';
@@ -23,7 +24,7 @@ export const KEY = 'pin-drop.v1';
 // the title, so a ball earned since is marked New. None of them is touched by Forget these scores: a ball, once
 // earned, stays.
 export const GAMES = 500;
-const blank = () => ({ names: ['You'], sound: true, best: 0, bestAt: 0, games: [], current: null, throws: 0, thrown: byName(), bests: byName(),
+const blank = () => ({ names: ['You'], sound: true, toons: true, best: 0, bestAt: 0, games: [], current: null, throws: 0, thrown: byName(), bests: byName(),
   bestsAt: byName(), hookShown: byName(), slideShown: byName(), opts: byName(), cpu: null, forgot: 0, earned: byName(), picks: byName(), seen: byName() });
 const byName = (o = {}) => Object.assign(Object.create(null), o && typeof o === 'object' ? o : {});
 export const int = v => Math.max(0, Math.trunc(Number(v)) || 0);
@@ -66,8 +67,8 @@ export function load() {
 // lose that game and maybe the best. The games are both lists together, newest first; the best and each player's best
 // are the higher of the two (a tie keeps this window's), and each player's ball count and lessons shown the higher.
 // Forget these scores on either side wins over everything bowled before it was tapped. The players set up on the title
-// (the names, their switches and the computer) are whichever side's were set up last (`lineupAt`), and the sound and the
-// game in progress stay this window's. The balls each player has earned are both sides' together, each with the earlier
+// (the names, their switches and the computer) are whichever side's were set up last (`lineupAt`), and the sound, the
+// cartoons switch and the game in progress stay this window's. The balls each player has earned are both sides' together, each with the earlier
 // time; each player's pick is whichever was chosen last (a tie keeps this window's); and when they last saw their balls,
 // the later.
 export function merge(mine, theirs) {

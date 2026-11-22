@@ -20,7 +20,7 @@ const FILE = { name: 'Pin Drop.json', mimeType: 'application/json', appPropertie
 const KS = 'pin-drop.sync', KT = 'junkdrawer.google';
 const RETRY = { retry: true };
 
-// What goes to Drive: everything kept here but the sound and the game in progress (the balls included: see merge).
+// What goes to Drive: everything kept here but the sound, the cartoons switch and the game in progress (the balls included: see merge).
 const SYNCED = ['games', 'best', 'bestBy', 'bestAt', 'bests', 'bestsAt', 'forgot', 'throws', 'thrown', 'hookShown', 'slideShown', 'names', 'opts', 'cpu', 'lineupAt', 'earned', 'picks', 'seen'];
 export function toDoc(s) {
   const doc = { app: 'pin-drop', v: 1 };
@@ -141,7 +141,7 @@ async function run(tries, g) {
     if (rawLocal() !== localRaw) throw RETRY; // saved here meanwhile: merge again
     const changed = out !== localText;
     if (changed) {
-      // Into what's kept here, keeping this device's own: the sound and the game in progress.
+      // Into what's kept here, keeping this device's own: the sound, the cartoons switch and the game in progress.
       const here = merge(parse(localRaw), parse(out));
       try { localStorage.setItem(KEY, JSON.stringify(here)); } catch { /* keep what's on screen */ }
     }

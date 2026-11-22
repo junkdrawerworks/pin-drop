@@ -5,6 +5,7 @@ import { Renderer } from './render.js';
 import { LOOKS, PLAIN, CPU_LOOK, lookById, lookFor, isPlain, picture, practiceEarns } from './balls.js';
 import { frames, next, total, pending, isSplit, callFor, cardText, boxes, best as most, statsLine, PRACTICE } from './scoring.js';
 import * as sound from './sound.js';
+import { Screen, eventFor, fit } from './screen.js';
 import { load, save as write, parse, merge, forget, numbers, catchUp, earn, int, keeping, KEY, GAMES } from './store.js';
 import { stroke, addPoints, readStroke, throwPoints, liftAs, throwOf, MOUSE } from './swipe.js';
 import { drive } from './sync.js';
@@ -16,6 +17,13 @@ const view = new Renderer(canvas);
 const store = load();
 catchUp(store);   // balls earned in games kept from before there were balls to earn
 sound.setSound(store.sound);
+// The alley screen: after a strike, a spare, a split or a miss, a little monitor over the pins plays a cartoon of it
+// (see screen.js) while the pins settle and the pinsetter sweeps, moved on by the game's clock, so it never adds to the
+// wait. A tap that hurries the pinsetter on switches it off. The computer's balls get them too, by the same rules.
+const toon = new Screen($('screen'), { cue: name => sound.cartoon(name) });
+let toonsPlayed = 0;
+// Switched off now, and its sounds faded.
+function endToon() { if (toon.playing) { toon.stop(); sound.hushToons(); } }
 
 const MAX_PLAYERS = 4;
 const SETTLE = 1.2, SWEEP = 1.75, RETURN = 0.85;   // seconds
@@ -89,11 +97,15 @@ function loop(now) {
       bumpers: !!game?.players[game.turn].bumpers });
     stale = false; drawnAt = now; drawnPhase = phase;
   }
+  if (toon.playing) toon.draw();
   requestAnimationFrame(loop);
 }
 
 function update(dt) {
   phaseT += dt;
+  // The cartoon goes as the camera starts back to the ball (or a ball is played again): it's for the pins.
+  if (toon.playing && (phase === 'return' || phase === 'aim' && !cpuUp() || phase === 'replay' || phase === 'title')) toon.stop();
+  toon.tick(dt);
   if (phase === 'rolling') {
     sim.step(dt);
     ball = sim.ball;
@@ -323,7 +335,7 @@ function callout(p, knocked, left) {
   }
   const [big, small, kind] = callFor(p.rolls.slice(0, -1), knocked, left, { wasSplit, sawGutter });
   // A strike or spare was called as the last pin went (see update), and is still on screen.
-  if (!called) { say(big, small, kind, kind === 'small' ? tip : ''); cheer(kind, big); }
+  if (!called) { say(big, small, kind, kind === 'small' ? tip : '', 'pins', eventFor(big, left)); cheer(kind, big); }
   tell(ballWords(p, big, small, kind === 'small' ? tip : ''));
 }
 
@@ -332,7 +344,7 @@ function callCleared() {
   const [big, small, kind] = callFor(current().rolls, before, [], { wasSplit, sawGutter });
   readout('');
   if (before >= 9) $('replay').hidden = false;
-  say(big, small, kind, '');
+  say(big, small, kind, '', 'pins', eventFor(big));
   cheer(kind, big);
 }
 // Strikes build: 1 for a strike, 2 a double, 3 a turkey or a longer run, 4 a perfect game. Each step up is bigger on
@@ -676,7 +688,7 @@ canvas.addEventListener('pointerdown', e => {
   if (e.pointerType === 'mouse' && e.button !== 0 && e.button !== 2) return;
   // A tap while the pins settle, the pinsetter sweeps or the camera comes back (or a ball is played again) hurries the
   // rest of it on.
-  if (!paused && !hurry && waiting()) { hurry = true; hurryTurn = game.turn; sound.hurry(); }
+  if (!paused && !hurry && waiting()) { hurry = true; hurryTurn = game.turn; sound.hurry(); endToon(); }
   // A flick at the end of the camera's way back, once the ball is coming onto the screen (0.65 s in, on a phone or a
   // tablet either way up): the camera jumps the rest of the way so the flick throws. One started earlier on its way
   // back is followed all the same, and counts once aiming begins (see lift).
@@ -933,7 +945,7 @@ let callTimer = 0, callUntil = 0, callAt = null;   // when the callout on screen
 // A callout. A ball's goes just above the sign over the pins, where there's room under the scorecard, or else over
 // the lane in front of the pins (a tablet on its side). A turn's (at 'aim') goes over the lane in front of the pins
 // as the next player sees them, so it doesn't hide them while they aim.
-function say(big, small, kind, tip, at = 'pins') {
+function say(big, small, kind, tip, at = 'pins', ev = null) {
   const el = $('call');
   callAt = at;
   el.className = 'call';
@@ -954,6 +966,12 @@ function say(big, small, kind, tip, at = 'pins') {
   const below = $('hud').hidden ? 0 : $('hud').getBoundingClientRect().bottom + 6;
   let top = at === 'aim' ? s.aimDeckFront + 12 + grow : s.signTop - 12 - grow - h;
   if (at !== 'aim' && top < below) top = s.deckFront + 12 + grow;
+  // A ball with a cartoon: the alley screen comes down between the scorecard and the pins, and the words sit across its
+  // bottom edge. (Not while the pinsetter's being hurried, nor with the cartoons switched off in the menu.)
+  if (ev && at === 'pins' && store.toons !== false && !hurrying()) {
+    const box = fit({ top: below || 8, bottom: s.pinTop - 4, width: view.W }, h, parseFloat(getComputedStyle(el).fontSize));
+    if (box && toon.play(ev, box, { still: reduced.matches })) { toonsPlayed++; top = box.wordsTop; }
+  }
   el.style.top = `${Math.round(Math.max(below, Math.min(top, view.H - h - grow - 8)))}px`;
   clearTimeout(callTimer);
   // Gone once it has faded, so a screen reader reading the page doesn't come across it later.
@@ -968,7 +986,7 @@ const isYou = name => name.trim().toLowerCase() === 'you';
 const turnLine = name => (isYou(name) ? 'Your turn' : LEVEL_KEYS.some(k => cpuName(k) === name) ? 'Computer’s turn' : `${name}’s turn`);
 const winLine = name => (isYou(name) ? 'You win!' : `${name} wins!`);
 
-function hush() { clearTimeout(callTimer); callUntil = 0; $('call').className = 'call'; $('call').innerHTML = ''; }
+function hush() { clearTimeout(callTimer); callUntil = 0; $('call').className = 'call'; $('call').innerHTML = ''; endToon(); }
 
 // One sentence for a screen reader to say (the callouts come and go too fast, and say less): what each ball did and
 // whose turn it is, read out by the polite live region #said.
@@ -1013,8 +1031,9 @@ function practiceBall() {
   store.thrown[p.name] = (store.thrown[p.name] || 0) + 1;
   readout('');
   const count = `${pr.made.filter(Boolean).length} of ${pr.made.length}`;
-  if (made) { if (!called) { say(wasSplit ? 'Picked up!' : 'Spare!', count, 'teal'); cheer('teal'); } }
-  else say(knocked === 0 ? (sawGutter ? 'Gutter ball' : 'Missed') : String(knocked), count, 'small');
+  const word = made ? (wasSplit ? 'Picked up!' : 'Spare!') : knocked === 0 ? (sawGutter ? 'Gutter ball' : 'Missed') : String(knocked);
+  if (made) { if (!called) { say(word, count, 'teal', '', 'pins', eventFor(word)); cheer('teal'); } }
+  else say(word, count, 'small', '', 'pins', eventFor(word));
   pr.i++;
   const more = pr.i < PRACTICE.length;
   tell(`${made ? 'Made it' : 'Missed it'}: ${count}.${more ? ` Next, ${leaveName(PRACTICE[pr.i])}.` : ''}`);
@@ -1075,7 +1094,7 @@ function endFor(practice) {
 const sheets = ['title', 'menu', 'howSheet', 'board', 'end', 'past', 'numbers', 'balls'];
 const dialogs = ['menu', 'howSheet', 'board', 'end', 'past', 'numbers', 'balls'];
 // Everything behind a sheet, out of reach of Tab and a screen reader while one is up.
-const behind = ['lane', 'handoff', 'hud', 'others', 'call', 'hint', 'readout', 'replay'];
+const behind = ['lane', 'screen', 'handoff', 'hud', 'others', 'call', 'hint', 'readout', 'replay'];
 // One How to play: the title's folded-up copy is the sheet's list.
 document.querySelector('#title .how ul').innerHTML = document.querySelector('#howSheet .howlist').innerHTML;
 let shown = null;    // the sheet that's up
@@ -1091,6 +1110,7 @@ function show(id) {
   if (dialogs.includes(id) && (was === null || was === 'menu')) opener = document.activeElement;
   for (const s of sheets) $(s).hidden = s !== id;
   for (const s of behind) $(s).inert = !!id;
+  if (id === 'end' || id === 'title') { toon.clear(); sound.hushToons(); }
   if (dialogs.includes(id)) $(id).querySelector('h2').focus({ preventScroll: true });
   else if (id === 'title') { opener = null; if (was) $('title').querySelector('h1').focus({ preventScroll: true }); }
   // From the title to the lane, the focus is let go rather than handed to the menu button: coming from a name just
@@ -1629,6 +1649,13 @@ const soundLabel = () => {
 };
 soundLabel();
 $('menuSound').addEventListener('click', () => { store.sound = !store.sound; sound.setSound(store.sound); soundLabel(); put(); });
+// The alley screen's cartoons, on or off on this device.
+const toonsLabel = () => {
+  $('menuToons').textContent = `Screen cartoons: ${store.toons !== false ? 'on' : 'off'}`;
+  $('menuToons').setAttribute('aria-pressed', String(store.toons !== false));
+};
+toonsLabel();
+$('menuToons').addEventListener('click', () => { store.toons = store.toons === false; if (!store.toons) endToon(); toonsLabel(); put(); });
 let quitArmed = false;
 $('menuQuit').addEventListener('click', () => {
   if (phase === 'over') { showEnd(); return; }
@@ -1709,7 +1736,7 @@ drive.onUpdate(() => {
   }
 });
 
-addEventListener('resize', () => { view.resize(); view.setCamera(camT, followX); redraw(); if (phase === 'aim') hint(); });
+addEventListener('resize', () => { if (toon.playing) { toon.clear(); sound.hushToons(); } view.resize(); view.setCamera(camT, followX); redraw(); if (phase === 'aim') hint(); });
 // The sign's lettering, once its font has come (drawn before then, it would stay in the stand-in font behind a sheet).
 document.fonts?.addEventListener?.('loadingdone', redraw);
 
@@ -1722,6 +1749,9 @@ window.pinDrop = {
   get ball() { return ball; },
   get shot() { return lastShot; },
   get lesson() { return lesson && { kind: lesson.kind, playing: lesson.playing }; },
+  // The cartoon on the alley screen, and how many have played since the page opened.
+  get toon() { const p = toon.now; return p && { id: p.id, event: p.event, n: p.n, still: p.still, t: p.t, ending: p.end !== null, box: toon.box }; },
+  get toonsPlayed() { return toonsPlayed; },
   // As a player would after tapping their card, if the turn has just passed.
   throw(shot) { if (phase === 'aim') { takeTurn(); throwBall({ x: ball.x, ...shot }); } },
   set speed(v) { timeScale = v; },
