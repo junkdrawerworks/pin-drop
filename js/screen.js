@@ -549,7 +549,7 @@ function bulb(g, x, y, on) {
 // [when, name], see cartoon() in sound.js), and how to draw it at t seconds in.
 
 export const GAGS = {};
-const gag = (id, event, dur, still, cues, draw) => { GAGS[id] = { id, event, dur, still, cues, draw }; };
+const gag = (id, event, dur, still, cues, draw) => { GAGS[id] = { id, event, dur, still, cues: cues.sort((a, b) => a[0] - b[0]), draw }; };
 
 // -- Strikes ---------------------------------------------------------------------------------------------------
 
@@ -729,7 +729,7 @@ gag('strut', 'turkey', 2.8, 1.6, [[1.25, 'gobble'], [1.15, 'tada']], (g, t) => {
 });
 
 // The turkey leads three pins in a conga line across the screen, kicking; it stops short and they pile into it.
-gag('conga', 'turkey', 2.8, 1.3, [[0.2, 'kazoo'], [1.95, 'honk'], [2.0, 'bonk'], [2.15, 'gobble']], (g, t) => {
+gag('conga', 'turkey', 2.8, 1.3, [[0.55, 'kazoo'], [1.95, 'honk'], [2.0, 'bonk'], [2.15, 'gobble']], (g, t) => {
   bands(g, [C.coral, C.orange, C.gold, C.sun], 0, 196);
   // Bunting along the top.
   for (let i = 0; i < 9; i++) { g.beginPath(); g.moveTo(i * 40 - 4, 8); g.lineTo(i * 40 + 16, 8); g.lineTo(i * 40 + 6, 26); g.closePath(); inked(g, [C.teal, C.purple, C.red][i % 3], 1.6); }
@@ -752,7 +752,7 @@ gag('conga', 'turkey', 2.8, 1.3, [[0.2, 'kazoo'], [1.95, 'honk'], [2.0, 'bonk'],
 
 // Four, five, six in a row: as many balls as strikes roll across in a row in party hats, over a crowd of pins doing the
 // wave, under a marquee lighting an X for each, with more fireworks the longer the run.
-gag('parade', 'run', 2.8, 1.5, [[0.1, 'kazoo'], [1.0, 'cheer']], (g, t, n = 4) => {
+gag('parade', 'run', 2.8, 1.5, [[0.6, 'kazoo'], [1.3, 'cheer']], (g, t, n = 4) => {
   bands(g, [C.deep, C.night, C.sky, C.purple], 0, H);
   twinkles(g, t, 26);
   const fw = Math.min(8, n - 2);
@@ -926,7 +926,7 @@ gag('gap', 'split', 2.6, 1.6, [[0.25, 'rumble'], [0.6, 'crack'], [1.9, 'sadHorn'
   for (const side of [-1, 1]) {
     const x = 160 + side * (gap / 2 + 24) + shake;
     const arm = reach > 0 ? lerp(-40, 8, sm(reach)) : -50;
-    pin(g, x, 192, { h: 96, flip: side > 0, face: apart > 0 ? 'sad' : t > 0.6 ? 'scared' : 'happy', arms: [-50, arm], look: [-side, 0] });
+    pin(g, x, 192, { h: 96, flip: side > 0, face: apart > 0 ? 'sad' : t > 0.6 ? 'scared' : 'happy', arms: [-50, arm], reach: reach > 0 ? 1.7 : 1, look: [-side, 0] });
   }
   if (apart > 0) for (const side of [-1, 1]) drop(g, 160 + side * (gap / 2 + 18), 120 + apart * 30, 1.4);
   if (t > 0.6) words(g, 'CRACK!', 160, 50, 30, C.gold, -0.06, seg(t, 0.6, 0.66) * (1 - seg(t, 1.3, 1.5)));
@@ -1151,8 +1151,8 @@ export class Screen {
     if (!p) return;
     p.t += dt;
     const gagT = p.t - ON, cues = GAGS[p.id].cues;
-    // Sounds as their moments come (all of them at once if a still is up: none of it moves, but it's still heard).
-    while (p.cued < cues.length && gagT >= [...cues].sort((a, b) => a[0] - b[0])[p.cued][0]) this.cue([...cues].sort((a, b) => a[0] - b[0])[p.cued++][1], p);
+    // Sounds as their moments come (with a still up too: none of it moves, but it's still heard).
+    while (p.cued < cues.length && gagT >= cues[p.cued][0]) this.cue(cues[p.cued++][1], p);
     if (p.end === null && p.t >= this.length - OFF) p.end = p.t;
     if (p.end !== null && p.t >= p.end + (p.still ? 0.15 : OFF)) this.clear();
   }
