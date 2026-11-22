@@ -107,6 +107,10 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .others b { color: var(--cream); font-variant-numeric: tabular-nums; }
 .others span > i.lk { display: inline-block; width: 9px; height: 9px; margin-right: 5px; vertical-align: -1px; }
 
+/* The alley screen: a little monitor over the pins that plays a cartoon after a strike, a spare, a split or a miss
+   (see screen.js). Taps go through it to the lane. */
+.screen { position: fixed; left: 0; top: 0; pointer-events: none; }
+
 /* STRIKE! */
 .call {
   position: fixed; left: 0; right: 0; top: calc(var(--safe-t) + 17%); padding: 0 12px; text-align: center; pointer-events: none;

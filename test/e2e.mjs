@@ -1261,6 +1261,163 @@ for (const tap of ['#menuBtn', '#card']) {
   } finally { await c.close(); }
 }
 
+// ---- The alley screen -------------------------------------------------------------------------------------------
+const phone = { viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true };
+// Every cartoon the page started while `while` ran, as seen frame by frame.
+const toonsDuring = (p, until) => p.evaluate(until => new Promise(done => {
+  const seen = new Set(), from = pinDrop.toonsPlayed;
+  (function f() {
+    if (pinDrop.toon) seen.add(`${pinDrop.toon.event}:${pinDrop.toon.id}`);
+    if (new Function(`return ${until}`)()) done({ seen: [...seen], started: pinDrop.toonsPlayed - from }); else requestAnimationFrame(f);
+  })();
+}), until);
+
+// A strike plays a strike cartoon on the alley screen, between the scorecard and the tops of the pins, with
+// "Strike!" across its bottom edge and nothing scrolling sideways; the screen is hidden from a screen reader and takes no
+// focus. A tap as the pins settle switches it off and hurries the pinsetter on as before.
+{
+  const { c, p, cdp } = await lane(phone);
+  try {
+    await p.evaluate(({ pocket, seed }) => { pinDrop.seed = seed; pinDrop.throw(pocket); }, { pocket, seed: strikeSeed });
+    await until(() => p.evaluate(() => !!pinDrop.toon), 20000, 'no cartoon after a strike');
+    const t = await p.evaluate(() => pinDrop.toon);
+    assert.equal(t.event, 'strike', `a strike played ${t.event}`);
+    assert.equal(t.still, false);
+    await wait(400);
+    const look = await p.evaluate(() => {
+      const el = document.getElementById('screen'), r = el.getBoundingClientRect(), call = document.getElementById('call');
+      const top = parseFloat(call.style.top), px = el.getContext('2d').getImageData(el.width / 2, el.height / 2, 1, 1).data;
+      return { top: r.top, bottom: r.bottom, left: r.left, right: r.right, shown: !el.hidden, aria: el.getAttribute('aria-hidden'), lit: px[3] > 0,
+        wordsTop: top, wordsBottom: top + call.offsetHeight, text: call.textContent, hud: document.getElementById('hud').getBoundingClientRect().bottom,
+        pinTop: pinDrop.view.spots().pinTop, wide: document.documentElement.scrollWidth > innerWidth, focused: document.activeElement === el, taps: getComputedStyle(el).pointerEvents };
+    });
+    assert.ok(look.shown && look.lit, 'the alley screen is not showing anything');
+    assert.equal(look.aria, 'true', 'the alley screen is not hidden from a screen reader');
+    assert.equal(look.focused, false);
+    assert.equal(look.taps, 'none', 'the alley screen takes taps meant for the lane');
+    assert.ok(look.left >= 0 && look.right <= 390 && look.top >= look.hud && look.bottom <= look.pinTop, `the alley screen (${JSON.stringify(look)}) is not between the scorecard and the pins`);
+    assert.equal(look.text, 'Strike!');
+    assert.ok(look.wordsTop < look.bottom && look.wordsBottom > look.bottom && look.wordsBottom <= look.pinTop + 1, `"Strike!" (${look.wordsTop}–${look.wordsBottom}) is not across the screen's bottom edge (${look.bottom})`);
+    assert.equal(look.wide, false, 'the page scrolls sideways with the alley screen up');
+    await until(() => p.evaluate(() => pinDrop.phase === 'settle'), 20000, 'the ball never finished');
+    assert.ok(await p.evaluate(() => !!pinDrop.toon), 'the cartoon was over before the pins settled');
+    const t0 = Date.now();
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 195, y: 500 }] });
+    await cdp.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+    await until(() => p.evaluate(() => !pinDrop.toon), 1000, 'the cartoon stayed up after a tap');
+    await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 3000, 'a tap did not hurry the pinsetter on');
+    assert.ok(Date.now() - t0 < 2000, `after a tap the next ball came ${Date.now() - t0} ms later`);
+    assert.equal(await p.isHidden('#screen'), true);
+    // A gutter ball plays a gutter cartoon, all of it inside the wait the game always had (the pins settling, the sweep
+    // and the camera coming back: about 3.8 s), and is gone before the next ball.
+    const wait0 = await p.evaluate(() => new Promise(done => {
+      pinDrop.throw({ x: 18, speed: 200, angle: 0.06, hook: 0 });
+      // How long each part of the wait took by the game's own clock (a slow test machine can't stretch it).
+      let from = null, seen = null;
+      const most = {};
+      (function frame(now) {
+        if (pinDrop.toon) seen = pinDrop.toon.event;
+        if (from === null && pinDrop.phase === 'settle') from = now;
+        if (from !== null) most[pinDrop.phase] = Math.max(most[pinDrop.phase] || 0, pinDrop.phaseT);
+        if (pinDrop.phase === 'aim' && from !== null) {
+          done({ s: (now - from) / 1000, game: most.settle + most.sweep + most.return, seen, left: !!pinDrop.toon });
+          return;
+        }
+        requestAnimationFrame(frame);
+      })();
+    }));
+    assert.equal(wait0.seen, 'gutter', 'no gutter cartoon for a gutter ball');
+    assert.equal(wait0.left, false, 'the cartoon was still up as the next ball was aimed');
+    assert.ok(wait0.game < 3.8 + 0.3, `the wait after a ball with a cartoon was ${wait0.game.toFixed(2)} s of the game's time`);
+    console.log(`  alley screen: ${t.id} for a strike, the wait after a gutter ball ${wait0.s.toFixed(2)} s (${wait0.game.toFixed(2)} s of the game's)`);
+  } finally { await c.close(); }
+}
+
+// Watch again plays the ball again but not its cartoon: the one up switches off, and none starts.
+{
+  const { c, p } = await lane(phone);
+  try {
+    await p.evaluate(({ pocket, seed }) => { pinDrop.seed = seed; pinDrop.throw(pocket); }, { pocket, seed: strikeSeed });
+    await until(() => p.isVisible('#replay'), 20000, 'no Watch again after a strike');
+    assert.equal(await p.evaluate(() => pinDrop.toonsPlayed), 1);
+    await p.click('#replay');
+    const seen = await toonsDuring(p, "pinDrop.phase === 'replay' && pinDrop.ball.y > 300 || pinDrop.phase === 'aim'");
+    assert.equal(seen.started, 0, 'Watch again played the cartoon again');
+    assert.equal(await p.evaluate(() => !pinDrop.toon || pinDrop.toon.ending), true, 'the cartoon kept playing through Watch again');
+    const after = await toonsDuring(p, "pinDrop.phase === 'aim'");
+    assert.equal(after.started, 0, 'a cartoon after Watch again');
+  } finally { await c.close(); }
+}
+
+// The menu's switch turns the cartoons off, and it's remembered on this device after a reload; the callout still
+// comes, where it always went.
+{
+  const { c, p } = await lane(phone);
+  try {
+    await p.click('#menuBtn');
+    assert.equal(await p.textContent('#menuToons'), 'Screen cartoons: on');
+    assert.equal(await p.getAttribute('#menuToons', 'aria-pressed'), 'true');
+    await p.click('#menuToons');
+    assert.equal(await p.textContent('#menuToons'), 'Screen cartoons: off');
+    assert.equal(await p.getAttribute('#menuToons', 'aria-pressed'), 'false');
+    await p.reload();
+    assert.equal(await p.evaluate(() => JSON.parse(localStorage.getItem('pin-drop.v1')).toons), false, 'the switch was not kept');
+    await p.click('#resume');
+    await p.click('#menuBtn');
+    assert.equal(await p.textContent('#menuToons'), 'Screen cartoons: off', 'the switch was forgotten after a reload');
+    await p.click('#menuResume');
+    await watchCalls(p);
+    await p.evaluate(({ pocket, seed }) => { pinDrop.seed = seed; pinDrop.throw(pocket); }, { pocket, seed: strikeSeed });
+    const seen = await toonsDuring(p, "pinDrop.phase === 'aim' && pinDrop.game.players[0].rolls.length === 1");
+    assert.deepEqual(seen, { seen: [], started: 0 }, 'a cartoon played with them switched off');
+    assert.ok((await p.evaluate(() => window.calls)).includes('Strike!'), 'no callout with the cartoons off');
+  } finally { await c.close(); }
+}
+
+// With Reduce Motion on, the cartoon is a still: the same picture from start to end.
+{
+  const { c, p } = await lane({ ...phone, reducedMotion: 'reduce' });
+  try {
+    await p.evaluate(({ pocket, seed }) => { pinDrop.seed = seed; pinDrop.throw(pocket); }, { pocket, seed: strikeSeed });
+    await until(() => p.evaluate(() => !!pinDrop.toon), 20000, 'no cartoon after a strike with Reduce Motion on');
+    assert.equal(await p.evaluate(() => pinDrop.toon.still), true, 'the cartoon moves with Reduce Motion on');
+    const pic = () => p.evaluate(() => document.getElementById('screen').toDataURL());
+    await until(() => p.evaluate(() => pinDrop.toon.t > 0.1), 3000, 'the cartoon stopped');
+    const a = await pic();
+    await wait(900);
+    assert.ok(await p.evaluate(() => pinDrop.toon && !pinDrop.toon.ending), 'the still went too soon to compare');
+    assert.ok(a === await pic(), 'the alley screen changed with Reduce Motion on');
+  } finally { await c.close(); }
+}
+
+// Every gag draws, start to end, at a phone's size and a laptop's, and as a still, with every sound it cues there to
+// play.
+{
+  const { c, p } = await lane(phone);
+  try {
+    const out = await p.evaluate(async () => {
+      const S = await import('./js/screen.js'), { TOON_SOUNDS } = await import('./js/sound.js');
+      const bad = [], drawn = [];
+      for (const g of Object.values(S.GAGS)) {
+        for (const [w, h, dpr] of [[342, 263, 2], [404, 311, 1]]) {
+          const cv = document.createElement('canvas'); cv.width = w * dpr; cv.height = h * dpr;
+          const cx = cv.getContext('2d'); cx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          const len = 0.3 + g.dur + 0.22;
+          try {
+            for (let t = 0; t <= len; t += 1 / 24) S.paint(cx, w, h, { id: g.id, n: 5, t, still: false, end: t > len - 0.22 ? len - 0.22 : null }, dpr);
+            S.paint(cx, w, h, { id: g.id, n: 5, t: 1, still: true, end: null }, dpr);
+          } catch (e) { bad.push(`${g.id}: ${e.message}`); }
+          if (cx.getImageData(w * dpr / 2, h * dpr / 2, 1, 1).data[3] > 0) drawn.push(g.id);
+        }
+        for (const [, name] of g.cues) if (!TOON_SOUNDS.includes(name)) bad.push(`${g.id}: no sound ${name}`);
+      }
+      return { bad, drawn: drawn.length, gags: Object.keys(S.GAGS).length };
+    });
+    assert.deepEqual(out.bad, [], 'a gag that didn\'t draw');
+    assert.equal(out.drawn, out.gags * 2, 'a gag drew nothing');
+  } finally { await c.close(); }
+}
+
 // A first ball that leaves a split is called with its count ("Split", "8 · the 4–10") and ringed on the scorecard,
 // along the top and on the full card (read there as "8 split"), and the ring is still there after a reload. A game
 // kept before there were rings carries on without any.
@@ -1749,7 +1906,8 @@ for (const tap of ['#menuBtn', '#card']) {
   } finally { await c.close(); }
 }
 
-// A ball's callout stays off the Pin Drop sign over the pins (it used to land on it on a tablet), and the call for
+// A ball's callout stays off the Pin Drop sign over the pins (it used to land on it on a tablet), or with a cartoon on
+// the alley screen, sits across the screen's bottom edge, above the pins; and the call for
 // the first player's turn stays off the pins they're aiming at: on a phone, and a tablet either way up. As the turn
 // passes, it's the next player's card instead, and nothing is called over the pins.
 {
@@ -1757,7 +1915,7 @@ for (const tap of ['#menuBtn', '#card']) {
   try {
     const call = () => p.evaluate(() => {
       const el = document.getElementById('call'), top = parseFloat(el.style.top);
-      return { text: el.textContent, top, bottom: top + el.offsetHeight, ...pinDrop.view.spots() };
+      return { text: el.textContent, top, bottom: top + el.offsetHeight, ...pinDrop.view.spots(), toon: pinDrop.toon };
     });
     const first = await call();
     assert.match(first.text, /Ana’s turn/);
@@ -1772,7 +1930,9 @@ for (const tap of ['#menuBtn', '#card']) {
         await p.evaluate(() => pinDrop.throw({ x: 10, speed: 290, angle: 0.03, hook: -45 }));
         await until(() => p.evaluate(() => pinDrop.phase === 'settle'), 20000, 'the ball never finished');
         const b = await call();
-        assert.ok(b.bottom <= b.signTop || b.top >= b.signBottom, `at ${width}x${height} "${b.text}" (${b.top}–${b.bottom}) is on the sign (${b.signTop}–${b.signBottom})`);
+        // With a cartoon up, the alley screen covers the sign, and the words sit across its bottom edge, above the pins.
+        if (b.toon) assert.ok(b.top < b.toon.box.y + b.toon.box.h && b.bottom > b.toon.box.y + b.toon.box.h && b.bottom <= b.pinTop + 1, `at ${width}x${height} "${b.text}" (${b.top}–${b.bottom}) is not across the alley screen's bottom edge (${JSON.stringify(b.toon.box)}) above the pins (${b.pinTop})`);
+        else assert.ok(b.bottom <= b.signTop || b.top >= b.signBottom, `at ${width}x${height} "${b.text}" (${b.top}–${b.bottom}) is on the sign (${b.signTop}–${b.signBottom})`);
         await until(() => p.evaluate(() => pinDrop.phase === 'aim'), 20000, 'never ready for the next ball');
       }
       assert.match(await p.textContent('#handoffWho'), /’s turn/);

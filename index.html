@@ -20,6 +20,7 @@
 </head>
 <body>
   <canvas id="lane" aria-label="A bowling lane seen from behind the ball, with the pins at the far end"></canvas>
+  <canvas class="screen" id="screen" aria-hidden="true" hidden></canvas>
   <button type="button" class="handoff" id="handoff" hidden><span class="card"><span class="orb" aria-hidden="true"></span><b id="handoffWho"></b><span>Tap to bowl</span></span></button>
 
   <header class="hud" id="hud" hidden>
@@ -89,6 +90,7 @@
       <button type="button" class="big" id="menuResume">Back to the lane</button>
       <button type="button" class="plain" id="menuBoard">Scorecard</button>
       <button type="button" class="plain" id="menuSound">Sound: on</button>
+      <button type="button" class="plain" id="menuToons">Screen cartoons: on</button>
       <button type="button" class="plain" id="menuHow">How to play</button>
       <button type="button" class="plain danger" id="menuQuit">End this game</button>
       <footer class="jd-foot">
@@ -115,6 +117,7 @@
         <li><b>Playing alone?</b> Add a computer player on the title, at Rookie, Regular or Pro. It bowls its own turns, and a tap on the lane hurries it along. Its games never count toward a best.</li>
         <li><b>Practise spares</b> under Bowl sets up ten common leaves, one ball at each, to practise picking them up. Making 7 of them earns the Target ball; otherwise it doesn’t count toward anything.</li>
         <li><b>Scoring is the real thing:</b> a strike scores 10 plus your next two balls, a spare 10 plus your next one, and a strike or spare in the tenth earns the extra balls to count it, up to three.</li>
+        <li><b>The screen over the pins</b> plays a cartoon after a strike, a spare, a split or a gutter ball. A tap skips it, and the menu switches the cartoons off.</li>
         <li><b>A ring round a count</b> on the scorecard marks a split: a first ball that left pins standing with a gap between them.</li>
       </ul>
       <button type="button" class="big" id="howDone">Got it</button>

@@ -45,6 +45,19 @@ thrown straight at the head pin.
   bigger than the last, with stars from a turkey on and a fanfare for a perfect game. A new best game gets a gold
   badge and a chime. While a second ball is aimed, the pins left show under the scorecard as ten dots, the way an
   alley's screen shows them.
+- **The alley screen.** After a strike, a spare, a split or a gutter ball, a little old monitor drops in over the pins
+  and plays a cartoon of it, the way the screens at old alleys did, with the callout across its bottom edge: pins with
+  faces running for it, toppling like dominoes or one flying at the glass and sliding down it; a pin doing a double
+  take for a double; a strutting, gobbling turkey for a turkey; a parade of balls in party hats over a crowd of pins
+  doing the wave for four, five or more in a row (more fireworks the longer it goes); a trophy, a crowned turkey and
+  confetti for a perfect game; a pin fainting, a ball with a broom, a white flag for a spare; a pin trying the splits,
+  or two pins drifting apart on a cracking floor, for a split, and two tiny pins waving across a canyon for the 7–10; a
+  caped ball bopping both pins of a split picked up; a ball plopping sheepishly into the gutter while the pins laugh, or
+  floating off on a rubber ring; crickets for a ball that missed everything. Each has its own honks, whistles, gobbles
+  and kazoos, made on the spot, and a few to choose from at random, never the same one twice running. They play while
+  the pins settle and the pinsetter sweeps, so they never add to the wait; a tap skips one as it hurries the pinsetter,
+  and Watch again plays the ball without it. The computer's balls get them by the same rules. With Reduce Motion on
+  it's a still picture, and **Screen cartoons** in the menu switches them off on this device. Ordinary counts get none.
 - **Up to four players** pass the phone round, each with their own ball. As the turn passes, the next player's
   card comes up over the lane ("Ben's turn · Tap to bowl"), and nothing can be thrown until they tap it. The Scorecard
   shows under each player's total the most they can still reach ("max 212"). On Bowl again, the second player leads
@@ -92,7 +105,8 @@ level), the best game and each player's best (with when they were bowled), the p
 title and the computer's level, the ball each player picked and the balls they've earned (with when, and when they
 last looked at them), how many balls each player has thrown and which lessons they've been shown, and when Forget
 these scores was last tapped (which clears the scores before then on every device, including one that turns Drive on
-later). What stays on each device: the sound setting, a game in progress, and whether that device saves to Drive.
+later). What stays on each device: the sound setting, the screen cartoons switch, a game in progress, and whether that device
+saves to Drive.
 Spare practice isn't kept anywhere, but a Target ball it earns is.
 
 It asks Google for `drive.file` only, so it can see nothing in your Drive but the folder and file it made. The sign-in
@@ -132,7 +146,9 @@ GitHub Pages serves it from `main`, at its own address set by `CNAME`.
 - `js/main.js`: turns, following the finger on the lane, the pinsetter's sweep, callouts and the sheets.
 - `js/swipe.js`: reading a swipe: whether a stroke slides the ball or throws it (a backswing included), and the
   throw's speed, aim and hook.
-- `js/sound.js`: every sound, made with Web Audio.
+- `js/screen.js`: the alley screen: which cartoon a ball calls for, every gag drawn with code (the pins, the ball and
+  the turkey with faces, fireworks, a canyon) on a little monitor with scanlines, and where the monitor goes.
+- `js/sound.js`: every sound, made with Web Audio, the cartoons' honks, gobbles and kazoos too.
 - `js/computer.js`: the computer player: where it stands and how it throws at each level.
 - `js/store.js`: what's kept on this device, under `pin-drop.v1`, how two copies of it merge (the balls earned and
   picked too), and each player's averages.
@@ -150,7 +166,10 @@ GitHub Pages serves it from `main`, at its own address set by `CNAME`.
   (each ball earned from a game's balls, bumpers and the computer, balls earned before there were balls to earn,
   Forget these scores keeping them, merging the balls earned and picked, a kept game's colour by number, and every
   ball drawing),
-  `computer.test.mjs` (the computer's levels' averages, its pocket ball and its spares), `build.mjs` (the one-file
+  `computer.test.mjs` (the computer's levels' averages, its pocket ball and its spares), `screen.test.mjs` (the
+  cartoon each ball calls for, from a strike to a perfect game, spares, splits, the 7–10, a split picked up, a gutter
+  ball, a miss and nothing for ordinary counts; no gag twice running; where the monitor fits; and every gag drawing
+  every moment), `build.mjs` (the one-file
   copy, built and played from file://), `records.mjs` (the end card's counts, a kept game's scorecard, the averages
   and Forget these scores, Share, and spare practice), `drive.mjs` (Google Drive against `fake-google.mjs`, a stand-in
   for Google from the junkdrawer kit: turning it on, a second device joining, both finishing games, Forget these
@@ -164,7 +183,9 @@ GitHub Pages serves it from `main`, at its own address set by `CNAME`.
   phone), a ball earned said at the end of a game and of spare practice, a head start, the card as the turn passes, the most each player can still reach, Bowl again's change of who leads
   off and tonight's tally, the computer player's turns, carrying on and records, Sound off stopping the buzz, the thud
   and the pinsetter's clunks, a tap hurrying the pinsetter, the pins left under the scorecard, strikes in a row
-  building up to a perfect game and a new best, Watch again, the ring for a split, the camera cutting with Reduce
+  building up to a perfect game and a new best, Watch again, the alley screen (a strike's cartoon between the scorecard
+  and the pins with the callout across its edge, a tap ending it, a gutter ball's inside the usual wait, none on Watch
+  again, the menu's switch kept after a reload, a still with Reduce Motion, and every gag drawing), the ring for a split, the camera cutting with Reduce
   Motion, offline, installable). `aim.mjs` aims the tests' balls: the angle that sends a ball through a spot at the
   head pin, and the pocket ball, 2.5 in right of the head pin's middle, that strikes about two times in three.
 - `tools/`: screenshots, icons and the one-file build.
